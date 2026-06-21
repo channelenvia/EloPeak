@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light mode (default) ─────────────── RGB channels, sem rgb() wrapper */
+  :root {
+    color-scheme: light;
+
+    --color-bg-base:     245 248 246;
+    --color-bg-surface:  255 255 255;
+    --color-bg-card:     255 255 255;
+    --color-bg-elevated: 235 240 237;
+    --color-bg-overlay:  221 230 224;
+
+    --color-ink:           13  16  14;
+    --color-ink-secondary: 60  74  66;
+    --color-ink-muted:    138 155 145;
+    --color-ink-inverse:  238 242 238;
+
+    --logo-url: url('/light.png');
+
+    --shadow-card:       0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-card-hover: 0 10px 25px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05);
+    --shadow-brand:      0 0 24px rgba(34,197,94,0.25);
+    --shadow-accent:     0 0 20px rgba(245,184,0,0.2);
+    --shadow-glow:       0 0 60px rgba(34,197,94,0.08);
+  }
+
+  /* ── Dark mode ────────────────────────── */
+  .dark {
+    color-scheme: dark;
+
+    --color-bg-base:      11  13  12;
+    --color-bg-surface:   15  18  17;
+    --color-bg-card:      21  26  24;
+    --color-bg-elevated:  28  36  33;
+    --color-bg-overlay:   35  45  42;
+
+    --color-ink:          238 242 238;
+    --color-ink-secondary:159 168 160;
+    --color-ink-muted:    106 120 112;
+    --color-ink-inverse:   11  13  12;
+
+    --logo-url: url('/dark.png');
+
+    --shadow-card:       0 1px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.3);
+    --shadow-brand:      0 0 24px rgba(34,197,94,0.35);
+    --shadow-accent:     0 0 20px rgba(245,184,0,0.3);
+    --shadow-glow:       0 0 60px rgba(34,197,94,0.12);
+  }
+
+  * {
+    @apply border-bg-elevated;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-bg-base text-ink font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { @apply bg-bg-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-bg-overlay rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-ink-muted; }
+
+  ::selection { @apply bg-brand/30 text-ink; }
+}
+
+@layer components {
+  .container-app {
+    @apply max-w-7xl mx-auto px-5 sm:px-8 lg:px-12;
+  }
+  .container-wide {
+    @apply max-w-screen-2xl mx-auto px-5 sm:px-8 lg:px-16;
+  }
+
+  .card {
+    @apply bg-bg-card border border-bg-elevated/80 rounded-2xl shadow-card transition-all duration-200;
+  }
+  .card-elevated {
+    @apply bg-bg-elevated border border-bg-overlay rounded-2xl shadow-card-hover;
+  }
+  .card-brand {
+    @apply bg-brand-muted border border-brand/25 rounded-2xl;
+  }
+  .card-glass {
+    @apply bg-bg-card/60 backdrop-blur-md border border-bg-elevated rounded-2xl;
+  }
+
+  .input-base {
+    @apply w-full bg-bg-surface border border-bg-elevated rounded-xl px-4 py-3
+           text-ink placeholder:text-ink-muted
+           focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60
+           transition-all duration-150;
+  }
+  .input-error {
+    @apply border-danger/60 focus:ring-danger/30;
+  }
+
+  .label-base {
+    @apply block text-sm font-medium text-ink-secondary mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .skeleton {
+    @apply bg-gradient-to-r from-bg-card via-bg-elevated to-bg-card
+           bg-[length:200%_100%] animate-shimmer rounded-xl;
+  }
+
+  .section-label {
+    @apply text-xs font-bold uppercase tracking-[0.15em] text-brand;
+  }
+
+  .text-gradient-brand {
+    @apply bg-gradient-brand bg-clip-text text-transparent;
+  }
+  .text-gradient-accent {
+    @apply bg-gradient-accent bg-clip-text text-transparent;
+  }
+
+  .divider-brand {
+    @apply h-px bg-gradient-to-r from-transparent via-brand/30 to-transparent;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(34,197,94,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,197,94,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
