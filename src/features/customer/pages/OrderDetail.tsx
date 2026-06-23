@@ -61,7 +61,8 @@ function CredentialsSection({ order }: { order: Order }) {
 
   const saveCredentials = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.rpc('set_order_credentials', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('set_order_credentials', {
         p_order_id: order.id,
         p_login: login.trim(),
         p_password: password,
@@ -79,7 +80,7 @@ function CredentialsSection({ order }: { order: Order }) {
   })
 
   const canSet = ['awaiting_assignment', 'assigned', 'in_progress', 'paused'].includes(order.status)
-  if (!canSet && !order.credentials_set) return null
+  if (!canSet && !(order as Order & { credentials_set?: boolean }).credentials_set) return null
 
   return (
     <Card padding="md">

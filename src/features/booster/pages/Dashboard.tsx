@@ -5,7 +5,7 @@ import { Button, Card, OrderStatusBadge, Skeleton, EmptyState, RankBadge } from 
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { timeAgo, formatRank } from '@/lib/utils'
-import type { Order, BoosterProfile, RankTier } from '@/types'
+import type { Division, Order, BoosterProfile, RankTier } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -192,22 +192,22 @@ export function BoosterDashboard() {
                       <div className="flex items-center gap-2 mt-1">
                         <RankBadge
                           tier={(order.current_rank as { tier: RankTier }).tier}
-                          division={(order.current_rank as { division: string }).division}
+                          division={(order.current_rank as { division: Division }).division}
                           size="xs"
                           showLabel={false}
                         />
                         <span className="text-xs font-medium text-ink-secondary">
-                          {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: string }).division)}
+                          {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: Division }).division)}
                         </span>
                         <span className="text-ink-muted text-xs">→</span>
                         <RankBadge
                           tier={(order.target_rank as { tier: RankTier }).tier}
-                          division={(order.target_rank as { division: string }).division}
+                          division={(order.target_rank as { division: Division }).division}
                           size="xs"
                           showLabel={false}
                         />
                         <span className="text-xs font-medium text-ink-secondary">
-                          {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: string }).division)}
+                          {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: Division }).division)}
                         </span>
                       </div>
                     )}

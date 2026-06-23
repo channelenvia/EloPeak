@@ -7,7 +7,7 @@ import {
   calcEloPrice, getWinBoostPrice, PLACEMENT_PRICE, DUO_BOOST_PCT,
   calcMasterPlusPrice, applyLpModifier,
 } from '@/lib/pricing'
-import type { BoostMode, Division, QueueType, RankTier } from '@/types'
+import type { Division, QueueType, RankTier } from '@/types'
 
 const DIVISIONS: Division[] = ['IV', 'III', 'II', 'I']
 const MASTER_PLUS: RankTier[] = ['master', 'grandmaster', 'challenger']
@@ -214,7 +214,7 @@ export function StepConfigure() {
     winsPurchased, sessionsPurchased,
     currentLp, avgLpGain, avgLpLoss, targetLp,
     setCurrentRank, setTargetRank, setQueueType, setBoostMode,
-    setWinsPurchased, setSessionsPurchased,
+    setWinsPurchased,
     setCurrentLp, setAvgLpGain, setAvgLpLoss, setTargetLp,
     setBasePrice, setEstimatedHours,
   } = useOrderBuilderStore()

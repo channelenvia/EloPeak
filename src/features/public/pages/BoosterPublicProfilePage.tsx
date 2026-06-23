@@ -41,7 +41,7 @@ export function BoosterPublicProfilePage() {
         .eq('id', id!)
         .single()
       if (error) throw error
-      return data as BoosterProfile
+      return data as unknown as BoosterProfile
     },
     enabled: !!id,
   })

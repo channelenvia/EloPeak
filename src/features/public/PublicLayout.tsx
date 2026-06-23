@@ -35,11 +35,6 @@ export function PublicLayout() {
     : profile?.role === 'booster' ? '/booster'
     : '/dashboard'
 
-  function handleBoostClick() {
-    if (isAuthenticated()) navigate(dashboardLink)
-    else navigate('/orders/new')
-  }
-
   function handleServicesClick() {
     if (pathname === '/') {
       document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })

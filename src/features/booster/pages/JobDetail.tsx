@@ -6,7 +6,7 @@ import { Button, Card, OrderStatusBadge, RankBadge } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { formatRank } from '@/lib/utils'
-import type { Order, OrderMessage, OrderStatus, OrderDropRequest, RankTier } from '@/types'
+import type { Division, Order, OrderMessage, OrderStatus, OrderDropRequest, RankTier } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -169,12 +169,12 @@ export function JobDetailPage() {
                   <div className="flex items-center gap-2">
                     <RankBadge
                       tier={(order.current_rank as { tier: RankTier }).tier}
-                      division={(order.current_rank as { division: string }).division}
+                      division={(order.current_rank as { division: Division }).division}
                       size="sm"
                       showLabel={false}
                     />
                     <span className="text-sm font-semibold text-ink">
-                      {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: string }).division)}
+                      {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: Division }).division)}
                     </span>
                   </div>
                 </div>
@@ -185,12 +185,12 @@ export function JobDetailPage() {
                   <div className="flex items-center gap-2">
                     <RankBadge
                       tier={(order.target_rank as { tier: RankTier }).tier}
-                      division={(order.target_rank as { division: string }).division}
+                      division={(order.target_rank as { division: Division }).division}
                       size="sm"
                       showLabel={false}
                     />
                     <span className="text-sm font-semibold text-ink">
-                      {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: string }).division)}
+                      {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: Division }).division)}
                     </span>
                   </div>
                 </div>

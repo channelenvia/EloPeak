@@ -75,7 +75,7 @@ export function BoostersPage() {
         .order('is_top5', { ascending: false })
         .order('rating', { ascending: false })
       if (error) throw error
-      return data as BoosterProfile[]
+      return data as unknown as BoosterProfile[]
     },
     staleTime: 60_000,
   })
