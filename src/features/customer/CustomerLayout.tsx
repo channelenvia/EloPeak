@@ -47,7 +47,7 @@ export function CustomerLayout() {
         {/* Nav */}
         <nav className="flex-1 px-4 py-5 space-y-1">
           {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && !pathname.startsWith('/orders/new'))
             return (
               <Link
                 key={href}
@@ -120,7 +120,7 @@ export function CustomerLayout() {
         {/* Mobile bottom nav */}
         <nav className="md:hidden border-t border-bg-elevated bg-bg-surface flex shrink-0">
           {NAV_ITEMS.filter(i => i.href !== '/orders/new').map(({ href, icon: Icon, label }) => {
-            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && !pathname.startsWith('/orders/new'))
             return (
               <Link
                 key={href}

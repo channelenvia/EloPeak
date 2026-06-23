@@ -73,7 +73,7 @@ export function CustomerDashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: t('customer.dashboard.stats.active'),    value: activeOrders.length,  icon: Zap,           color: 'text-brand bg-brand-muted' },
+          { label: t('customer.dashboard.stats.active'),    value: activeOrders.length,  icon: Zap,           color: 'text-brand bg-brand/10' },
           { label: t('customer.dashboard.stats.total'),     value: orders?.length ?? 0,  icon: ShoppingBag,   color: 'text-accent bg-accent/10'  },
           { label: t('customer.dashboard.stats.completed'), value: completedCount,        icon: ShoppingBag,   color: 'text-success bg-success/10' },
           { label: t('customer.dashboard.stats.spent'),     value: currency(orders?.reduce((s, o) => s + o.total_price, 0) ?? 0), icon: MessageCircle, color: 'text-info bg-info/10' },
@@ -139,7 +139,7 @@ function OrderCard({ order, currency }: { order: Order; currency: (amount: numbe
     <Link to={`/orders/${order.id}`}>
       <Card className="flex items-center justify-between gap-4 hover:border-brand/20 hover:shadow-card-hover transition-all duration-150 cursor-pointer">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="h-10 w-10 rounded-xl bg-brand-muted flex items-center justify-center shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
             <Zap className="h-5 w-5 text-brand" />
           </div>
           <div className="min-w-0">

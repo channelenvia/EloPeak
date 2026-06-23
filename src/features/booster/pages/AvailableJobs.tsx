@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Briefcase, Lock, Swords, Users } from 'lucide-react'
-import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
+import { Button, Card, EmptyState, Skeleton, RankBadge } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { formatRank, timeAgo } from '@/lib/utils'
-import type { Order, QueueType } from '@/types'
+import { timeAgo, formatRank } from '@/lib/utils'
+import type { Order, QueueType, RankTier } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -240,11 +240,27 @@ export function AvailableJobsPage() {
                     </span>
                   </div>
                   {job.current_rank && job.target_rank && (
-                    <p className="text-sm font-semibold text-ink">
-                      {formatRank((job.current_rank as { tier: string }).tier as never, (job.current_rank as { division: string }).division)}
-                      {' → '}
-                      {formatRank((job.target_rank as { tier: string }).tier as never, (job.target_rank as { division: string }).division)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <RankBadge
+                        tier={(job.current_rank as { tier: RankTier }).tier}
+                        division={(job.current_rank as { division: string }).division}
+                        size="xs"
+                        showLabel={false}
+                      />
+                      <span className="text-xs font-medium text-ink-secondary">
+                        {formatRank((job.current_rank as { tier: RankTier }).tier, (job.current_rank as { division: string }).division)}
+                      </span>
+                      <span className="text-ink-muted text-xs">→</span>
+                      <RankBadge
+                        tier={(job.target_rank as { tier: RankTier }).tier}
+                        division={(job.target_rank as { division: string }).division}
+                        size="xs"
+                        showLabel={false}
+                      />
+                      <span className="text-xs font-medium text-ink-secondary">
+                        {formatRank((job.target_rank as { tier: RankTier }).tier, (job.target_rank as { division: string }).division)}
+                      </span>
+                    </div>
                   )}
                   {duoBlocked && (
                     <p className="text-[10px] text-warning mt-0.5">Slot Duo cheio — libere um slot duo para aceitar.</p>

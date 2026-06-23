@@ -5,6 +5,7 @@ import { Stepper, Button, Card } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { ChevronRight, ChevronLeft, Shield, Clock, Star } from 'lucide-react'
 import type { ServiceType } from '@/types'
+import { getServiceLabel } from '@/lib/utils'
 
 const VALID_SERVICES: ServiceType[] = ['elo_boost', 'win_boost', 'coaching', 'placement_matches']
 
@@ -105,7 +106,7 @@ export function OrderBuilderPage() {
                   <SummaryRow label="Jogo" value={gameSlug === 'lol' ? 'League of Legends' : gameSlug.toUpperCase()} />
                 )}
                 {serviceType && (
-                  <SummaryRow label="Serviço" value={serviceType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} />
+                  <SummaryRow label="Serviço" value={getServiceLabel(serviceType)} />
                 )}
                 {estimatedHours && (
                   <SummaryRow label="Entrega est." value={`~${estimatedHours}h`} />

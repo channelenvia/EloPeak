@@ -5,7 +5,7 @@ import { Search } from 'lucide-react'
 import { OrderStatusBadge, Skeleton, EmptyState } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { supabase } from '@/lib/supabase'
-import { timeAgo } from '@/lib/utils'
+import { timeAgo, getServiceLabel } from '@/lib/utils'
 import type { Order, OrderStatus } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -87,7 +87,7 @@ export function AdminOrdersPage() {
                       #{order.id.slice(0, 8).toUpperCase()}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-ink capitalize">{(order.service_id as string).replace(/_/g, ' ')}</TableCell>
+                  <TableCell className="text-ink">{getServiceLabel(order.service_id as string)}</TableCell>
                   <TableCell>{order.server}</TableCell>
                   <TableCell className="font-semibold text-ink">{currency(order.total_price)}</TableCell>
                   <TableCell><OrderStatusBadge status={order.status} /></TableCell>

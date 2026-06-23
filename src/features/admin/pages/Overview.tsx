@@ -73,7 +73,7 @@ export function AdminOverview() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: t('admin.overview.totalRevenue'), value: currency(stats?.totalRevenue ?? 0), icon: DollarSign, color: 'text-success bg-success/10', trend: '+12%' },
-            { label: t('admin.overview.activeOrders'), value: stats?.activeOrdersCount ?? 0, icon: ShoppingBag, color: 'text-brand bg-brand-muted', trend: null },
+            { label: t('admin.overview.activeOrders'), value: stats?.activeOrdersCount ?? 0, icon: ShoppingBag, color: 'text-brand bg-brand/10', trend: null },
             { label: t('admin.overview.pendingBoosters'), value: stats?.pendingBoostersCount ?? 0, icon: Users, color: 'text-warning bg-warning/10', trend: null },
             { label: t('admin.overview.openTickets'), value: `${stats?.openTicketsCount ?? 0}${stats?.urgentTickets ? ` (${stats.urgentTickets} ${t('admin.overview.urgent')})` : ''}`, icon: AlertCircle, color: stats?.urgentTickets ? 'text-danger bg-danger/10' : 'text-info bg-info/10', trend: null },
           ].map(({ label, value, icon: Icon, color, trend }) => (

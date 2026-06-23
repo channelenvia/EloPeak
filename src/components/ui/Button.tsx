@@ -18,7 +18,7 @@ const buttonVariants = cva(
         ghost:
           'text-ink-secondary hover:text-ink hover:bg-bg-elevated active:scale-[0.98]',
         outline:
-          'border border-bg-elevated text-ink-secondary hover:border-brand/50 hover:text-ink hover:bg-brand-muted active:scale-[0.98]',
+          'border border-bg-elevated text-ink-secondary hover:border-brand/50 hover:text-ink hover:bg-brand/10 active:scale-[0.98]',
         danger:
           'bg-danger text-white hover:bg-danger/90 active:scale-[0.98]',
         'danger-ghost':

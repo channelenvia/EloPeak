@@ -2,14 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { cn } from '@/lib/utils'
 import type { GameSlug } from '@/types'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Swords, Crosshair, LayoutGrid, Gamepad2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Skeleton } from '@/components/ui'
 
-const EMOJI_MAP: Record<string, string> = {
-  lol: '⚔️',
-  valorant: '🔫',
-  tft: '♟️',
+const ICON_MAP: Record<string, React.ElementType> = {
+  lol:      Swords,
+  valorant: Crosshair,
+  tft:      LayoutGrid,
 }
 
 export function StepGame() {
@@ -41,30 +41,33 @@ export function StepGame() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {games.map(({ id, slug, name, is_active }) => (
-            <button
-              key={slug}
-              onClick={() => is_active && setGame(slug, id)}
-              disabled={!is_active}
-              className={cn(
-                'relative flex flex-col items-center gap-3 p-6 rounded-2xl border-2 text-left transition-all duration-150',
-                gameSlug === slug
-                  ? 'border-brand bg-brand-muted shadow-brand'
-                  : is_active
-                    ? 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated cursor-pointer'
-                    : 'border-bg-elevated bg-bg-card opacity-50 cursor-not-allowed'
-              )}
-            >
-              {gameSlug === slug && (
-                <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-brand" />
-              )}
-              <span className="text-4xl">{EMOJI_MAP[slug] ?? '🎮'}</span>
-              <div className="text-center">
-                <p className={cn('text-sm font-semibold', gameSlug === slug ? 'text-brand' : 'text-ink')}>{name}</p>
-                {!is_active && <p className="text-xs text-ink-muted mt-0.5">Em breve</p>}
-              </div>
-            </button>
-          ))}
+          {games.map(({ id, slug, name, is_active }) => {
+            const GameIcon = ICON_MAP[slug] ?? Gamepad2
+            return (
+              <button
+                key={slug}
+                onClick={() => is_active && setGame(slug, id)}
+                disabled={!is_active}
+                className={cn(
+                  'relative flex flex-col items-center gap-3 p-6 rounded-2xl border-2 text-left transition-all duration-150',
+                  gameSlug === slug
+                    ? 'border-brand bg-brand/10 shadow-brand'
+                    : is_active
+                      ? 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated cursor-pointer'
+                      : 'border-bg-elevated bg-bg-card opacity-50 cursor-not-allowed'
+                )}
+              >
+                {gameSlug === slug && (
+                  <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-brand" />
+                )}
+                <GameIcon className={cn('h-10 w-10', gameSlug === slug ? 'text-brand' : 'text-ink-secondary')} />
+                <div className="text-center">
+                  <p className={cn('text-sm font-semibold', gameSlug === slug ? 'text-brand' : 'text-ink')}>{name}</p>
+                  {!is_active && <p className="text-xs text-ink-muted mt-0.5">Em breve</p>}
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

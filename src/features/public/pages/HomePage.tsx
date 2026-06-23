@@ -1,183 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Shield, Zap, Clock, Users, ChevronRight,
-  TrendingUp, MessageCircle, Award, CheckCircle2,
-  ArrowRight, Lock, Eye, Radio,
+  TrendingUp, MessageCircle, CheckCircle2,
+  ArrowRight, Lock, Trophy, Star,
 } from 'lucide-react'
-import { Button } from '@/components/ui'
-import { cn, RANK_TIER_ORDER, RANK_TIER_LABEL, RANK_TIER_COLOR } from '@/lib/utils'
-import type { RankTier } from '@/types'
-import { useAuthStore } from '@/stores/authStore'
-import { useCurrency } from '@/hooks/useCurrency'
-
-// ─── Price engine ──────────────────────────────────────────────────────────────
-
-import { calcEloPrice } from '@/lib/pricing'
-
-const DIVISIONS = ['IV', 'III', 'II', 'I'] as const
-type Division = (typeof DIVISIONS)[number]
-
-function calcPrice(fTier: RankTier, fDiv: Division, tTier: RankTier, tDiv: Division): number {
-  return calcEloPrice(fTier, fDiv, tTier, tDiv).price
-}
-
-function estHours(fTier: RankTier, fDiv: Division, tTier: RankTier, tDiv: Division): string {
-  const { hours } = calcEloPrice(fTier, fDiv, tTier, tDiv)
-  if (hours === 0) return '—'
-  const lo = Math.max(1, Math.round(hours * 0.6))
-  const hi = Math.round(hours * 1.4)
-  return `${lo}–${hi}h`
-}
-
-// ─── Rank Configurator ────────────────────────────────────────────────────────
-
-function RankPicker({
-  label, value, div, onTier, onDiv, excludeBelow,
-}: {
-  label: string
-  value: RankTier
-  div: Division
-  onTier: (t: RankTier) => void
-  onDiv: (d: Division) => void
-  excludeBelow?: RankTier
-}) {
-  const minIdx = excludeBelow ? RANK_TIER_ORDER.indexOf(excludeBelow) + 1 : 0
-  const tiers = RANK_TIER_ORDER.slice(minIdx)
-
-  return (
-    <div className="space-y-3">
-      <p className="text-xs font-bold text-ink-secondary uppercase tracking-widest">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {tiers.map(tier => (
-          <button
-            key={tier}
-            type="button"
-            onClick={() => onTier(tier)}
-            className={cn(
-              'px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all',
-              value === tier
-                ? `border-current bg-bg-elevated ${RANK_TIER_COLOR[tier]}`
-                : 'border-bg-elevated text-ink-muted hover:border-bg-overlay hover:text-ink-secondary'
-            )}
-          >
-            {RANK_TIER_LABEL[tier]}
-          </button>
-        ))}
-      </div>
-      {!(['master', 'grandmaster', 'challenger'] as RankTier[]).includes(value) && (
-        <div className="flex gap-1.5">
-          {DIVISIONS.map(d => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => onDiv(d)}
-              className={cn(
-                'flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all',
-                div === d
-                  ? 'border-brand bg-brand/15 text-brand'
-                  : 'border-bg-elevated text-ink-muted hover:border-bg-overlay'
-              )}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function BoostConfigurator() {
-  const navigate = useNavigate()
-  const { isAuthenticated } = useAuthStore()
-  const { t } = useTranslation()
-  const currency = useCurrency()
-  const [fromTier, setFromTier] = useState<RankTier>('silver')
-  const [fromDiv, setFromDiv] = useState<Division>('IV')
-  const [toTier, setToTier] = useState<RankTier>('gold')
-  const [toDiv, setToDiv] = useState<Division>('IV')
-
-  function handleFromTier(tier: RankTier) {
-    setFromTier(tier)
-    const fIdx = RANK_TIER_ORDER.indexOf(tier)
-    const tIdx = RANK_TIER_ORDER.indexOf(toTier)
-    if (tIdx <= fIdx) setToTier(RANK_TIER_ORDER[Math.min(fIdx + 1, RANK_TIER_ORDER.length - 1)])
-  }
-
-  const price = calcPrice(fromTier, fromDiv, toTier, toDiv)
-  const hours = estHours(fromTier, fromDiv, toTier, toDiv)
-
-  function handleStart() {
-    const params = new URLSearchParams({
-      service: 'elo_boost',
-      from_tier: fromTier, from_div: fromDiv,
-      to_tier: toTier, to_div: toDiv,
-      queue: 'solo_duo', server: 'BR',
-    })
-    if (isAuthenticated()) navigate(`/orders/new?${params}`)
-    else navigate(`/login?redirect=/orders/new?${params}`)
-  }
-
-  return (
-    <div className="card p-6 space-y-5 shadow-glow border-brand/20">
-      <div className="flex items-center gap-2 border-b border-bg-elevated pb-4">
-        <div className="h-8 w-8 rounded-lg bg-brand/15 flex items-center justify-center">
-          <Zap className="h-4 w-4 text-brand" />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-ink">{t('home.configurator.title')}</p>
-          <p className="text-xs text-ink-muted">{t('home.configurator.subtitle')}</p>
-        </div>
-      </div>
-
-      <RankPicker
-        label={t('home.configurator.currentRank')}
-        value={fromTier} div={fromDiv}
-        onTier={handleFromTier} onDiv={setFromDiv}
-      />
-
-      <RankPicker
-        label={t('home.configurator.targetRank')}
-        value={toTier} div={toDiv}
-        onTier={setToTier} onDiv={setToDiv}
-        excludeBelow={fromTier}
-      />
-
-      <div className="rounded-xl bg-bg-elevated/60 border border-bg-overlay p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-ink-muted font-medium">{t('home.configurator.estTime')}</p>
-          <p className="text-sm font-bold text-ink">{hours}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-ink-muted font-medium">{t('home.configurator.totalPrice')}</p>
-          {price > 0
-            ? <p className="text-2xl font-extrabold text-ink">{currency(price)}</p>
-            : <p className="text-sm text-ink-muted italic">{t('home.configurator.selectRanks')}</p>
-          }
-        </div>
-      </div>
-
-      <Button
-        className="w-full"
-        size="lg"
-        disabled={price === 0}
-        onClick={handleStart}
-      >
-        {t('home.configurator.startBoost', { price: price > 0 ? currency(price) : currency(0) })}
-        <ArrowRight className="h-5 w-5" />
-      </Button>
-
-      <div className="flex items-center justify-center gap-4 text-[11px] text-ink-muted font-medium">
-        <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> {t('home.configurator.securePayment')}</span>
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> {t('home.configurator.guarantee')}</span>
-        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {t('home.configurator.support')}</span>
-      </div>
-    </div>
-  )
-}
+import { Button, RankBadge } from '@/components/ui'
+import { RANK_TIER_ORDER } from '@/lib/utils'
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -185,38 +15,75 @@ export function HomePage() {
   const { t } = useTranslation()
 
   const STATS = [
-    { value: '48,200+', label: t('home.stats.ordersCompleted') },
-    { value: '4.94★',   label: t('home.stats.avgRating')       },
+    { value: '48.200+', label: t('home.stats.ordersCompleted') },
+    { value: '4,94★',   label: t('home.stats.avgRating')       },
     { value: '88%',     label: t('home.stats.winRate')          },
     { value: '340+',    label: t('home.stats.activeBoosters')   },
   ]
 
   const SERVICES = [
-    { icon: TrendingUp, title: t('home.services.eloBoostTitle'),    href: '/orders/new?service=elo_boost',        badge: t('home.services.mostPopular'), color: 'text-brand bg-brand/10',   desc: t('home.services.eloBoostDesc') },
-    { icon: Zap,        title: t('home.services.winBoostTitle'),    href: '/orders/new?service=win_boost',         badge: t('home.services.fast'),        color: 'text-accent bg-accent/10',  desc: t('home.services.winBoostDesc') },
-    { icon: Users,      title: t('home.services.coachingTitle'),    href: '/orders/new?service=coaching',          badge: t('home.services.pro'),         color: 'text-success bg-success/10', desc: t('home.services.coachingDesc') },
-    { icon: Award,      title: t('home.services.placementsTitle'),  href: '/orders/new?service=placement_matches', badge: null,                           color: 'text-info bg-info/10',       desc: t('home.services.placementsDesc') },
+    {
+      icon: TrendingUp,
+      title: t('home.services.eloBoostTitle'),
+      href: '/orders/new?service=elo_boost',
+      badge: t('home.services.mostPopular'),
+      color: 'text-brand bg-brand/10',
+      desc: t('home.services.eloBoostDesc'),
+    },
+    {
+      icon: Zap,
+      title: t('home.services.winBoostTitle'),
+      href: '/orders/new?service=win_boost',
+      badge: t('home.services.fast'),
+      color: 'text-accent bg-accent/10',
+      desc: t('home.services.winBoostDesc'),
+    },
+    {
+      icon: Users,
+      title: t('home.services.coachingTitle'),
+      href: '/orders/new?service=coaching',
+      badge: t('home.services.pro'),
+      color: 'text-success bg-success/10',
+      desc: t('home.services.coachingDesc'),
+    },
+    {
+      icon: Trophy,
+      title: t('home.services.placementsTitle'),
+      href: '/orders/new?service=placement_matches',
+      badge: null,
+      color: 'text-rank-grandmaster bg-rank-grandmaster/10',
+      desc: t('home.services.placementsDesc'),
+    },
   ]
 
-  const EXTRAS = [
-    { icon: Eye,          label: t('home.extras.offlineLabel'),  desc: t('home.extras.offlineDesc')  },
-    { icon: Lock,         label: t('home.extras.vpnLabel'),      desc: t('home.extras.vpnDesc')      },
-    { icon: MessageCircle,label: t('home.extras.chatLabel'),     desc: t('home.extras.chatDesc')     },
-    { icon: Radio,        label: t('home.extras.streamLabel'),   desc: t('home.extras.streamDesc')   },
-    { icon: Shield,       label: t('home.extras.soloLabel'),     desc: t('home.extras.soloDesc')     },
-    { icon: CheckCircle2, label: t('home.extras.guaranteeLabel'),desc: t('home.extras.guaranteeDesc')},
+  const TRUST_FEATURES = [
+    { icon: Lock,          label: t('home.extras.vpnLabel'),       desc: t('home.extras.vpnDesc')       },
+    { icon: MessageCircle, label: t('home.extras.chatLabel'),      desc: t('home.extras.chatDesc')      },
+    { icon: Star,          label: t('home.extras.guaranteeLabel'), desc: t('home.extras.guaranteeDesc') },
+    { icon: Clock,         label: 'Início rápido',                 desc: 'Seu pedido é atribuído em até 30 minutos após o pagamento.' },
+  ]
+
+  const INCLUDED = [
+    'Boosters Grão-mestre ou acima',
+    'VPN ativado em cada partida',
+    'Conta offline durante todo o serviço',
+    'Chat em PT-BR com o booster',
+    'Início garantido em até 30 minutos',
+    'Garantia 100% de conclusão',
   ]
 
   return (
     <div>
-      {/* ── HERO ── */}
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section className="relative min-h-[92vh] flex items-center bg-bg-base overflow-hidden">
         <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
         <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
-        <div className="absolute -top-60 right-0 w-[600px] h-[600px] rounded-full bg-brand/8 blur-[120px] pointer-events-none" />
+        <div className="absolute -top-60 right-0 w-[700px] h-[700px] rounded-full bg-brand/6 blur-[140px] pointer-events-none" />
 
         <div className="max-w-screen-xl mx-auto px-5 sm:px-8 w-full py-20">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-2 gap-14 lg:gap-20 items-center">
+
+            {/* Left — copy */}
             <motion.div
               initial={{ opacity: 0, x: -32 }}
               animate={{ opacity: 1, x: 0 }}
@@ -237,7 +104,8 @@ export function HomePage() {
                 <span className="text-ink font-semibold">{t('home.heroDescBold')}</span>{t('home.heroDescPost')}
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+              {/* Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
                 {STATS.map(({ value, label }) => (
                   <div key={label}>
                     <p className="text-2xl font-extrabold text-ink">{value}</p>
@@ -246,26 +114,71 @@ export function HomePage() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-4 text-sm text-ink-secondary">
-                <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-success" /> {t('home.trustBadge1')}</span>
-                <span className="flex items-center gap-1.5"><Eye className="h-4 w-4 text-success" /> {t('home.trustBadge2')}</span>
-                <span className="flex items-center gap-1.5"><Lock className="h-4 w-4 text-success" /> {t('home.trustBadge3')}</span>
+              {/* CTAs */}
+              <div className="flex flex-wrap gap-3">
+                <Button asChild size="lg">
+                  <Link to="/orders/new">
+                    Começar Agora <ArrowRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="secondary">
+                  <Link to="/apply">Seja Booster</Link>
+                </Button>
               </div>
             </motion.div>
 
+            {/* Right — features card */}
             <motion.div
               initial={{ opacity: 0, y: 32 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, delay: 0.15 }}
+              className="card p-7 space-y-6 border-brand/15 shadow-glow"
             >
-              <BoostConfigurator />
+              {/* Live indicator */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                  <span className="text-xs font-bold text-success">340+ boosters disponíveis</span>
+                </div>
+                <span className="text-[10px] font-semibold text-ink-muted bg-bg-elevated px-2 py-1 rounded-lg">
+                  League of Legends
+                </span>
+              </div>
+
+              {/* Included features */}
+              <div>
+                <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest mb-4">
+                  Incluso em todo pedido
+                </p>
+                <div className="space-y-3">
+                  {INCLUDED.map(item => (
+                    <div key={item} className="flex items-center gap-3">
+                      <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                      <span className="text-sm text-ink-secondary">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rank strip */}
+              <div className="border-t border-bg-elevated pt-5">
+                <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest mb-3">
+                  Atendemos todos os ranks
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {RANK_TIER_ORDER.map(tier => (
+                    <RankBadge key={tier} tier={tier} size="xs" showDivision={false} showLabel={false} />
+                  ))}
+                </div>
+              </div>
             </motion.div>
+
           </div>
         </div>
       </section>
 
-      {/* ── SERVICES ── */}
-      <section className="py-28 bg-bg-surface">
+      {/* ── SERVICES ─────────────────────────────────────────────────────── */}
+      <section id="services" className="py-28 bg-bg-surface scroll-mt-20">
         <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
@@ -305,17 +218,35 @@ export function HomePage() {
               </motion.div>
             ))}
           </div>
+
+          {/* Ver todos os serviços */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.35 }}
+            className="mt-8 text-center"
+          >
+            <Button asChild variant="ghost">
+              <Link to="/services">
+                Ver todos os serviços em detalhe <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </motion.div>
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ── */}
+      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
       <section className="py-28 bg-bg-base relative overflow-hidden">
         <div className="absolute inset-0 bg-grid pointer-events-none opacity-40" />
         <div className="max-w-screen-xl mx-auto px-5 sm:px-8 relative">
-          <div className="text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.5 }}
+            className="text-center mb-16"
+          >
             <p className="section-label mb-3">{t('home.howItWorks.sectionLabel')}</p>
             <h2 className="text-4xl md:text-5xl font-black text-ink">{t('home.howItWorks.title')}</h2>
-          </div>
+          </motion.div>
+
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
               { n: '01', title: t('home.howItWorks.step1Title'), body: t('home.howItWorks.step1Desc') },
@@ -335,13 +266,26 @@ export function HomePage() {
               </motion.div>
             ))}
           </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.4 }}
+            className="mt-14 text-center"
+          >
+            <Button asChild size="lg">
+              <Link to="/orders/new">
+                Começar agora <ArrowRight className="h-5 w-5" />
+              </Link>
+            </Button>
+          </motion.div>
         </div>
       </section>
 
-      {/* ── SECURITY / EXTRAS ── */}
+      {/* ── TRUST & SECURITY ─────────────────────────────────────────────── */}
       <section className="py-28 bg-bg-surface">
         <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-start">
+
             <motion.div
               initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}
@@ -366,13 +310,13 @@ export function HomePage() {
                   </div>
                 ))}
               </div>
-              <Button asChild size="lg">
+              <Button asChild size="lg" variant="secondary">
                 <Link to="/security">{t('home.trust.policy')}</Link>
               </Button>
             </motion.div>
 
             <div className="grid grid-cols-2 gap-4">
-              {EXTRAS.map(({ icon: Icon, label, desc }, i) => (
+              {TRUST_FEATURES.map(({ icon: Icon, label, desc }, i) => (
                 <motion.div key={label}
                   initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
@@ -388,88 +332,46 @@ export function HomePage() {
                 </motion.div>
               ))}
             </div>
+
           </div>
         </div>
       </section>
 
-      {/* ── BOOSTER RECRUITMENT ── */}
-      <section className="py-28 bg-bg-surface">
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5 }}
-            >
-              <p className="section-label mb-4">{t('home.boosterRecruit.sectionLabel')}</p>
-              <h2 className="text-4xl md:text-5xl font-black text-ink mb-6 leading-tight">
-                {t('home.boosterRecruit.title')}
-              </h2>
-              <p className="text-ink-secondary text-lg mb-8 leading-relaxed">
-                {t('home.boosterRecruit.desc')}
-              </p>
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                {[
-                  { stat: 'R$15–R$80', label: t('home.boosterRecruit.perOrder')      },
-                  { stat: '72h',     label: t('home.boosterRecruit.avgPayment')     },
-                  { stat: '80+',     label: t('home.boosterRecruit.activeBoosters') },
-                  { stat: '4.9★',   label: t('home.boosterRecruit.avgRating')      },
-                ].map(({ stat, label }) => (
-                  <div key={label} className="card p-4">
-                    <p className="text-2xl font-extrabold text-brand">{stat}</p>
-                    <p className="text-xs text-ink-muted mt-1">{label}</p>
-                  </div>
-                ))}
-              </div>
-              <Button asChild size="lg" variant="secondary">
-                <Link to="/apply">{t('home.boosterRecruit.apply')} <ArrowRight className="h-5 w-5" /></Link>
-              </Button>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-              className="card p-8 space-y-6"
-            >
-              <h3 className="text-lg font-bold text-ink">{t('home.boosterRecruit.requirements')}</h3>
-              {[
-                { icon: '🏆', title: t('home.boosterRecruit.req1Title'), sub: t('home.boosterRecruit.req1Sub') },
-                { icon: '🎮', title: t('home.boosterRecruit.req2Title'), sub: t('home.boosterRecruit.req2Sub') },
-                { icon: '⏰', title: t('home.boosterRecruit.req3Title'), sub: t('home.boosterRecruit.req3Sub') },
-                { icon: '💬', title: t('home.boosterRecruit.req4Title'), sub: t('home.boosterRecruit.req4Sub') },
-              ].map(({ icon, title, sub }) => (
-                <div key={title} className="flex gap-4">
-                  <span className="text-2xl shrink-0">{icon}</span>
-                  <div>
-                    <p className="font-semibold text-ink text-sm">{title}</p>
-                    <p className="text-xs text-ink-muted mt-0.5">{sub}</p>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ── */}
-      <section className="py-28 bg-bg-base relative overflow-hidden">
-        <div className="absolute inset-0 bg-hero-glow opacity-80 pointer-events-none" />
-        <div className="absolute inset-0 bg-grid opacity-50 pointer-events-none" />
+      {/* ── FINAL CTA ────────────────────────────────────────────────────── */}
+      <section className="py-28 bg-bg-surface relative overflow-hidden">
+        <div className="absolute inset-0 bg-hero-glow opacity-60 pointer-events-none" />
+        <div className="absolute inset-0 bg-grid opacity-40 pointer-events-none" />
         <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center relative">
           <motion.div
             initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.55 }}
           >
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-success/10 border border-success/20 text-success text-xs font-bold mb-8">
+              <Shield className="h-3.5 w-3.5" />
+              Garantia 100% de conclusão
+            </div>
+
             <h2 className="text-4xl md:text-6xl font-black text-ink mb-6 leading-tight">
               {t('home.cta.title')}
             </h2>
             <p className="text-ink-secondary text-xl mb-10">
               {t('home.cta.desc')}
             </p>
-            <Button asChild size="xl">
-              <Link to="/orders/new">
-                {t('home.cta.button')} <ArrowRight className="h-5 w-5" />
-              </Link>
-            </Button>
+
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Button asChild size="xl">
+                <Link to="/orders/new">
+                  {t('home.cta.button')} <ArrowRight className="h-5 w-5" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="ghost">
+                <Link to="/faq">Dúvidas frequentes</Link>
+              </Button>
+            </div>
+
+            <p className="mt-8 text-xs text-ink-muted">
+              Pagamento seguro · Sem compromisso · Suporte 24/7
+            </p>
           </motion.div>
         </div>
       </section>

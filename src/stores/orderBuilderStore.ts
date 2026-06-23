@@ -27,6 +27,12 @@ interface OrderBuilderState {
   customerNotes: string
   selectedExtras: SelectedExtra[]
 
+  // LP (PDL) fields
+  currentLp: number
+  avgLpGain: number
+  avgLpLoss: number
+  targetLp: number | null
+
   // Computed
   basePrice: number
   extrasPrice: number
@@ -47,6 +53,10 @@ interface OrderBuilderState {
   setSessionsPurchased: (sessions: number) => void
   setNotes: (notes: string) => void
   toggleExtra: (extra: ServiceExtra) => void
+  setCurrentLp: (lp: number) => void
+  setAvgLpGain: (lp: number) => void
+  setAvgLpLoss: (lp: number) => void
+  setTargetLp: (lp: number | null) => void
   setBasePrice: (price: number) => void
   setExtrasPrice: (price: number) => void
   setEstimatedHours: (hours: number | null) => void
@@ -71,6 +81,10 @@ const initialState = {
   sessionsPurchased: null,
   customerNotes: '',
   selectedExtras: [],
+  currentLp: 0,
+  avgLpGain: 20,
+  avgLpLoss: 15,
+  targetLp: null,
   basePrice: 0,
   extrasPrice: 0,
   estimatedHours: null,
@@ -113,6 +127,10 @@ export const useOrderBuilderStore = create<OrderBuilderState>((set, get) => ({
       return { selectedExtras: [...state.selectedExtras, { extra }] }
     }),
 
+  setCurrentLp: (currentLp) => set({ currentLp }),
+  setAvgLpGain: (avgLpGain) => set({ avgLpGain }),
+  setAvgLpLoss: (avgLpLoss) => set({ avgLpLoss }),
+  setTargetLp: (targetLp) => set({ targetLp }),
   setBasePrice: (basePrice) => set({ basePrice }),
   setExtrasPrice: (extrasPrice) => set({ extrasPrice }),
   setEstimatedHours: (estimatedHours) => set({ estimatedHours }),

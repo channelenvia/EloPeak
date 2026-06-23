@@ -2,11 +2,11 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Send, ArrowLeft, Clock, MessageCircle } from 'lucide-react'
+import { Send, ArrowLeft, Clock, MessageCircle, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { Button, Card, OrderStatusBadge, Avatar, Skeleton } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { formatDateTime, timeAgo, formatRank } from '@/lib/utils'
+import { formatDateTime, timeAgo, formatRank, getServiceLabel, ORDER_STATUS_LABEL } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import type { Order, OrderMessage, OrderStatusHistory } from '@/types'
 
@@ -51,6 +51,100 @@ function useOrderHistory(orderId: string) {
       return data as OrderStatusHistory[]
     },
   })
+}
+
+function CredentialsSection({ order }: { order: Order }) {
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const saveCredentials = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('set_order_credentials', {
+        p_order_id: order.id,
+        p_login: login.trim(),
+        p_password: password,
+      })
+      if (error) throw error
+      const result = data as { success: boolean; error?: string }
+      if (!result.success) throw new Error(result.error ?? 'Erro ao salvar')
+    },
+    onSuccess: () => {
+      setSaved(true)
+      setLogin('')
+      setPassword('')
+      setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
+  const canSet = ['awaiting_assignment', 'assigned', 'in_progress', 'paused'].includes(order.status)
+  if (!canSet && !order.credentials_set) return null
+
+  return (
+    <Card padding="md">
+      <div className="flex items-center gap-2 mb-4">
+        <KeyRound className="h-4 w-4 text-brand" />
+        <h3 className="text-sm font-semibold text-ink">Credenciais da Conta</h3>
+        {(order as Order & { credentials_set?: boolean }).credentials_set && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-lg">
+            <ShieldCheck className="h-3 w-3" /> Salvas
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-ink-muted mb-4">
+        Visível somente para você. Seus dados são criptografados antes de serem armazenados.
+      </p>
+      {canSet && (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-ink-secondary block mb-1">Login / E-mail da conta</label>
+            <input
+              type="text"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="Ex: SeuUsuario#BR1"
+              className="input-base w-full text-sm"
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-ink-secondary block mb-1">Senha da conta</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="input-base w-full text-sm pr-10"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="w-full"
+            loading={saveCredentials.isPending}
+            disabled={!login.trim() || !password}
+            onClick={() => saveCredentials.mutate()}
+            variant={saved ? 'success' : 'primary'}
+          >
+            {saved ? 'Credenciais salvas!' : (order as Order & { credentials_set?: boolean }).credentials_set ? 'Atualizar Credenciais' : 'Salvar Credenciais'}
+          </Button>
+          {saveCredentials.isError && (
+            <p className="text-xs text-danger">{saveCredentials.error instanceof Error ? saveCredentials.error.message : 'Erro'}</p>
+          )}
+        </div>
+      )}
+    </Card>
+  )
 }
 
 export function OrderDetailPage() {
@@ -124,7 +218,7 @@ export function OrderDetailPage() {
             <h3 className="text-sm font-semibold text-ink mb-4">{t('customer.order.details')}</h3>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: t('customer.order.service'),     value: (order.service_id as string).replace(/_/g, ' ') },
+                { label: t('customer.order.service'),     value: getServiceLabel(order.service_id as string) },
                 { label: t('customer.order.server'),      value: order.server },
                 { label: t('customer.order.queue'),       value: order.queue_type === 'solo_duo' ? t('customer.order.soloQueue') : t('customer.order.flexQueue') },
                 {
@@ -219,8 +313,11 @@ export function OrderDetailPage() {
           </Card>
         </div>
 
-        {/* Timeline */}
+        {/* Sidebar */}
         <div className="space-y-4">
+          {/* Credenciais */}
+          <CredentialsSection order={order} />
+
           <Card padding="md">
             <h3 className="text-sm font-semibold text-ink mb-4">{t('customer.order.timeline')}</h3>
             {!history?.length ? (
@@ -239,8 +336,8 @@ export function OrderDetailPage() {
                         <Clock className="h-3 w-3 text-white" />
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-ink capitalize">
-                          {entry.to_status.replace(/_/g, ' ')}
+                        <p className="text-xs font-semibold text-ink">
+                          {ORDER_STATUS_LABEL[entry.to_status] ?? entry.to_status.replace(/_/g, ' ')}
                         </p>
                         <p className="text-[10px] text-ink-muted mt-0.5">
                           {timeAgo(entry.created_at)}

@@ -6,7 +6,7 @@ import { ShoppingBag, Search } from 'lucide-react'
 import { OrderStatusBadge, EmptyState, Skeleton } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { timeAgo } from '@/lib/utils'
+import { timeAgo, getServiceLabel } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import type { Order, OrderStatus } from '@/types'
 
@@ -101,7 +101,7 @@ export function OrderHistoryPage() {
                     #{order.id.slice(0, 8).toUpperCase()}
                   </p>
                   <span className="hidden sm:block text-xs text-ink-muted">
-                    {(order.service_id as string).replace(/_/g, ' ')}
+                    {getServiceLabel(order.service_id as string)}
                   </span>
                 </div>
                 <p className="text-xs text-ink-muted">{timeAgo(order.created_at)}</p>

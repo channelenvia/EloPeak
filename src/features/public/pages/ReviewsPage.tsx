@@ -49,7 +49,7 @@ export function ReviewsPage() {
               <p className="text-sm text-ink-secondary leading-relaxed">"{comment}"</p>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-ink">{name}</p>
-                <span className="text-xs text-brand font-medium bg-brand-muted px-2 py-0.5 rounded-full">{rank}</span>
+                <span className="text-xs text-brand font-medium bg-brand/10 px-2 py-0.5 rounded-full">{rank}</span>
               </div>
             </div>
           ))}

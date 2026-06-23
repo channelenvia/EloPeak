@@ -205,7 +205,7 @@ export function AdminBoosterDetailPage() {
           {[
             { label: 'Pedidos', value: booster.total_completed },
             { label: 'Ganhos',  value: currency(booster.total_earnings) },
-            { label: 'Rating',  value: `${booster.rating.toFixed(1)} ⭐` },
+            { label: 'Rating',  value: booster.rating.toFixed(1) },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-lg font-bold text-ink">{value}</p>
@@ -226,7 +226,7 @@ export function AdminBoosterDetailPage() {
           </h3>
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Solo', value: slotInfo.solo_count, icon: Swords, color: 'text-brand bg-brand-muted' },
+              { label: 'Solo', value: slotInfo.solo_count, icon: Swords, color: 'text-brand bg-brand/10' },
               { label: 'Duo',  value: `${slotInfo.duo_count}/${slotInfo.max_duo}`, icon: Users, color: 'text-accent bg-accent/10' },
               { label: 'Total', value: `${slotInfo.total_count}/${slotInfo.max_total}`, icon: Trophy,
                 color: slotInfo.total_count >= slotInfo.max_total ? 'text-danger bg-danger/10' : 'text-success bg-success/10' },

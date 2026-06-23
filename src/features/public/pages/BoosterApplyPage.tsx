@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useForm, Controller, type FieldErrors } from 'react-hook-form'
 import { Shield, Clock, DollarSign, Zap, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { cn, RANK_TIER_ORDER, RANK_TIER_LABEL } from '@/lib/utils'
+import { useAuthStore } from '@/stores/authStore'
 import type { RankTier } from '@/types'
 import { supabase } from '@/lib/supabase'
 
@@ -17,19 +18,28 @@ const ROLES = [
   { id: 'fill',    label: 'Fill'    },
 ]
 
-const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+const DAYS = [
+  { id: 'Segunda', label: 'Seg' },
+  { id: 'Terça',   label: 'Ter' },
+  { id: 'Quarta',  label: 'Qua' },
+  { id: 'Quinta',  label: 'Qui' },
+  { id: 'Sexta',   label: 'Sex' },
+  { id: 'Sábado',  label: 'Sáb' },
+  { id: 'Domingo', label: 'Dom' },
+]
 
 type FormData = {
   summoner_name: string
   opgg_link: string
   peak_tier: RankTier | ''
   roles: string[]
-  hours_per_week: string
+  has_coaching: boolean
   available_days: string[]
+  hours_per_day_min: string
+  hours_per_day_max: string
   years_experience: string
   motivation: string
   discord_tag: string
-  has_coaching: boolean
   agreed_terms: boolean
 }
 
@@ -64,6 +74,8 @@ function CheckPill({
 }
 
 export function BoosterApplyPage() {
+  const { profile } = useAuthStore()
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('form')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,12 +90,13 @@ export function BoosterApplyPage() {
       opgg_link: '',
       peak_tier: '',
       roles: [],
-      hours_per_week: '',
+      has_coaching: false,
       available_days: [],
+      hours_per_day_min: '',
+      hours_per_day_max: '',
       years_experience: '',
       motivation: '',
       discord_tag: '',
-      has_coaching: false,
       agreed_terms: false,
     },
   })
@@ -92,6 +105,10 @@ export function BoosterApplyPage() {
     setError(null)
     setSubmitting(true)
     try {
+      const minH = Number(data.hours_per_day_min) || 0
+      const maxH = Number(data.hours_per_day_max) || minH
+      const hoursPerWeek = Math.round(((minH + maxH) / 2) * (data.available_days.length || 5))
+
       const payload = {
         summoner_name: data.summoner_name,
         opgg_link: data.opgg_link || null,
@@ -99,13 +116,13 @@ export function BoosterApplyPage() {
         peak_rank: data.peak_tier,
         roles: data.roles,
         games: ['lol'],
-        hours_per_week: Number(data.hours_per_week),
+        hours_per_week: hoursPerWeek,
         available_days: data.available_days,
         years_experience: Number(data.years_experience),
         motivation: data.motivation,
         discord_tag: data.discord_tag || null,
         has_coaching: data.has_coaching,
-        user_id: null,
+        user_id: profile?.id ?? null,
         status: 'pending' as const,
       }
 
@@ -129,20 +146,18 @@ export function BoosterApplyPage() {
     }
   }
 
-  function onInvalid(errors: FieldErrors<FormData>) {
+  function onInvalid(errs: FieldErrors<FormData>) {
     const labels: Record<string, string> = {
-      summoner_name: 'Nome do Invocador',
-      peak_tier:     'Rank de Pico',
-      roles:         'Funções',
-      available_days:'Dias disponíveis',
-      hours_per_week:'Horas por semana',
+      summoner_name:    'Nome do Invocador',
+      peak_tier:        'Rank de Pico',
+      roles:            'Funções preferidas',
+      available_days:   'Dias disponíveis',
+      hours_per_day_max:'Horas por dia',
       years_experience: 'Anos de experiência',
-      motivation:    'Motivação (mín. 80 chars)',
-      agreed_terms:  'Aceitar os termos',
+      motivation:       'Motivação (mín. 80 chars)',
+      agreed_terms:     'Aceitar os termos',
     }
-    const missing = Object.keys(errors)
-      .map(k => labels[k] ?? k)
-      .join(', ')
+    const missing = Object.keys(errs).map(k => labels[k] ?? k).join(', ')
     setError(`Preencha os campos obrigatórios: ${missing}`)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -180,8 +195,8 @@ export function BoosterApplyPage() {
               </div>
             ))}
           </div>
-          <Button asChild size="lg" className="w-full">
-            <Link to="/">Voltar para a página inicial</Link>
+          <Button size="lg" className="w-full" onClick={() => navigate('/dashboard')}>
+            Ir para o painel
           </Button>
         </motion.div>
       </div>
@@ -190,7 +205,6 @@ export function BoosterApplyPage() {
 
   return (
     <div className="bg-bg-base">
-      {/* Fixed error banner — visible regardless of scroll position */}
       {error && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-full max-w-xl px-4">
           <div className="bg-danger text-white rounded-xl px-5 py-4 text-sm font-medium shadow-lg flex items-start justify-between gap-3">
@@ -214,8 +228,8 @@ export function BoosterApplyPage() {
                 Candidate-se como<br /><span className="text-gradient-brand">Booster Profissional</span>
               </h1>
               <p className="text-ink-secondary text-lg leading-relaxed mb-8">
-                Jogadores Diamond+ ganham R$15–R$80 por pedido, definem seus próprios horários
-                e trabalham na plataforma de boosting mais confiável da região.
+                Jogadores Grão-mestre ou acima ganham R$15–R$80 por pedido, definem seus próprios
+                horários e trabalham na plataforma de boosting mais confiável da região.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 {[
@@ -241,15 +255,15 @@ export function BoosterApplyPage() {
               <div className="card p-6 w-full max-w-xs space-y-4">
                 <p className="section-label">Requisitos</p>
                 {[
-                  '🏆 Diamond IV ou superior (temporada atual)',
-                  '🎮 Pelo menos uma função dominada',
-                  '⏰ 10+ horas/semana de disponibilidade',
-                  '💬 Comunicação básica em português',
-                  '📊 Perfil OP.GG verificável',
+                  'Grão-mestre ou acima (temporada atual)',
+                  'Pelo menos uma função dominada',
+                  '10+ horas/semana de disponibilidade',
+                  'Comunicação empática com o cliente em português',
+                  'Perfil OP.GG verificável',
                 ].map(req => (
                   <div key={req} className="flex items-start gap-2 text-sm text-ink-secondary">
                     <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
-                    <span>{req.slice(2)}</span>
+                    <span>{req}</span>
                   </div>
                 ))}
               </div>
@@ -261,6 +275,7 @@ export function BoosterApplyPage() {
       {/* Form */}
       <div className="max-w-2xl mx-auto px-5 sm:px-8 py-16">
         <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-10">
+
           {/* Section 1: Account info */}
           <div>
             <h2 className="text-xl font-bold text-ink mb-6 pb-3 border-b border-bg-elevated">
@@ -281,10 +296,7 @@ export function BoosterApplyPage() {
                 <FieldLabel>Link do OP.GG</FieldLabel>
                 <input
                   {...register('opgg_link', {
-                    pattern: {
-                      value: /^https?:\/\//i,
-                      message: 'Digite uma URL válida',
-                    },
+                    pattern: { value: /^https?:\/\//i, message: 'Digite uma URL válida' },
                   })}
                   placeholder="https://op.gg/summoners/br/SeuNome"
                   className="input-base w-full"
@@ -332,7 +344,8 @@ export function BoosterApplyPage() {
             </h2>
             <div className="space-y-5">
               <div>
-                <FieldLabel required>Funções preferidas (selecione todas que se aplicam)</FieldLabel>
+                <FieldLabel required>Funções preferidas</FieldLabel>
+                <p className="text-xs text-ink-muted mb-2">Selecione todas as lanes que você domina.</p>
                 <Controller
                   name="roles"
                   control={control}
@@ -360,14 +373,15 @@ export function BoosterApplyPage() {
 
               <div>
                 <FieldLabel required>Capacidade de coaching</FieldLabel>
+                <p className="text-xs text-ink-muted mb-2">Boosters com coaching ganham pedidos extras e taxas maiores.</p>
                 <Controller
                   name="has_coaching"
                   control={control}
                   render={({ field }) => (
                     <div className="flex gap-3">
                       {[
-                        { v: true, label: 'Sim, posso fazer coaching' },
-                        { v: false, label: 'Apenas boosting' },
+                        { v: true,  label: 'Sim, posso fazer coaching' },
+                        { v: false, label: 'Apenas boosting'           },
                       ].map(({ v, label }) => (
                         <button
                           key={label}
@@ -380,6 +394,7 @@ export function BoosterApplyPage() {
                               : 'border-bg-elevated text-ink-muted hover:border-bg-overlay'
                           )}
                         >
+                          {field.value === v && <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5" />}
                           {label}
                         </button>
                       ))}
@@ -404,15 +419,15 @@ export function BoosterApplyPage() {
                   rules={{ validate: v => v.length > 0 || 'Selecione pelo menos um dia' }}
                   render={({ field }) => (
                     <div className="flex flex-wrap gap-2">
-                      {DAYS.map(day => (
+                      {DAYS.map(({ id, label }) => (
                         <CheckPill
-                          key={day}
-                          label={day.slice(0, 3)}
-                          checked={field.value.includes(day)}
+                          key={id}
+                          label={label}
+                          checked={field.value.includes(id)}
                           onChange={() => {
-                            const next = field.value.includes(day)
-                              ? field.value.filter(d => d !== day)
-                              : [...field.value, day]
+                            const next = field.value.includes(id)
+                              ? field.value.filter(d => d !== id)
+                              : [...field.value, id]
                             field.onChange(next)
                           }}
                         />
@@ -424,20 +439,47 @@ export function BoosterApplyPage() {
               </div>
 
               <div>
-                <FieldLabel required>Horas disponíveis por semana</FieldLabel>
-                <input
-                  {...register('hours_per_week', {
-                    required: 'Obrigatório',
-                    min: { value: 1, message: 'Mínimo 1 hora' },
-                    max: { value: 80, message: 'Máximo 80 horas' },
-                  })}
-                  type="number"
-                  min={1}
-                  max={80}
-                  placeholder="e.g. 20"
-                  className="input-base w-40"
-                />
-                {errors.hours_per_week && <p className="text-danger text-xs mt-1">{errors.hours_per_week.message}</p>}
+                <FieldLabel required>Horas disponíveis por dia</FieldLabel>
+                <p className="text-xs text-ink-muted mb-2">Informe o intervalo típico nos dias que você joga.</p>
+                <div className="flex items-end gap-3 flex-wrap">
+                  <div>
+                    <p className="text-xs text-ink-muted mb-1">Mínimo</p>
+                    <input
+                      {...register('hours_per_day_min', {
+                        required: 'Obrigatório',
+                        min: { value: 1, message: 'Mínimo 1h' },
+                        max: { value: 24, message: 'Máximo 24h' },
+                      })}
+                      type="number"
+                      min={1}
+                      max={24}
+                      placeholder="2"
+                      className="input-base w-24"
+                    />
+                  </div>
+                  <span className="text-ink-muted pb-2">–</span>
+                  <div>
+                    <p className="text-xs text-ink-muted mb-1">Máximo</p>
+                    <input
+                      {...register('hours_per_day_max', {
+                        required: 'Obrigatório',
+                        min: { value: 1, message: 'Mínimo 1h' },
+                        max: { value: 24, message: 'Máximo 24h' },
+                      })}
+                      type="number"
+                      min={1}
+                      max={24}
+                      placeholder="8"
+                      className="input-base w-24"
+                    />
+                  </div>
+                  <span className="text-sm text-ink-muted pb-2">horas/dia</span>
+                </div>
+                {(errors.hours_per_day_min || errors.hours_per_day_max) && (
+                  <p className="text-danger text-xs mt-1">
+                    {errors.hours_per_day_min?.message || errors.hours_per_day_max?.message}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -458,7 +500,7 @@ export function BoosterApplyPage() {
                   type="number"
                   min={0}
                   step={0.5}
-                  placeholder="e.g. 2"
+                  placeholder="ex: 2"
                   className="input-base w-40"
                 />
                 {errors.years_experience && <p className="text-danger text-xs mt-1">{errors.years_experience.message}</p>}
@@ -487,7 +529,7 @@ export function BoosterApplyPage() {
                     minLength: { value: 80, message: 'Mínimo de 80 caracteres' },
                   })}
                   rows={5}
-                  placeholder="Jogo no Diamond+ há 3 temporadas. Minha pool principal é Zed/Fizz/Akali mid. Sou conhecido por…"
+                  placeholder="Jogo no Grão-mestre há 2 temporadas. Minha pool principal é Zed/Fizz/Akali mid. Sou conhecido por comunicação clara e atendimento ao cliente…"
                   className="input-base w-full resize-none"
                 />
                 <div className="flex justify-between mt-1">
@@ -533,12 +575,6 @@ export function BoosterApplyPage() {
           <Button type="submit" size="lg" loading={submitting} className="w-full">
             Enviar Candidatura
           </Button>
-
-          <p className="text-center text-xs text-ink-muted">
-            Já é cliente?{' '}
-            <Link to="/login" className="text-brand hover:underline">Entre primeiro</Link>
-            {' '}para vincular sua candidatura à sua conta.
-          </p>
         </form>
       </div>
     </div>

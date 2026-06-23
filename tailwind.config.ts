@@ -18,14 +18,14 @@ export default {
         brand: {
           DEFAULT: '#22C55E',
           hover:   '#16A34A',
-          muted:   '#0F2A1A',
-          subtle:  '#1A3D28',
+          muted:   'rgb(var(--color-brand-muted) / <alpha-value>)',
+          subtle:  'rgb(var(--color-brand-subtle) / <alpha-value>)',
         },
         // Accent (gold)
         accent: {
           DEFAULT: '#F5B800',
           hover:   '#D9A300',
-          muted:   '#2E2400',
+          muted:   'rgb(var(--color-accent-muted) / <alpha-value>)',
         },
         // Text — driven by CSS variables
         ink: {
@@ -35,9 +35,9 @@ export default {
           inverse:   'rgb(var(--color-ink-inverse) / <alpha-value>)',
         },
         // Status
-        success: { DEFAULT: '#10B981', muted: '#0A2E20' },
-        warning: { DEFAULT: '#F59E0B', muted: '#2E1F00' },
-        danger:  { DEFAULT: '#EF4444', muted: '#2E0A0A' },
+        success: { DEFAULT: '#10B981', muted: 'rgb(var(--color-success-muted) / <alpha-value>)' },
+        warning: { DEFAULT: '#F59E0B', muted: 'rgb(var(--color-warning-muted) / <alpha-value>)' },
+        danger:  { DEFAULT: '#EF4444', muted: 'rgb(var(--color-danger-muted)  / <alpha-value>)' },
         info:    { DEFAULT: '#3B82F6', muted: '#0A1830' },
         // Rank colors
         rank: {

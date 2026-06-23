@@ -76,7 +76,7 @@ export function CustomerProfilePage() {
           <div>
             <p className="font-semibold text-ink">{profile?.username}</p>
             <p className="text-sm text-ink-secondary">{profile?.email}</p>
-            <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-muted text-brand">
+            <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand/10 text-brand">
               {t('customer.profile.role')}
             </span>
           </div>

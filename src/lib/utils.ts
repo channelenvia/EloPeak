@@ -24,19 +24,19 @@ export function timeAgo(date: string | Date) {
 // ─── Order status display ─────────────────────────────────────────────────────
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
-  draft: 'Draft',
-  awaiting_payment: 'Awaiting Payment',
-  paid: 'Payment Confirmed',
-  awaiting_assignment: 'Queued',
-  assigned: 'Booster Assigned',
-  in_progress: 'In Progress',
-  paused: 'Paused',
-  drop_requested: 'Drop Requested',
-  awaiting_customer: 'Awaiting You',
-  completed: 'Completed',
-  disputed: 'Disputed',
-  refunded: 'Refunded',
-  canceled: 'Canceled',
+  draft: 'Rascunho',
+  awaiting_payment: 'Aguardando Pagamento',
+  paid: 'Pagamento Confirmado',
+  awaiting_assignment: 'Esperando Booster',
+  assigned: 'Booster Atribuído',
+  in_progress: 'Em Andamento',
+  paused: 'Pausado',
+  drop_requested: 'Solicitação de Drop',
+  awaiting_customer: 'Aguardando Cliente',
+  completed: 'Concluído',
+  disputed: 'Disputado',
+  refunded: 'Reembolsado',
+  canceled: 'Cancelado',
 }
 
 export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
@@ -44,7 +44,7 @@ export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   awaiting_payment: 'text-warning bg-warning/10',
   paid: 'text-info bg-info/10',
   awaiting_assignment: 'text-info bg-info/10',
-  assigned: 'text-brand bg-brand-muted',
+  assigned: 'text-brand bg-brand/10',
   in_progress: 'text-success bg-success/10',
   paused: 'text-warning bg-warning/10',
   drop_requested: 'text-danger bg-danger/10',
@@ -75,16 +75,16 @@ export const RANK_TIER_COLOR: Record<RankTier, string> = {
 }
 
 export const RANK_TIER_LABEL: Record<RankTier, string> = {
-  iron: 'Iron',
+  iron: 'Ferro',
   bronze: 'Bronze',
-  silver: 'Silver',
-  gold: 'Gold',
-  platinum: 'Platinum',
-  emerald: 'Emerald',
-  diamond: 'Diamond',
-  master: 'Master',
-  grandmaster: 'Grandmaster',
-  challenger: 'Challenger',
+  silver: 'Prata',
+  gold: 'Ouro',
+  platinum: 'Platina',
+  emerald: 'Esmeralda',
+  diamond: 'Diamante',
+  master: 'Mestre',
+  grandmaster: 'Grão-mestre',
+  challenger: 'Desafiante',
 }
 
 export function formatRank(tier: RankTier, division?: string | null) {
@@ -96,11 +96,11 @@ export function formatRank(tier: RankTier, division?: string | null) {
 // ─── Booster status ───────────────────────────────────────────────────────────
 
 export const BOOSTER_STATUS_LABEL: Record<BoosterStatus, string> = {
-  pending: 'Pending',
-  under_review: 'Under Review',
-  approved: 'Approved',
-  suspended: 'Suspended',
-  rejected: 'Rejected',
+  pending: 'Pendente',
+  under_review: 'Em Revisão',
+  approved: 'Aprovado',
+  suspended: 'Suspenso',
+  rejected: 'Rejeitado',
 }
 
 export const BOOSTER_STATUS_COLOR: Record<BoosterStatus, string> = {
@@ -114,26 +114,26 @@ export const BOOSTER_STATUS_COLOR: Record<BoosterStatus, string> = {
 // ─── Ticket status ────────────────────────────────────────────────────────────
 
 export const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  waiting_customer: 'Waiting for You',
-  resolved: 'Resolved',
-  closed: 'Closed',
+  open: 'Aberto',
+  in_progress: 'Em Andamento',
+  waiting_customer: 'Aguardando Cliente',
+  resolved: 'Resolvido',
+  closed: 'Fechado',
 }
 
 export const TICKET_STATUS_COLOR: Record<TicketStatus, string> = {
   open: 'text-danger bg-danger/10',
-  in_progress: 'text-brand bg-brand-muted',
+  in_progress: 'text-brand bg-brand/10',
   waiting_customer: 'text-accent bg-accent/10',
   resolved: 'text-success bg-success/10',
   closed: 'text-ink-muted bg-bg-overlay',
 }
 
 export const TICKET_PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
+  low: 'Baixa',
+  medium: 'Média',
+  high: 'Alta',
+  urgent: 'Urgente',
 }
 
 export const TICKET_PRIORITY_COLOR: Record<TicketPriority, string> = {
@@ -141,6 +141,19 @@ export const TICKET_PRIORITY_COLOR: Record<TicketPriority, string> = {
   medium: 'text-warning',
   high: 'text-danger',
   urgent: 'text-danger font-bold',
+}
+
+// ─── Service label ────────────────────────────────────────────────────────────
+
+const SERVICE_LABEL_MAP: Record<string, string> = {
+  elo_boost:         'Solo Boost / Duo Boost',
+  win_boost:         'Vitórias',
+  placement_matches: 'MD5',
+  coaching:          'Coaching',
+}
+
+export function getServiceLabel(serviceId: string): string {
+  return SERVICE_LABEL_MAP[serviceId] ?? serviceId.replace(/_/g, ' ')
 }
 
 // ─── Misc ─────────────────────────────────────────────────────────────────────

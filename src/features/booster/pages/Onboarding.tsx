@@ -129,7 +129,7 @@ export function BoosterOnboardingPage() {
                     className={cn(
                       'px-4 py-2 rounded-lg text-sm font-semibold border transition-all',
                       peakTier === tier
-                        ? 'border-brand bg-brand-muted text-brand'
+                        ? 'border-brand bg-brand/10 text-brand'
                         : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30'
                     )}
                   >

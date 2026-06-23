@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Briefcase, DollarSign, Star, TrendingUp, Clock, ChevronRight, Swords, Users } from 'lucide-react'
-import { Button, Card, OrderStatusBadge, Skeleton, EmptyState } from '@/components/ui'
+import { Button, Card, OrderStatusBadge, Skeleton, EmptyState, RankBadge } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { formatRank, timeAgo } from '@/lib/utils'
-import type { Order, BoosterProfile } from '@/types'
+import { timeAgo, formatRank } from '@/lib/utils'
+import type { Order, BoosterProfile, RankTier } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -106,10 +106,10 @@ export function BoosterDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: t('booster.dashboard.stats.active'), value: activeOrders?.length ?? 0, icon: Briefcase, color: 'text-brand bg-brand-muted' },
+          { label: t('booster.dashboard.stats.active'), value: activeOrders?.length ?? 0, icon: Briefcase, color: 'text-brand bg-brand/10' },
           { label: t('booster.dashboard.stats.completed'), value: completedCount, icon: TrendingUp, color: 'text-success bg-success/10' },
           { label: t('booster.dashboard.stats.earned'), value: currency(earnings), icon: DollarSign, color: 'text-accent bg-accent/10' },
-          { label: t('booster.dashboard.stats.rating'), value: `${rating.toFixed(1)} ⭐`, icon: Star, color: 'text-warning bg-warning/10' },
+          { label: t('booster.dashboard.stats.rating'), value: rating.toFixed(1), icon: Star, color: 'text-warning bg-warning/10' },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label} padding="md">
             <div className={`h-8 w-8 rounded-lg ${color} flex items-center justify-center mb-3`}>
@@ -189,11 +189,27 @@ export function BoosterDashboard() {
                       <span className="text-xs text-ink-muted">{order.server}</span>
                     </div>
                     {order.current_rank && order.target_rank && (
-                      <p className="text-xs text-ink-secondary">
-                        {formatRank((order.current_rank as { tier: string }).tier as never, (order.current_rank as { division: string }).division)}
-                        {' → '}
-                        {formatRank((order.target_rank as { tier: string }).tier as never, (order.target_rank as { division: string }).division)}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <RankBadge
+                          tier={(order.current_rank as { tier: RankTier }).tier}
+                          division={(order.current_rank as { division: string }).division}
+                          size="xs"
+                          showLabel={false}
+                        />
+                        <span className="text-xs font-medium text-ink-secondary">
+                          {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: string }).division)}
+                        </span>
+                        <span className="text-ink-muted text-xs">→</span>
+                        <RankBadge
+                          tier={(order.target_rank as { tier: RankTier }).tier}
+                          division={(order.target_rank as { division: string }).division}
+                          size="xs"
+                          showLabel={false}
+                        />
+                        <span className="text-xs font-medium text-ink-secondary">
+                          {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: string }).division)}
+                        </span>
+                      </div>
                     )}
                     <p className="text-[10px] text-ink-muted mt-0.5">{timeAgo(order.created_at)}</p>
                   </div>

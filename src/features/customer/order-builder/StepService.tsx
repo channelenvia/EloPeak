@@ -1,13 +1,13 @@
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { cn } from '@/lib/utils'
 import type { ServiceType } from '@/types'
-import { TrendingUp, Zap, Users, Award, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, Zap, Users, Trophy, CheckCircle2 } from 'lucide-react'
 
 const SERVICES: { type: ServiceType; name: string; desc: string; icon: React.ElementType; badge?: string }[] = [
-  { type: 'elo_boost', name: 'Elo Boost', desc: 'Suba do seu rank atual para a divisão desejada.', icon: TrendingUp, badge: 'Mais Popular' },
-  { type: 'win_boost', name: 'Win Boost', desc: 'Compre um número fixo de vitórias para ganhar LP rapidamente.', icon: Zap, badge: 'Rápido' },
-  { type: 'coaching', name: 'Coaching', desc: 'Sessões individuais com coaches de alto ELO.', icon: Users },
-  { type: 'placement_matches', name: 'Placement Matches', desc: 'Comece a temporada no rank mais alto possível.', icon: Award },
+  { type: 'elo_boost',         name: 'Solo Boost / Duo Boost', desc: 'Suba do seu rank atual para a divisão desejada — solo ou duo.',         icon: TrendingUp, badge: 'Mais Popular' },
+  { type: 'win_boost',         name: 'Vitórias',               desc: 'Compre um número fixo de vitórias para ganhar LP rapidamente.',          icon: Zap,        badge: 'Rápido'       },
+  { type: 'coaching',          name: 'Coaching',               desc: 'Sessões individuais com coaches de alto ELO para evolução real.',        icon: Users                              },
+  { type: 'placement_matches', name: 'MD5',                    desc: 'Comece a temporada no rank mais alto com 5 partidas de posicionamento.', icon: Trophy                             },
 ]
 
 export function StepService() {
@@ -26,7 +26,7 @@ export function StepService() {
             className={cn(
               'relative flex items-start gap-4 p-5 rounded-2xl border-2 text-left transition-all duration-150',
               serviceType === type
-                ? 'border-brand bg-brand-muted shadow-brand'
+                ? 'border-brand bg-brand/10 shadow-brand'
                 : 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated cursor-pointer'
             )}
           >

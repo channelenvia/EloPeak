@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createHmac } from 'https://deno.land/std@0.177.0/node/crypto.ts'
+import { createHmac } from 'node:crypto'
 
 const MP_ACCESS_TOKEN = Deno.env.get('MERCADOPAGO_ACCESS_TOKEN') ?? ''
 const MP_WEBHOOK_SECRET = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET') ?? ''
@@ -63,16 +63,23 @@ serve(async (req) => {
   const dataId = String((body.data as Record<string, unknown>).id ?? '')
   if (!dataId) return new Response('ok', { status: 200 })
 
-  // Verify webhook authenticity — must be configured or we refuse all traffic
+  // Verify webhook authenticity — fail closed in all environments.
+  // Dev bypass only when DENO_ENV=development AND secret is explicitly absent.
+  const isDev = Deno.env.get('DENO_ENV') === 'development'
   if (!MP_WEBHOOK_SECRET) {
-    console.error('MERCADOPAGO_WEBHOOK_SECRET is not set — rejecting all webhook traffic')
-    return new Response('server misconfigured', { status: 500 })
-  }
-  const xSignature = req.headers.get('x-signature')
-  const xRequestId = req.headers.get('x-request-id')
-  if (!verifySignature(xSignature, xRequestId, dataId)) {
-    console.error('Invalid MP webhook signature for payment', dataId)
-    return new Response('invalid signature', { status: 401 })
+    if (isDev) {
+      console.warn('[DEV] MERCADOPAGO_WEBHOOK_SECRET not set — skipping signature check in development only')
+    } else {
+      console.error('MERCADOPAGO_WEBHOOK_SECRET is not set — rejecting all webhook traffic')
+      return new Response('server misconfigured', { status: 500 })
+    }
+  } else {
+    const xSignature = req.headers.get('x-signature')
+    const xRequestId = req.headers.get('x-request-id')
+    if (!verifySignature(xSignature, xRequestId, dataId)) {
+      console.error('Invalid MP webhook signature for payment', dataId)
+      return new Response('invalid signature', { status: 401 })
+    }
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)

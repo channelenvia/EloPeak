@@ -2,11 +2,11 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { ArrowLeft, Send, Play, Pause, CheckCircle2, Trophy, XCircle, AlertTriangle } from 'lucide-react'
-import { Button, Card, OrderStatusBadge } from '@/components/ui'
+import { Button, Card, OrderStatusBadge, RankBadge } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { formatRank } from '@/lib/utils'
-import type { Order, OrderMessage, OrderStatus, OrderDropRequest } from '@/types'
+import type { Order, OrderMessage, OrderStatus, OrderDropRequest, RankTier } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -165,14 +165,34 @@ export function JobDetailPage() {
               <div><p className="text-xs text-ink-muted">{t('booster.job.queue')}</p><p className="text-sm font-semibold text-ink">{order.queue_type === 'solo_duo' ? t('booster.job.soloQueue') : t('booster.job.flexQueue')}</p></div>
               {order.current_rank && (
                 <div>
-                  <p className="text-xs text-ink-muted">{t('booster.job.from')}</p>
-                  <p className="text-sm font-semibold text-ink">{formatRank((order.current_rank as { tier: string }).tier as never, (order.current_rank as { division: string }).division)}</p>
+                  <p className="text-xs text-ink-muted mb-1">{t('booster.job.from')}</p>
+                  <div className="flex items-center gap-2">
+                    <RankBadge
+                      tier={(order.current_rank as { tier: RankTier }).tier}
+                      division={(order.current_rank as { division: string }).division}
+                      size="sm"
+                      showLabel={false}
+                    />
+                    <span className="text-sm font-semibold text-ink">
+                      {formatRank((order.current_rank as { tier: RankTier }).tier, (order.current_rank as { division: string }).division)}
+                    </span>
+                  </div>
                 </div>
               )}
               {order.target_rank && (
                 <div>
-                  <p className="text-xs text-ink-muted">{t('booster.job.to')}</p>
-                  <p className="text-sm font-semibold text-ink">{formatRank((order.target_rank as { tier: string }).tier as never, (order.target_rank as { division: string }).division)}</p>
+                  <p className="text-xs text-ink-muted mb-1">{t('booster.job.to')}</p>
+                  <div className="flex items-center gap-2">
+                    <RankBadge
+                      tier={(order.target_rank as { tier: RankTier }).tier}
+                      division={(order.target_rank as { division: string }).division}
+                      size="sm"
+                      showLabel={false}
+                    />
+                    <span className="text-sm font-semibold text-ink">
+                      {formatRank((order.target_rank as { tier: RankTier }).tier, (order.target_rank as { division: string }).division)}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

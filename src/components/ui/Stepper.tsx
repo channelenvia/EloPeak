@@ -29,8 +29,8 @@ export function Stepper({ steps, currentStep, completedSteps = [] }: StepperProp
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold transition-all',
                     isCompleted && 'border-brand bg-brand text-white',
-                    isCurrent && !isCompleted && 'border-brand bg-brand-muted text-brand',
-                    !isCurrent && !isCompleted && 'border-bg-overlay bg-bg-surface text-ink-muted'
+                    isCurrent && !isCompleted && 'border-brand bg-brand/10 text-brand',
+                    !isCurrent && !isCompleted && 'border-bg-overlay bg-bg-elevated text-ink-muted'
                   )}
                 >
                   {isCompleted ? (

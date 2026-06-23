@@ -16,6 +16,8 @@ const PricingPage      = lazy(() => import('@/features/public/pages/PricingPage'
 const SecurityPage     = lazy(() => import('@/features/public/pages/SecurityPage').then(m => ({ default: m.SecurityPage })))
 const FAQPage          = lazy(() => import('@/features/public/pages/FAQPage').then(m => ({ default: m.FAQPage })))
 const BoosterApplyPage = lazy(() => import('@/features/public/pages/BoosterApplyPage').then(m => ({ default: m.BoosterApplyPage })))
+const BoostersPage               = lazy(() => import('@/features/public/pages/BoostersPage').then(m => ({ default: m.BoostersPage })))
+const BoosterPublicProfilePage   = lazy(() => import('@/features/public/pages/BoosterPublicProfilePage').then(m => ({ default: m.BoosterPublicProfilePage })))
 
 // Auth pages
 const LoginPage          = lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.LoginPage })))
@@ -104,8 +106,17 @@ export const router = createBrowserRouter([
       { path: '/pricing',  element: <SuspensePage><PricingPage /></SuspensePage> },
       { path: '/security', element: <SuspensePage><SecurityPage /></SuspensePage> },
       { path: '/faq',      element: <SuspensePage><FAQPage /></SuspensePage> },
-      { path: '/apply',    element: <SuspensePage><BoosterApplyPage /></SuspensePage> },
       { path: '/reviews',  element: <SuspensePage><ReviewsPage /></SuspensePage> },
+      { path: '/boosters',     element: <SuspensePage><BoostersPage /></SuspensePage> },
+      { path: '/boosters/:id', element: <SuspensePage><BoosterPublicProfilePage /></SuspensePage> },
+    ],
+  },
+
+  // Any authenticated user (no role restriction)
+  {
+    element: <RequireAuth />,
+    children: [
+      { path: '/apply', element: <SuspensePage><BoosterApplyPage /></SuspensePage> },
     ],
   },
 

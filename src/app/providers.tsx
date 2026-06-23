@@ -26,33 +26,50 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setSession, setProfile, setLoading, setInitialized } = useAuthStore()
 
   useEffect(() => {
+    let initialized = false
+
+    // Resolve session immediately from cache — no network needed for logged-out users
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (initialized) return
+      setSession(session)
+      if (session?.user) {
+        const displayName = (session.user.user_metadata?.name ?? session.user.user_metadata?.full_name) as string | undefined
+        fetchProfile(session.user.id, displayName)
+      } else {
+        setProfile(null)
+        setLoading(false)
+        setInitialized(true)
+        initialized = true
+      }
+    })
+
+    // Subscribe to future auth state changes (sign in / sign out / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (event === 'INITIAL_SESSION') return // Handled by getSession() above
         setSession(session)
         if (session?.user) {
-          // Auto-join Discord server when user authenticates via Discord OAuth
           if (event === 'SIGNED_IN' && session.provider_token) {
             const provider = (session.user.app_metadata as Record<string, string>).provider
-            if (provider === 'discord') {
-              joinDiscordServer(session.provider_token)
-            }
+            if (provider === 'discord') joinDiscordServer(session.provider_token)
           }
-
           const displayName = (session.user.user_metadata?.name ?? session.user.user_metadata?.full_name) as string | undefined
           await fetchProfile(session.user.id, displayName)
         } else {
           setProfile(null)
           setLoading(false)
           setInitialized(true)
+          initialized = true
         }
       }
     )
 
-    // Safety net: unblock UI if Supabase never responds
+    // Safety net: unblock UI if Supabase never responds within 3s
     const timeout = setTimeout(() => {
       setLoading(false)
       setInitialized(true)
-    }, 8000)
+      initialized = true
+    }, 3000)
 
     return () => {
       subscription.unsubscribe()

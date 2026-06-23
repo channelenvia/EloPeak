@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Shield, CheckCircle2, XCircle, Trophy, RefreshCw } from 'lucide-react'
+import { Shield, CheckCircle2, XCircle, Trophy, RefreshCw, Star } from 'lucide-react'
 import { Button, BoosterStatusBadge, EmptyState, Skeleton } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { supabase } from '@/lib/supabase'
@@ -117,7 +117,12 @@ export function AdminBoostersPage() {
                     </div>
                   </TableCell>
                   <TableCell>{b.games?.join(', ') || '—'}</TableCell>
-                  <TableCell>{b.rating.toFixed(1)} ⭐</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1">
+                      {b.rating.toFixed(1)}
+                      <Star className="h-3 w-3 text-warning fill-warning" />
+                    </span>
+                  </TableCell>
                   <TableCell>{b.total_completed}</TableCell>
                   <TableCell><BoosterStatusBadge status={b.status} /></TableCell>
                   <TableCell>{formatDate(b.created_at)}</TableCell>

@@ -6,13 +6,6 @@ import { Button, ThemeToggle, LogoMark } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 
-const SERVICES_NAV = [
-  { href: '/orders/new?service=elo_boost',          label: 'Elo Boost'          },
-  { href: '/orders/new?service=win_boost',          label: 'Win Boost'          },
-  { href: '/orders/new?service=coaching',           label: 'Coaching'           },
-  { href: '/orders/new?service=placement_matches',  label: 'Placements'         },
-]
-
 function LiveIndicator() {
   const { t } = useTranslation()
   const [count, setCount] = useState(11)
@@ -32,7 +25,6 @@ function LiveIndicator() {
 
 export function PublicLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [servicesOpen, setServicesOpen] = useState(false)
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, profile } = useAuthStore()
@@ -46,6 +38,18 @@ export function PublicLayout() {
   function handleBoostClick() {
     if (isAuthenticated()) navigate(dashboardLink)
     else navigate('/orders/new')
+  }
+
+  function handleServicesClick() {
+    if (pathname === '/') {
+      document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      navigate('/')
+      setTimeout(() => {
+        document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })
+      }, 150)
+    }
+    setMobileOpen(false)
   }
 
   return (
@@ -68,27 +72,19 @@ export function PublicLayout() {
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-1 flex-1">
-            {/* Services dropdown */}
-            <div className="relative" onMouseEnter={() => setServicesOpen(true)} onMouseLeave={() => setServicesOpen(false)}>
-              <button className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors">
-                {t('nav.services')}
-              </button>
-              {servicesOpen && (
-                <div className="absolute top-full left-0 mt-1 w-52 card p-1.5 shadow-card-hover animate-scale-in z-50">
-                  {SERVICES_NAV.map(({ href, label }) => (
-                    <Link key={label} to={href}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors"
-                    >
-                      {label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Serviços — click only, scrolls to services section */}
+            <button
+              onClick={handleServicesClick}
+              className="px-3 py-2 rounded-lg text-sm font-medium text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors"
+            >
+              {t('nav.services')}
+            </button>
+
             {[
-              { href: '/pricing',  label: t('nav.pricing')  },
-              { href: '/security', label: t('nav.security') },
-              { href: '/faq',      label: t('nav.faq')      },
+              { href: '/pricing',   label: t('nav.pricing')   },
+              { href: '/security',  label: t('nav.security')  },
+              { href: '/faq',       label: t('nav.faq')       },
+              { href: '/boosters',  label: t('nav.boosters')  },
             ].map(({ href, label }) => (
               <Link key={href} to={href}
                 className={cn('px-3 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -109,14 +105,9 @@ export function PublicLayout() {
                 <Link to={dashboardLink}>{t('nav.dashboard')}</Link>
               </Button>
             ) : (
-              <>
-                <Button asChild variant="ghost" size="sm">
-                  <Link to="/login">{t('nav.signIn')}</Link>
-                </Button>
-                <Button size="sm" onClick={handleBoostClick}>
-                  {t('nav.boostNow')}
-                </Button>
-              </>
+              <Button asChild size="sm">
+                <Link to="/login">{t('nav.signIn')}</Link>
+              </Button>
             )}
           </div>
 
@@ -132,11 +123,18 @@ export function PublicLayout() {
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-bg-elevated bg-bg-surface px-5 py-5 space-y-1 animate-slide-down">
+            <button
+              onClick={handleServicesClick}
+              className="w-full text-left block px-3 py-2.5 rounded-xl text-sm text-ink-secondary hover:text-ink hover:bg-bg-elevated"
+            >
+              {t('nav.services')}
+            </button>
             {[
-              { href: '/pricing',  label: t('nav.pricing')      },
-              { href: '/security', label: t('nav.security')     },
-              { href: '/faq',      label: t('nav.faq')          },
-              { href: '/apply',    label: t('nav.applyBooster') },
+              { href: '/pricing',   label: t('nav.pricing')       },
+              { href: '/security',  label: t('nav.security')      },
+              { href: '/faq',       label: t('nav.faq')           },
+              { href: '/boosters',  label: t('nav.boosters')      },
+              { href: '/apply',     label: t('nav.applyBooster')  },
             ].map(({ href, label }) => (
               <Link key={href} to={href} onClick={() => setMobileOpen(false)}
                 className="block px-3 py-2.5 rounded-xl text-sm text-ink-secondary hover:text-ink hover:bg-bg-elevated"
@@ -146,11 +144,8 @@ export function PublicLayout() {
             ))}
             <div className="pt-3 flex gap-2">
               <ThemeToggle />
-              <Button asChild variant="secondary" size="sm" className="flex-1">
+              <Button asChild size="sm" className="flex-1">
                 <Link to="/login">{t('nav.signIn')}</Link>
-              </Button>
-              <Button size="sm" className="flex-1" onClick={handleBoostClick}>
-                {t('nav.boostNow')}
               </Button>
             </div>
           </div>
@@ -181,19 +176,16 @@ export function PublicLayout() {
 
             {[
               { title: t('footer.services'), links: [
-                { href: '/orders/new?service=elo_boost', label: t('footer.eloBoost') },
-                { href: '/orders/new?service=win_boost', label: t('footer.winBoost') },
-                { href: '/orders/new?service=coaching',  label: t('footer.coaching') },
-                { href: '/pricing',                      label: t('footer.pricing')  },
+                { href: '/orders/new?service=elo_boost',          label: t('footer.eloBoost') },
+                { href: '/orders/new?service=win_boost',          label: t('footer.winBoost') },
+                { href: '/orders/new?service=placement_matches',  label: t('footer.md5')      },
+                { href: '/orders/new?service=coaching',           label: t('footer.coaching') },
               ]},
               { title: t('footer.company'), links: [
-                { href: '/security', label: t('footer.security') },
-                { href: '/faq',      label: t('footer.faq')      },
-                { href: '/apply',    label: t('nav.applyBooster')},
-              ]},
-              { title: t('footer.account'), links: [
-                { href: '/login',     label: t('footer.signIn')   },
-                { href: '/dashboard', label: t('footer.dashboard')},
+                { href: '/pricing',   label: t('footer.pricing')  },
+                { href: '/security',  label: t('footer.security') },
+                { href: '/faq',       label: t('footer.faq')      },
+                { href: '/boosters',  label: t('nav.boosters')    },
               ]},
             ].map(({ title, links }) => (
               <div key={title}>

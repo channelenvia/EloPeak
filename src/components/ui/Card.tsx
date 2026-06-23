@@ -16,7 +16,7 @@ const variantMap = {
   default: 'card',
   elevated: 'card-elevated',
   brand: 'card-brand',
-  glass: 'bg-white/5 border border-white/10 backdrop-blur-sm rounded-2xl',
+  glass: 'card-glass',
 }
 
 export function Card({ className, variant = 'default', padding = 'md', children, ...props }: CardProps) {

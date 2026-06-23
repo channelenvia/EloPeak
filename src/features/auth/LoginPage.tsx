@@ -25,7 +25,7 @@ export function LoginPage() {
 
     // Validate ?redirect= — must be a same-origin path to prevent open redirect / token leak
     const raw = searchParams.get('redirect')
-    let path = '/'
+    let path = '/dashboard'
     if (raw) {
       try {
         const decoded = decodeURIComponent(raw)

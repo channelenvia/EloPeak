@@ -56,7 +56,7 @@ export function BoosterEarningsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
           { label: t('booster.earnings.totalEarned'), value: currency(totalEarned), icon: DollarSign, color: 'text-success bg-success/10' },
-          { label: t('booster.earnings.thisMonth'), value: currency(thisMonth), icon: TrendingUp, color: 'text-brand bg-brand-muted' },
+          { label: t('booster.earnings.thisMonth'), value: currency(thisMonth), icon: TrendingUp, color: 'text-brand bg-brand/10' },
           { label: t('booster.earnings.pendingPayout'), value: currency(pending), icon: Clock, color: 'text-warning bg-warning/10' },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label} padding="md">

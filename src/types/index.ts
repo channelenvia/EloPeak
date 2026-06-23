@@ -114,6 +114,12 @@ export interface BoosterProfile {
   email: string | null
   cpf: string | null
   verified_at: string | null
+  rank_stats: {
+    gold_minus?:    { kda: number; winrate: number }
+    plat_diamond?:  { kda: number; winrate: number }
+    master_plus?:   { kda: number; winrate: number }
+  } | null
+  last_active_at: string | null
   created_at: string
   updated_at: string
 }

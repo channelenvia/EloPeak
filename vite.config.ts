@@ -9,7 +9,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: [
+      'react', 'react-dom', 'react-router-dom',
+      '@tanstack/react-query', 'zustand',
+      '@supabase/supabase-js', 'lucide-react',
+    ],
+  },
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
