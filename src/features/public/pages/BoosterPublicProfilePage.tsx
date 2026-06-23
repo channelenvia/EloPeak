@@ -35,7 +35,7 @@ export function BoosterPublicProfilePage() {
   const { data: booster, isLoading } = useQuery({
     queryKey: ['public-booster', id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('public_booster_profiles')
         .select('*')
         .eq('id', id!)
