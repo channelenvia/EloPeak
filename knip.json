@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "supabase/functions/*/index.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "shared/**/*.ts",
+    "supabase/functions/**/*.ts"
+  ],
+  "ignore": [
+    "src/lib/database.types.ts",
+    "supabase/functions/_shared/orderPricing.test.ts"
+  ],
+  "ignoreBinaries": ["supabase"],
+  "ignoreExportsUsedInFile": true
+}
