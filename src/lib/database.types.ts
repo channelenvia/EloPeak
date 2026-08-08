@@ -2551,6 +2551,7 @@ export type Database = {
         | { Args: never; Returns: boolean }
         | { Args: { p_booster_id: string }; Returns: boolean }
       list_duo_accounts: { Args: never; Returns: Json }
+      mark_order_chat_read: { Args: { p_order_id: string }; Returns: Json }
       mark_order_match_sync: { Args: { p_order_id: string }; Returns: Json }
       onboard_booster: {
         Args: {
