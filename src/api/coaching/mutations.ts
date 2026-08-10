@@ -13,6 +13,7 @@ export async function createCoachingPackage(params: SaveCoachingPackageParams) {
     unit: 'fixed',
     lanes: params.lanes,
     specialties: params.specialties,
+    champions: params.champions,
   })
   if (error) throw normalizeApiError(error, 'Não foi possível criar o pacote de coaching.')
 }
@@ -25,6 +26,7 @@ export async function updateCoachingPackage(params: SaveCoachingPackageParams & 
     price: params.price,
     lanes: params.lanes,
     specialties: params.specialties,
+    champions: params.champions,
   }).eq('id', params.id)
   if (error) throw normalizeApiError(error, 'Não foi possível atualizar o pacote de coaching.')
 }

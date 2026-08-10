@@ -16,8 +16,6 @@ const PROFESSIONAL_PROFILE_MESSAGES: Record<string, string> = {
   full_name_required: 'Nome completo é obrigatório.',
   invalid_cpf: 'CPF inválido.',
   available_days_required: 'Selecione ao menos um dia disponível.',
-  invalid_lanes: 'Selecione entre 1 e 2 lanes.',
-  invalid_specialties: 'Selecione ao menos uma especialidade.',
 }
 
 export async function boosterHeartbeat(): Promise<void> {
@@ -53,8 +51,6 @@ export async function updateProfessionalProfile(params: UpdateProfessionalProfil
   const { data, error } = await supabase.rpc('update_booster_professional_profile', {
     p_display_name: params.displayName,
     p_bio: params.bio,
-    p_lanes: params.lanes,
-    p_specialties: params.specialties,
     p_peak_tier: params.peakTier,
     p_opgg_link: params.opggLink,
     p_available_days: params.availableDays,

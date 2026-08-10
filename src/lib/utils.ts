@@ -53,6 +53,20 @@ export function formatLastSeen(lastActiveAt: string | null | undefined): string 
   return `Visto ${timeAgo(lastActiveAt)}`
 }
 
+// Só http(s) -- opgg_link vem direto do formulário do booster (texto livre),
+// então valida o protocolo antes de jogar num href pra não abrir espaço pra
+// um javascript:/data: URI malicioso.
+export function safeOpggUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined
+    return parsed.toString()
+  } catch {
+    return undefined
+  }
+}
+
 // ─── Order status display ─────────────────────────────────────────────────────
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
@@ -193,33 +207,38 @@ export const PAYOUT_REQUEST_STATUS_COLOR: Record<PayoutRequestStatus, string> = 
 
 // ─── Service label ────────────────────────────────────────────────────────────
 
+// 4 serviços canônicos da plataforma -- win_boost, md5 e o legado
+// placement_matches são todos variações de "compra de vitórias", por isso
+// caem juntos em "Wins" (mesmo agrupamento que ServiceFilterBar já usa pra
+// filtrar os 3 debaixo de uma categoria só).
 const SERVICE_LABEL_MAP: Record<string, string> = {
-  elo_boost:         'Solo Boost / Duo Boost',
-  win_boost:         'Vitórias / MD5',
-  placement_matches: 'MD5 Completo (legado)',
+  elo_boost:         'Elo Boost',
+  win_boost:         'Wins',
+  md5:               'Wins',
+  placement_matches: 'Wins',
   coaching:          'Coaching',
-  md5:               'Vitórias / MD5',
   clash:             'Clash',
 }
 
+// Nome do serviço pra título de card/campo "Serviço" na página de detalhe --
+// sempre um dos 4 nomes canônicos acima, independente do modo (solo/duo) do
+// pedido (isso é o campo/rótulo "Modo", ver getOrderModeType).
 export function getServiceLabel(serviceId: string | null | undefined): string {
   if (!serviceId) return '—'
   return SERVICE_LABEL_MAP[serviceId] ?? serviceId.replace(/_/g, ' ')
 }
 
-// Rótulo específico dentro da categoria de getServiceLabel -- "Solo Boost /
-// Duo Boost" (elo_boost) vira "Solo Boost" ou "Duo Boost"; "Vitórias / MD5"
-// vira "Vitórias" ou "MD5". Usado nos cards/detalhes de pedido do booster
-// pra deixar claro exatamente qual variação é o pedido, não só a categoria.
-export function getOrderModeType(order: Pick<Order, 'service_type' | 'boost_mode'>): string {
-  if (!order.service_type) return '—'
-  if (order.service_type === 'elo_boost') return order.boost_mode === 'duo' ? 'Duo Boost' : 'Solo Boost'
-  if (order.service_type === 'win_boost') return order.boost_mode === 'duo' ? 'Duo Vitórias' : 'Vitórias'
-  if (order.service_type === 'md5') return order.boost_mode === 'duo' ? 'Duo MD5' : 'MD5'
-  if (order.service_type === 'coaching') return 'Coaching'
-  if (order.service_type === 'placement_matches') return 'MD5 Completo'
-  if (order.service_type === 'clash') return order.boost_mode === 'duo' ? 'Duo Clash' : 'Solo Clash'
+// Mesma coisa que getServiceLabel, só que recebendo o pedido inteiro (mais
+// conveniente nos cards/detalhes que já têm o objeto order/job em mãos).
+export function getOrderServiceName(order: Pick<Order, 'service_type'>): string {
   return getServiceLabel(order.service_type)
+}
+
+// Modo do pedido -- só "Solo" ou "Duo", sem repetir o nome do serviço (que já
+// aparece em getOrderServiceName/getServiceLabel). Só chamado onde o pedido
+// de fato tem essa variação (elo_boost, win_boost/md5, clash), nunca coaching.
+export function getOrderModeType(order: Pick<Order, 'boost_mode'>): string {
+  return order.boost_mode === 'duo' ? 'Duo' : 'Solo'
 }
 
 // Mirrors public.order_requires_access_token(service_type, boost_mode) —

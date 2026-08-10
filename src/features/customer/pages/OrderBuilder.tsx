@@ -23,12 +23,16 @@ import { StepExtras } from '../order-builder/StepExtras'
 import { StepReview } from '../order-builder/StepReview'
 import { StepPayment } from '../order-builder/StepPayment'
 
+// "Pagamento" não aparece mais no stepper visual -- pagamento não é mais uma
+// tela navegável, virou o popup que abre a partir da Revisão (ver
+// pixModalOpen). O step 'payment' continua existindo em OrderBuilderStep
+// (usado só pra retomar um pedido pendente após reload, sem popup nenhum
+// por cima), só não ganha um número/pill no Stepper.
 const STEPS: { id: OrderBuilderStep; label: string }[] = [
   { id: 'service', label: 'Serviço' },
   { id: 'configure', label: 'Configurar' },
   { id: 'extras', label: 'Extras' },
   { id: 'review', label: 'Revisão' },
-  { id: 'payment', label: 'Pagamento' },
 ]
 
 const STEP_COMPONENTS: Record<OrderBuilderStep, React.ComponentType> = {
@@ -103,7 +107,7 @@ export function OrderBuilderPage() {
     setSelectedCoachPackage, setBasePrice, couponCode,
     winsPurchased, riotId, isMd5, md5MatchesRemaining, riotLookupLoading, riotVerified,
     selectedCoachPackage, setStepAttempted, winPackage, queueType,
-    clashTier, clashDay,
+    clashTier, clashDay, dismissedOrderId, setDismissedOrderId,
   } = useOrderBuilderStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
@@ -114,6 +118,17 @@ export function OrderBuilderPage() {
   // (ex.: PIX expirou e o fluxo reinicia em 'service') -- sem isso, reabrir
   // a revisão numa sessão nova podia reabrir o popup por engano.
   const [pixModalOpen, setPixModalOpen] = useState(false)
+  // Confirmação antes de fechar o popup com um pedido já persistido
+  // (?order= setado assim que "Gerar PIX" roda) -- sem isso, o cliente
+  // fechava o X sem aviso, o configurador continuava com a MESMA
+  // configuração em memória, e um clique novo em "Ir para Pagamento"
+  // reabria o mesmo pedido (sem duplicar) -- mas nada impedia ele de trocar
+  // ?new=1 (fluxo "novo pedido") e configurar/pagar um SEGUNDO pedido
+  // parecido enquanto o primeiro seguia pendente em Meus Pedidos, dando a
+  // real impressão de duplicidade. Sair aqui agora reseta o configurador de
+  // propósito (evita esse caminho) -- o pedido em si NUNCA é cancelado,
+  // continua pagável em Meus Pedidos.
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
   const currency = useCurrency()
   const pendingOrderId = searchParams.get('order')
   const explicitlyStartingNewOrder = searchParams.get('new') === '1'
@@ -139,10 +154,22 @@ export function OrderBuilderPage() {
 
   useEffect(() => {
     if (!resumableOrder?.id || pendingOrderId || explicitlyStartingNewOrder || hasCatalogEntryIntent) return
-    setStep('payment')
+    // Pedido que o cliente já dispensou explicitamente via "Sair e
+    // reiniciar" -- ?new=1 só vale pra ESSA visita; sem essa checagem,
+    // voltar depois por um link comum (Meus Pedidos -> Novo Pedido, sem
+    // ?new=1 nenhum) reabria o auto-resume pro mesmo pedido de novo. O
+    // pedido continua pagável em Meus Pedidos, só não é mais empurrado pra
+    // cá sozinho.
+    if (resumableOrder.id === dismissedOrderId) return
+    // Pagamento SÓ existe como popup agora -- nunca mais navega pro step
+    // 'payment' em tela cheia (isso substituía/"sobrescrevia" o conteúdo da
+    // revisão por baixo em vez de sobrepor). Fica em 'review' com o popup
+    // aberto por cima, exatamente como abrir "Ir para Pagamento" manualmente.
+    setStep('review')
+    setPixModalOpen(true)
     setSearchParams({ order: resumableOrder.id }, { replace: true })
   }, [
-    resumableOrder?.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent,
+    resumableOrder?.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, dismissedOrderId,
     setStep, setSearchParams,
   ])
 
@@ -180,6 +207,34 @@ export function OrderBuilderPage() {
       }, { replace: true })
     }
     prevStep()
+  }
+
+  // Radix chama onOpenChange(false) pra qualquer tentativa de fechar (X,
+  // clique fora, Esc) -- intercepta todas de uma vez só. Sem pedido
+  // persistido ainda (?order= vazio, "Gerar PIX" nunca rodou), fecha direto:
+  // não há nada em Meus Pedidos pra perder.
+  function handlePixModalOpenChange(open: boolean) {
+    if (open) { setPixModalOpen(true); return }
+    if (!pendingOrderId) { setPixModalOpen(false); return }
+    setShowExitConfirm(true)
+  }
+
+  // Nunca cancela o pedido -- ele continua "Aguardando pagamento", pagável
+  // em Meus Pedidos. Só desvincula o configurador local dele (reset +
+  // derruba ?order=), pra que reabrir "Novo Pedido" comece do zero em vez de
+  // reaparecer com a config antiga ainda meio-presa a um pedido já criado.
+  function confirmExitPixModal() {
+    const orderId = pendingOrderId
+    setShowExitConfirm(false)
+    setPixModalOpen(false)
+    reset()
+    // Depois do reset() (que reaplicaria initialState.dismissedOrderId =
+    // null) -- marca esse pedido como dispensado de propósito, persistido
+    // (sobrevive a navegar pra Meus Pedidos e voltar por um link comum,
+    // diferente do ?new=1 abaixo, que só vale pra ESSA visita).
+    if (orderId) setDismissedOrderId(orderId)
+    setStep('service')
+    setSearchParams({ new: '1' }, { replace: true })
   }
 
   // Mesma regra de StepExtras.tsx/StepPayment.tsx — Clash reaproveita
@@ -416,19 +471,37 @@ export function OrderBuilderPage() {
               monta (ver efeito de auto-start nele), sem precisar de um
               segundo clique aqui dentro. */}
           {step === 'review' && (
-            <Modal open={pixModalOpen} onOpenChange={setPixModalOpen} title="Pagamento via PIX" maxWidth="xl">
+            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="xl">
               <StepPayment insideModal />
             </Modal>
           )}
+
+          <Modal open={showExitConfirm} onOpenChange={setShowExitConfirm} title="Sair sem pagar?" maxWidth="sm">
+            <p className="text-sm text-ink-secondary">
+              Seu configurador será reiniciado, mas seu pedido continua salvo — você pode pagar a qualquer momento na aba <strong className="text-ink">Meus Pedidos</strong>.
+            </p>
+            <div className="flex gap-2.5 justify-end pt-2">
+              <Button variant="ghost" onClick={() => setShowExitConfirm(false)}>Continuar pagamento</Button>
+              <Button variant="danger" onClick={confirmExitPixModal}>Sair e reiniciar</Button>
+            </div>
+          </Modal>
         </div>
 
         {/* Summary panel — acompanha o pedido em todas as etapas (sticky),
             não só na revisão final, pra o cliente ver quanto está pagando
             desde o início. Largura maior que antes (era lg:w-72): nesse
             tamanho os botões de Voltar/Ir para Pagamento da revisão ficavam
-            espremidos contra o padding do Card. */}
-        <aside className="lg:w-80 xl:w-96 shrink-0 space-y-5">
-          <Card padding="lg" className="sticky top-6">
+            espremidos contra o padding do Card. O sticky vai no wrapper
+            interno (não no <aside> nem só no primeiro Card): o <aside> é
+            esticado pelo flex pai até a altura da coluna principal (bem mais
+            alto que os 2 cards juntos), então "sticky" direto nele não tem
+            efeito nenhum -- e sticky só no Card de preço fazia o card de
+            confiança (abaixo, em fluxo normal) rolar por trás/sobre ele.
+            Com os dois dentro do mesmo wrapper sticky, sobem e "grudam"
+            juntos, sem sobreposição. */}
+        <aside className="lg:w-80 xl:w-96 shrink-0">
+          <div className="sticky top-6 space-y-5">
+          <Card padding="lg">
             <div className="space-y-2.5">
               <div className="flex justify-between text-xs">
                 <span className="text-ink-secondary">Preço base</span>
@@ -510,6 +583,7 @@ export function OrderBuilderPage() {
               ))}
             </div>
           </Card>
+          </div>
         </aside>
       </div>
     </div>

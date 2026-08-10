@@ -1,10 +1,12 @@
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { formatEstimatedDelivery, orderRequiresAccountAccess } from '@/lib/utils'
 import { isMasterPlusCurrentTier } from '@/lib/boostDomain'
-import { CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL, CLASH_DAY_LABEL } from '@/lib/clashDomain'
+import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { GuaranteeNotice } from '@/components/ui'
+import { ClashDetailsBlock } from '@/components/order/ClashDetailsBlock'
 import { OrderRankRow } from '@/components/order/OrderRankRow'
 import { OrderInfoGrid, type OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
+import { WinsRemainingBadge } from '@/components/order/OrderRankSummary'
 import { Shuffle, Users, Hash, Clock, Trophy } from 'lucide-react'
 
 export function StepReview() {
@@ -21,23 +23,34 @@ export function StepReview() {
   const showAccountAccessNotice = serviceType != null && orderRequiresAccountAccess({ service_type: serviceType, boost_mode: boostMode })
 
   const isBoostFlow = serviceType === 'elo_boost' || serviceType === 'win_boost' || serviceType === 'md5'
+  const isClash = serviceType === 'clash'
   const modoLabel = serviceType === 'elo_boost'
     ? (boostMode === 'duo' ? 'Duo Boost' : 'Solo Boost')
     : serviceType === 'md5'
       ? (boostMode === 'duo' ? 'Duo MD5' : 'MD5')
       : serviceType === 'win_boost'
         ? (boostMode === 'duo' ? 'Duo Vitórias' : 'Vitórias')
-        : ''
+        : isClash
+          ? (boostMode === 'duo' ? 'Duo Clash' : 'Solo Clash')
+          : ''
+  const clashClosingLabel = isClash && clashDay
+    ? (() => {
+        const { day, month } = getClashDateParts(new Date().toISOString(), clashDay)
+        return `Até 23h de ${day}/${month} (${CLASH_DAY_LABEL[clashDay]})`
+      })()
+    : null
 
   // Mesmos campos exibidos no "Detalhes do Pedido" de um pedido em
   // andamento (OrderDetail.tsx) -- via OrderInfoGrid, o mesmo componente,
   // não uma cópia -- só que restrito ao que já existe antes do pedido
   // nascer: sem preço, sem booster, sem contagem de partidas jogadas.
   const infoItems: OrderInfoGridItem[] = [
-    ...(isBoostFlow ? [{ icon: Shuffle, label: 'Modo', value: modoLabel }] : []),
+    ...((isBoostFlow || isClash) ? [{ icon: Shuffle, label: 'Modo', value: modoLabel }] : []),
     ...(isBoostFlow ? [{ icon: Users, label: 'Fila', value: queueType === 'solo_duo' ? 'Solo/Duo' : 'Flex' }] : []),
-    ...((isBoostFlow || serviceType === 'clash') && riotId.trim() ? [{ icon: Hash, label: 'Riot ID', value: riotId.trim() }] : []),
-    ...(estimatedHours ? [{ icon: Clock, label: 'Entrega Estimada', value: formatEstimatedDelivery(estimatedHours) }] : []),
+    ...((isBoostFlow || isClash) && riotId.trim() ? [{ icon: Hash, label: 'Riot ID', value: riotId.trim() }] : []),
+    ...(isClash
+      ? (clashClosingLabel ? [{ icon: Clock, label: 'Entrega Estimada', value: clashClosingLabel }] : [])
+      : (estimatedHours ? [{ icon: Clock, label: 'Entrega Estimada', value: formatEstimatedDelivery(estimatedHours) }] : [])),
     ...((serviceType === 'win_boost' || serviceType === 'md5') && winsPurchased
       ? [{ icon: Trophy, label: 'Vitórias', value: `${winsPurchased}` }]
       : []),
@@ -68,22 +81,17 @@ export function StepReview() {
               </div>
             )}
 
-            {serviceType === 'clash' && clashTier && (
-              <div className="space-y-2 pb-4 mb-4 border-b border-border-subtle">
-                <p className="text-base font-bold text-ink">{boostMode === 'duo' ? 'Duo Clash' : 'Solo Clash'}</p>
-                <p className="text-sm text-ink-secondary leading-relaxed">
-                  {boostMode === 'duo'
-                    ? 'Você joga junto com o booster — ele monta o restante do time.'
-                    : 'O booster entra na sua conta e monta o time dentro do jogo.'}
-                </p>
-                <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs text-ink-muted">
-                  <span>{CLASH_TIER_LABEL[clashTier]}: <span className="font-semibold text-ink">{CLASH_TIER_RANGE_LABEL[clashTier]}</span></span>
-                  {clashDay && <span>Dia: <span className="font-semibold text-ink">{CLASH_DAY_LABEL[clashDay]}</span></span>}
-                </div>
-              </div>
+            {isClash && clashTier && (
+              <ClashDetailsBlock
+                viewerRole="customer"
+                boostMode={boostMode}
+                clashTier={clashTier}
+                clashDay={clashDay}
+                createdAt={new Date().toISOString()}
+              />
             )}
 
-            {currentRank && (
+            {currentRank && !isClash && (
               <div className="mb-4 pb-5 border-b border-border-subtle">
                 <OrderRankRow
                   currentTier={currentRank.tier}
@@ -92,9 +100,16 @@ export function StepReview() {
                   targetDivision={serviceType === 'elo_boost' ? targetRank?.division ?? null : null}
                   currentLabel={isMd5 ? 'Rank na Temporada Passada' : 'Rank Atual'}
                   centerContent={
-                    <span className="text-sm font-bold text-brand whitespace-nowrap" data-tabular>
-                      {currentIsMasterPlus ? `${currentPdl} PDL` : `${currentLp} LP`}
-                    </span>
+                    serviceType === 'elo_boost' ? (
+                      <span className="text-sm font-bold text-brand whitespace-nowrap" data-tabular>
+                        {currentIsMasterPlus ? `${currentPdl} PDL` : `${currentLp} LP`}
+                      </span>
+                    ) : undefined
+                  }
+                  targetSlot={
+                    (serviceType === 'win_boost' || serviceType === 'md5') && winsPurchased
+                      ? <WinsRemainingBadge count={winsPurchased} />
+                      : undefined
                   }
                 />
               </div>

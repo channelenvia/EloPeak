@@ -1,17 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Briefcase, History, Lock, Search, Sparkles, Swords, Users } from 'lucide-react'
-import { Button, Card, EmptyState, Skeleton, RankBadge } from '@/components/ui'
+import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { timeAgo, formatRank, boosterEarningsShare, getServiceLabel, getOrderModeType, sortOrderExtras } from '@/lib/utils'
-import type { Division, Order, RankTier } from '@/types'
+import { timeAgo, boosterEarningsShare, getOrderServiceName, getOrderModeType } from '@/lib/utils'
+import type { Order } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAvailableJobs, useBoosterSlotInfo, useAcceptBoostOrder } from '@/api/orders'
 import { OrderSoundSettings } from '@/features/booster/components/OrderSoundSettings'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
+import { OrderCardDetails } from '@/components/order/OrderCardDetails'
 
 
 interface SlotInfo {
@@ -197,119 +198,69 @@ export function AvailableJobsPage() {
 
       {/* Jobs */}
       {isLoading ? (
-        <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
+        </div>
       ) : !filtered.length ? (
         <EmptyState icon={Briefcase} title={t('booster.jobs.empty')} description={t('booster.jobs.emptyDesc')} />
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((job) => {
             const isDuo = job.boost_mode === 'duo'
             const blocked = slotInfo && !canAcceptJob(job)
             const exclusiveLabel = exclusiveTimeLeft(job, profile?.id)
 
             return (
-              <Card key={job.id} className={`flex items-center justify-between gap-4 ${exclusiveLabel ? 'border-accent/40' : ''}`}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-xs font-mono text-ink-muted">#{job.id.slice(0, 8).toUpperCase()}</span>
-                    <span className="text-xs bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg">
-                      {getServiceLabel(job.service_type)}
-                    </span>
-                    {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
-                      <span className="text-xs bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg">
-                        {job.queue_type === 'solo_duo' ? t('booster.jobs.soloQueue') : t('booster.jobs.flexQueue')}
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide ${
+              <Card
+                key={job.id}
+                className={`h-full flex flex-col hover:border-brand/20 hover:shadow-card-hover transition-all ${exclusiveLabel ? 'border-accent/40' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-mono text-ink-muted">#{job.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-sm font-semibold text-ink truncate">{getOrderServiceName(job)}</p>
+                  </div>
+                  {job.service_type !== 'coaching' && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide shrink-0 ${
                       isDuo
                         ? 'bg-brand/10 text-brand border border-brand/20'
                         : 'bg-bg-elevated text-ink-muted'
                     }`}>
                       {getOrderModeType(job)}
                     </span>
+                  )}
+                </div>
+
+                {(exclusiveLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
+                      <span className="text-[10px] font-medium bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg">
+                        {job.queue_type === 'solo_duo' ? t('booster.jobs.soloQueue') : t('booster.jobs.flexQueue')}
+                      </span>
+                    )}
                     {exclusiveLabel && (
                       <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-accent/15 text-accent border border-accent/30">
                         <Sparkles className="h-3 w-3" />
-                        Exclusivo para você · {exclusiveLabel}
+                        Exclusivo · {exclusiveLabel}
                       </span>
                     )}
                     {job.drop_count > 0 && (
                       <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
                         <History className="h-3 w-3" />
-                        Pedido dropado · valor e prazo atualizados
+                        Dropado
                       </span>
                     )}
                   </div>
-                  {job.current_rank && job.target_rank && (
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {job.drop_count > 0 && job.rank_before_last_drop && (
-                        <>
-                          <RankBadge
-                            tier={(job.rank_before_last_drop as { tier: RankTier }).tier}
-                            division={(job.rank_before_last_drop as { division: Division }).division}
-                            size="xs"
-                            showLabel={false}
-                          />
-                          <span className="text-xs font-medium text-ink-muted line-through">
-                            {formatRank((job.rank_before_last_drop as { tier: RankTier }).tier, (job.rank_before_last_drop as { division: Division }).division)}
-                          </span>
-                          <span className="text-ink-muted text-xs">→</span>
-                        </>
-                      )}
-                      <RankBadge
-                        tier={(job.current_rank as { tier: RankTier }).tier}
-                        division={(job.current_rank as { division: Division }).division}
-                        size="xs"
-                        showLabel={false}
-                      />
-                      <span className="text-xs font-medium text-ink-secondary">
-                        {formatRank((job.current_rank as { tier: RankTier }).tier, (job.current_rank as { division: Division }).division)}
-                      </span>
-                      <span className="text-ink-muted text-xs">→</span>
-                      <RankBadge
-                        tier={(job.target_rank as { tier: RankTier }).tier}
-                        division={(job.target_rank as { division: Division }).division}
-                        size="xs"
-                        showLabel={false}
-                      />
-                      <span className="text-xs font-medium text-ink-secondary">
-                        {formatRank((job.target_rank as { tier: RankTier }).tier, (job.target_rank as { division: Division }).division)}
-                      </span>
-                    </div>
-                  )}
-                  {job.current_rank && !job.target_rank && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <RankBadge
-                        tier={(job.current_rank as { tier: RankTier }).tier}
-                        division={(job.current_rank as { division: Division }).division}
-                        size="xs"
-                        showLabel={false}
-                      />
-                      <span className="text-xs font-medium text-ink-secondary">
-                        {formatRank((job.current_rank as { tier: RankTier }).tier, (job.current_rank as { division: Division }).division)}
-                      </span>
-                      {job.wins_purchased != null && (
-                        <span className="text-xs text-ink-muted">· {job.wins_purchased} vitória{job.wins_purchased === 1 ? '' : 's'}</span>
-                      )}
-                    </div>
-                  )}
-                  {job.extras?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {sortOrderExtras(job.extras).map((extra) => (
-                        <span key={extra.extra_id} className="text-[10px] font-medium bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg">
-                          {extra.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-ink-muted mt-0.5">{t('booster.jobs.posted', { time: timeAgo(job.created_at) })}</p>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="text-right">
+                )}
+
+                <OrderCardDetails order={job} />
+
+                <div className="flex items-center justify-between pt-3 border-t border-bg-elevated mt-auto">
+                  <div>
                     <p className="text-sm font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3))}</p>
                     <p className="text-[10px] text-ink-muted">{t('booster.jobs.yourCut', { pct: Math.round(boosterEarningsShare(slotInfo?.is_top3) * 100) })}</p>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col items-end gap-1">
                     <Button
                       size="sm"
                       onClick={() => acceptJob.mutate(job.id)}
@@ -320,12 +271,14 @@ export function AvailableJobsPage() {
                       {t('booster.jobs.accept')}
                     </Button>
                     {acceptJob.isError && (
-                      <p className="text-[10px] text-danger text-center max-w-[120px]">
+                      <p className="text-[10px] text-danger text-right max-w-[140px]">
                         {acceptJob.error instanceof Error ? acceptJob.error.message : 'Erro'}
                       </p>
                     )}
                   </div>
                 </div>
+
+                <p className="text-[10px] text-ink-muted mt-2">{t('booster.jobs.posted', { time: timeAgo(job.created_at) })}</p>
               </Card>
             )
           })}

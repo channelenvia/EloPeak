@@ -87,6 +87,21 @@ export async function adminDropOrder(params: { orderId: string; reason: string }
   return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES)
 }
 
+const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
+  unauthorized: 'Você não tem permissão para essa ação.',
+  invalid_reason: 'O motivo precisa ter pelo menos 10 caracteres.',
+  invalid_amount: 'Informe um valor válido, maior que zero.',
+  order_not_found: 'Pedido não encontrado. Confira o número.',
+}
+
+export async function adminCreateManualRefund(params: { orderId: string; reason: string; amount: number }) {
+  const { data, error } = await supabase.rpc('admin_create_manual_refund', {
+    p_order_id: params.orderId, p_reason: params.reason, p_amount: params.amount,
+  })
+  if (error) throw normalizeApiError(error)
+  return assertRpcSuccess(data as { success: boolean; error?: string; refund_id?: string }, ADMIN_MANUAL_REFUND_MESSAGES)
+}
+
 const REQUEST_ORDER_DROP_MESSAGES: Record<string, string> = {
   invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
   order_not_found: 'Pedido não encontrado.',

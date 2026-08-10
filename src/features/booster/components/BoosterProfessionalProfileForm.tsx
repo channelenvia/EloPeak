@@ -1,9 +1,8 @@
-import { useState, useEffect, KeyboardEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { LANES } from '@/lib/lolTaxonomy'
 import { useOwnProfessionalProfile, useUpdateProfessionalProfile } from '@/api/boosters'
 
 const DAYS = [
@@ -23,8 +22,6 @@ const PEAK_OPTIONS = [
   { value: 'challenger',  label: 'Desafiante'  },
 ] as const
 
-const MAX_SPECIALTIES = 8
-
 const DISPLAY_NAME_COOLDOWN_DAYS = 30
 
 export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
@@ -32,14 +29,12 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
   const [displayName, setDisplayName]       = useState('')
   const [bio, setBio]                       = useState('')
-  const [lanes, setLanes]                   = useState<string[]>([])
-  const [specialties, setSpecialties]       = useState<string[]>([])
-  const [specialtyInput, setSpecialtyInput] = useState('')
   const [peakTier, setPeakTier]             = useState<string | null>(null)
   const [opggLink, setOpggLink]             = useState('')
   const [availableDays, setAvailableDays]   = useState<string[]>([])
   const [hoursMin, setHoursMin]             = useState('')
   const [hoursMax, setHoursMax]             = useState('')
+  const [open, setOpen]                     = useState(true)
   const [saving, setSaving]                 = useState(false)
   const [saved, setSaved]                   = useState(false)
   const [error, setError]                   = useState<string | null>(null)
@@ -51,8 +46,6 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
     if (!profile) return
     setDisplayName(profile.display_name ?? '')
     setBio(profile.bio ?? '')
-    setLanes(profile.lanes ?? [])
-    setSpecialties(profile.specialties ?? [])
     setPeakTier(profile.peak_rank?.tier ?? null)
     setOpggLink(profile.opgg_link ?? '')
     setAvailableDays(profile.available_days ?? [])
@@ -69,23 +62,8 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
   const nameChangeLocked = !!cooldownEndsAt && cooldownEndsAt.getTime() > Date.now()
   const daysRemaining = nameChangeLocked ? Math.ceil((cooldownEndsAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : 0
 
-  function toggleLane(key: string) {
-    setLanes(prev => (prev.includes(key) ? prev.filter(l => l !== key) : prev.length < 2 ? [...prev, key] : prev))
-  }
-
   function toggleDay(key: string) {
     setAvailableDays(prev => (prev.includes(key) ? prev.filter(d => d !== key) : [...prev, key]))
-  }
-
-  function addSpecialty() {
-    const s = specialtyInput.trim().slice(0, 30)
-    if (!s || specialties.includes(s) || specialties.length >= MAX_SPECIALTIES) return
-    setSpecialties(prev => [...prev, s])
-    setSpecialtyInput('')
-  }
-
-  function handleSpecialtyKey(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') { e.preventDefault(); addSpecialty() }
   }
 
   async function handleSave() {
@@ -100,8 +78,6 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       await updateProfile.mutateAsync({
         displayName: nextDisplayName,
         bio: bio.trim(),
-        lanes,
-        specialties,
         peakTier: peakTier ?? '',
         opggLink: opggLink.trim(),
         availableDays,
@@ -134,24 +110,32 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
     )
   }
 
-  const isComplete = !!(displayName.trim() && bio.trim() && lanes.length && peakTier)
+  const isComplete = !!(displayName.trim() && bio.trim() && peakTier)
   const formValid = !!(
     displayName.trim() && bio.trim() && peakTier
-    && lanes.length > 0 && specialties.length > 0
     && opggLink.trim() && availableDays.length > 0
     && hoursMin && hoursMax
   )
 
   return (
-    <div className="card p-6 space-y-6">
-      <div>
-        <h2 className="text-sm font-bold text-ink">Perfil Profissional</h2>
-        <p className="text-xs text-ink-muted mt-0.5">Visível para clientes ao acessar seu perfil público.</p>
-        {!isComplete && (
-          <p className="text-xs text-warning mt-2">Complete suas informações profissionais para aparecer para os clientes.</p>
-        )}
-      </div>
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-start gap-3 w-full text-left"
+      >
+        <ChevronDown className={cn('h-4 w-4 mt-0.5 text-ink-muted shrink-0 transition-transform', !open && '-rotate-90')} />
+        <div>
+          <h2 className="text-sm font-bold text-ink">Perfil Profissional</h2>
+          <p className="text-xs text-ink-secondary mt-0.5">Visível para clientes ao acessar seu perfil público.</p>
+          {!isComplete && (
+            <p className="text-xs text-warning mt-2">Complete suas informações profissionais para aparecer para os clientes.</p>
+          )}
+        </div>
+      </button>
 
+      {open && (
+      <div className="card p-6 space-y-6">
       {/* Nome de exibição */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição <span className="text-danger">*</span></label>
@@ -205,76 +189,6 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Lanes */}
-      <div className="space-y-2">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
-          Lanes Masterizadas <span className="text-danger">*</span> <span className="normal-case font-normal">(máx. 2)</span>
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {LANES.map(({ key, label }) => {
-            const selected = lanes.includes(key)
-            const disabled = !selected && lanes.length >= 2
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleLane(key)}
-                disabled={disabled}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-xl text-xs font-bold border-2 transition-all',
-                  selected
-                    ? 'bg-brand/15 border-brand text-brand'
-                    : disabled
-                    ? 'border-bg-elevated text-ink-muted opacity-40 cursor-not-allowed'
-                    : 'border-bg-elevated text-ink-secondary hover:border-brand/40 hover:text-ink',
-                )}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Specialties */}
-      <div className="space-y-2">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
-          Especialidades <span className="text-danger">*</span> <span className="normal-case font-normal">({specialties.length}/{MAX_SPECIALTIES})</span>
-        </label>
-        {specialties.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {specialties.map(s => (
-              <span key={s} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-bg-elevated text-xs font-medium text-ink-secondary">
-                {s}
-                <button type="button" onClick={() => setSpecialties(prev => prev.filter(x => x !== s))} className="hover:text-danger transition-colors">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {specialties.length < MAX_SPECIALTIES && (
-          <div className="flex gap-2">
-            <input
-              value={specialtyInput}
-              onChange={e => setSpecialtyInput(e.target.value.slice(0, 30))}
-              onKeyDown={handleSpecialtyKey}
-              placeholder="Ex: Farmador, Teamfighter, Macro..."
-              className="input-base flex-1 text-sm"
-            />
-            <button
-              type="button"
-              onClick={addSpecialty}
-              disabled={!specialtyInput.trim()}
-              aria-label="Adicionar especialidade"
-              className="px-3 py-2 rounded-xl bg-bg-elevated text-ink-secondary hover:text-ink hover:bg-bg-overlay disabled:opacity-40 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* OP.GG */}
@@ -337,6 +251,8 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
           {saving ? 'Salvando...' : 'Salvar perfil'}
         </button>
       </div>
+      </div>
+      )}
     </div>
   )
 }

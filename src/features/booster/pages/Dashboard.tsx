@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Briefcase, Clock, Swords, Users, CalendarClock,
+  Briefcase, Clock, Swords, CalendarClock,
   Trophy, Target, Star, CheckCircle2, TrendingUp, Gamepad2,
 } from 'lucide-react'
 import { Button, Card, Skeleton, StatCard, EmptyState, ErrorAlert } from '@/components/ui'
@@ -13,7 +13,6 @@ import { useAuthStore } from '@/stores/authStore'
 import type { Order, BoosterProfile } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
-import { useBoosterSlotInfo } from '@/api/orders'
 
 export type AccountType = '__all__' | 'solo' | 'duo'
 
@@ -171,8 +170,6 @@ export function BoosterDashboard() {
     accountTab === '__all__' ? 'solo' : accountTab,
   )
   const completedCount = accountTab === '__all__' ? (boosterProfile?.total_completed ?? 0) : (segmentCompletedCount ?? 0)
-
-  const { data: slotInfo } = useBoosterSlotInfo(profile?.id, boosterProfile?.status === 'approved')
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
@@ -351,51 +348,6 @@ export function BoosterDashboard() {
         )}
       </div>
 
-      {/* Slot usage */}
-      {slotInfo && (
-        <Card padding="md" className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <p className="text-sm font-semibold text-ink flex items-center gap-2">
-                Slots de Pedido
-                {slotInfo.is_top3 && (
-                  <span className="text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">
-                    TOP 3
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-ink-muted mt-0.5">
-                {slotInfo.is_top3 ? 'Top3: máx 4 pedidos' : 'Normal: máx 3 pedidos'} + 1 exclusivo
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Swords className="h-4 w-4 text-ink-muted" />
-              <span className="text-ink-secondary">Solo:</span>
-              <span className="font-bold text-ink">{slotInfo.solo_count}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="h-4 w-4 text-ink-muted" />
-              <span className="text-ink-secondary">Duo:</span>
-              <span className="font-bold text-ink">{slotInfo.duo_count}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-ink-secondary">Total:</span>
-              <span className={`font-bold ${(slotInfo.total_count ?? 0) >= (slotInfo.max_total ?? 3) ? 'text-danger' : slotInfo.total_count === (slotInfo.max_total ?? 3) - 1 ? 'text-warning' : 'text-success'}`}>
-                {slotInfo.total_count}/{slotInfo.max_total}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-ink-secondary">Exclusivo:</span>
-              <span className={`font-bold ${slotInfo.exclusive_slot_used ? 'text-danger' : 'text-success'}`}>
-                {slotInfo.exclusive_slot_used ? 1 : 0}/1
-              </span>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Serviços concluídos este mês */}
       <div>
         <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
@@ -403,8 +355,8 @@ export function BoosterDashboard() {
           Serviços concluídos este mês
         </h3>
         {loadingMonthOrders ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
           </div>
         ) : monthOrdersError ? (
           <ErrorAlert message="Não foi possível carregar os serviços concluídos deste mês." />
@@ -413,7 +365,7 @@ export function BoosterDashboard() {
             <p className="text-sm text-ink-muted text-center py-4">Nenhum serviço concluído neste mês ainda.</p>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {monthOrders.map((order) => <CompletedOrderCard key={order.id} order={order} isTop3={boosterProfile?.is_top3} />)}
           </div>
         )}

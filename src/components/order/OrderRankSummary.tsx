@@ -2,6 +2,28 @@ import { OrderRankRow } from './OrderRankRow'
 import { useLatestVerification, computeEffectivePoints } from './useOrderRankProgress'
 import type { Order } from '@/types'
 
+// Badge cinza do mesmo tamanho do ícone de rank (RankBadge lg sem label) --
+// ocupa a posição de "rank alvo" (ver targetSlot em OrderRankRow): número
+// grande sozinho dentro do badge (equivalente ao ícone do tier) e o label
+// fora, ao lado, no mesmo esquema de "Rank Alvo" (label pequeno em cima,
+// valor em negrito embaixo). Exportado (não só local) porque StepReview
+// precisa do mesmo badge antes do pedido existir (0 partidas jogadas,
+// restante = comprado), onde este componente não pode ser usado direto (ele
+// depende de wins_played de um pedido real).
+export function WinsRemainingBadge({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+      <div className="flex items-center justify-center bg-bg-elevated border border-bg-overlay shrink-0 w-20 h-20 rounded-2xl p-2.5">
+        <span className="text-2xl font-extrabold text-ink-muted leading-none" data-tabular>{count}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] text-ink-muted uppercase tracking-wide">Vitórias Restantes</p>
+        <p className="text-base font-bold text-ink truncate">{count} {count === 1 ? 'vitória' : 'vitórias'}</p>
+      </div>
+    </div>
+  )
+}
+
 // Resumo "rank atual ↔ pontos ↔ rank alvo" numa única linha -- os pontos
 // (PDL pro fluxo Master+, LP pro fluxo padrão) ficam sempre centralizados
 // entre os dois badges, nunca embaixo/solto em outra célula. Extraído do
@@ -40,14 +62,7 @@ export function OrderRankSummary({ order }: { order: Order }) {
   // ocupa a posição de "rank alvo" (ver targetSlot em OrderRankRow), com o
   // número grande no lugar do ícone e "vitórias restantes" embaixo, no lugar
   // do nome do tier -- como se fosse o rank alvo de um elo_boost.
-  const winsTargetSlot = isWinsBased && winsRemaining != null ? (
-    <div className="flex flex-col items-center justify-center gap-1 bg-bg-elevated border border-bg-overlay shrink-0 w-20 h-20 rounded-2xl p-2">
-      <span className="text-xl font-extrabold text-ink-muted leading-none" data-tabular>{winsRemaining}</span>
-      <span className="text-[9px] font-medium text-ink-muted text-center leading-tight">
-        {winsRemaining === 1 ? 'vitória restante' : 'vitórias restantes'}
-      </span>
-    </div>
-  ) : null
+  const winsTargetSlot = isWinsBased && winsRemaining != null ? <WinsRemainingBadge count={winsRemaining} /> : null
 
   const centerContent = isWinsBased ? null : order.status === 'completed' ? (
     <span className="text-sm font-bold text-success whitespace-nowrap">Rank alvo atingido!</span>

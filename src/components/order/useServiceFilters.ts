@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { BoostMode, ClashDay, ClashTier, Order, QueueType, ServiceType } from '@/types'
 
 // Mesmo agrupamento usado em AvailableJobs.tsx (booster) e StepService.tsx --
-// win_boost/md5/placement_matches (legado) caem no mesmo balde "Vitórias / MD5",
+// win_boost/md5/placement_matches (legado) caem no mesmo balde "Wins",
 // nunca aparecem como opções separadas de filtro.
 export type ServiceCategory = 'all' | 'elo_boost' | 'win_boost' | 'clash' | 'coaching'
 

@@ -8,7 +8,7 @@ import type { BoostMode, ClashDay, ClashTier, QueueType } from '@/types'
 const SERVICE_CATEGORIES: { value: ServiceCategory; label: string; icon: React.ElementType }[] = [
   { value: 'all', label: 'Todos', icon: Briefcase },
   { value: 'elo_boost', label: 'Elo Boost', icon: TrendingUp },
-  { value: 'win_boost', label: 'Vitórias / MD5', icon: Zap },
+  { value: 'win_boost', label: 'Wins', icon: Zap },
   { value: 'clash', label: 'Clash', icon: Swords },
   { value: 'coaching', label: 'Coaching', icon: Users },
 ]

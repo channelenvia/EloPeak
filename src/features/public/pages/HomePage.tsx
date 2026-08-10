@@ -58,20 +58,20 @@ export function HomePage() {
       desc: t('home.services.winBoostDesc'),
     },
     {
-      icon: Users,
-      title: t('home.services.coachingTitle'),
-      href: '/orders/new?service=coaching',
-      badge: t('home.services.pro'),
-      color: 'text-success bg-success/10',
-      desc: t('home.services.coachingDesc'),
-    },
-    {
       icon: Swords,
       title: t('home.services.clashTitle'),
       href: '/orders/new?service=clash',
       badge: t('home.services.weekend'),
       color: 'text-warning bg-warning/10',
       desc: t('home.services.clashDesc'),
+    },
+    {
+      icon: Users,
+      title: t('home.services.coachingTitle'),
+      href: '/orders/new?service=coaching',
+      badge: t('home.services.pro'),
+      color: 'text-success bg-success/10',
+      desc: t('home.services.coachingDesc'),
     },
   ]
 
@@ -89,7 +89,7 @@ export function HomePage() {
         <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
         <div className="absolute -top-60 right-0 w-[700px] h-[700px] rounded-full bg-brand/6 blur-[140px] pointer-events-none" />
 
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8 py-20 lg:py-24 relative">
+        <div className="container-wide py-20 lg:py-24 relative">
           <motion.div
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
@@ -132,7 +132,7 @@ export function HomePage() {
       {/* ── SERVICES ─────────────────────────────────────────────────────── */}
       <section id="services" className="relative py-16 lg:py-20 scroll-mt-20">
         <SectionTint />
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
+        <div className="container-wide">
           <motion.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}
@@ -189,7 +189,7 @@ export function HomePage() {
 
       {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
       <section className="py-16 lg:py-20 relative overflow-hidden">
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8 relative">
+        <div className="container-wide relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}
@@ -225,7 +225,7 @@ export function HomePage() {
       {/* ── TRUST & SECURITY ─────────────────────────────────────────────── */}
       <section className="relative py-16 lg:py-20">
         <SectionTint />
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
+        <div className="container-wide">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
 
             <motion.div
@@ -271,7 +271,7 @@ export function HomePage() {
       {/* ── BOOSTERS ─────────────────────────────────────────────────────── */}
       {featuredBoosters.length > 0 && (
         <section className="py-16 lg:py-20">
-          <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
+          <div className="container-wide">
             <motion.div
               initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}
@@ -349,7 +349,7 @@ export function HomePage() {
           inconsistente conforme os dados (fonte da quebra perceptível). */}
       <section className="relative py-16 lg:py-20 overflow-hidden">
         <SectionTint />
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8">
+        <div className="container-wide">
           <motion.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}

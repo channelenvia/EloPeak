@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { Trophy, XCircle, Clock, RefreshCw, Crown, Gamepad2 } from 'lucide-react'
+import { Trophy, XCircle, Clock, RefreshCw, Crown, Gamepad2, History } from 'lucide-react'
 import { Card, Skeleton, ErrorAlert } from '@/components/ui'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn, timeAgo } from '@/lib/utils'
+import { getQueueLabel } from '@/lib/riotQueues'
 import { useOrderMatches } from '@/api/orders'
 
 function formatDuration(seconds: number | null): string {
@@ -62,8 +63,12 @@ export interface PdlEstimate {
 // match_sync_started_at, ver migration 052) -- desde que o booster clicou em
 // "Iniciar pedido" até a conclusão, nunca antes disso. Esta tela só exibe o
 // que já foi sincronizado, nunca recalcula a janela no front.
-export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: string; sync?: SyncControls; pdlEstimate?: PdlEstimate | null }) {
-  const { data: matches, isLoading } = useOrderMatches(orderId)
+// `locked` cobre o intervalo entre o pedido existir e o booster de fato
+// iniciá-lo -- sem partida nenhuma pra sincronizar ainda. Card continua
+// aparecendo (com título e o botão de sincronizar, só travado) em vez de
+// sumir e reaparecer depois, pro layout não pular de posição.
+export function OrderMatchHistory({ orderId, sync, pdlEstimate, locked }: { orderId: string; sync?: SyncControls; pdlEstimate?: PdlEstimate | null; locked?: string }) {
+  const { data: matches, isLoading } = useOrderMatches(locked ? undefined : orderId)
   const ddragonVersion = useDdragonVersion()
 
   const wins = matches?.filter((m) => m.result === 'win').length ?? 0
@@ -74,14 +79,17 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: str
     : null
 
   return (
-    <Card padding="md">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-ink">Histórico de partidas</h3>
+    <Card padding="md" className="h-full overflow-y-auto">
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-border-subtle">
+        <div className="flex items-center gap-2">
+          <History className="h-4 w-4 text-brand" />
+          <h3 className="text-sm font-semibold text-ink">Histórico de partidas</h3>
+        </div>
         {sync && (
           <button
             type="button"
             onClick={sync.onSync}
-            disabled={sync.syncing || (sync.cooldownSeconds ?? 0) > 0}
+            disabled={!!locked || sync.syncing || (sync.cooldownSeconds ?? 0) > 0}
             className="inline-flex items-center gap-1.5 text-sm font-semibold shrink-0 text-ink-secondary hover:text-ink transition-colors disabled:opacity-60"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', sync.syncing && 'animate-spin')} />
@@ -90,6 +98,12 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: str
         )}
       </div>
 
+      {locked ? (
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <p className="text-xs text-ink-muted max-w-xs">{locked}</p>
+        </div>
+      ) : (
+      <>
       {sync?.error && <ErrorAlert className="mb-3" message={sync.error} />}
       {sync?.resultMessage && <p className="text-xs text-ink-muted mb-3">{sync.resultMessage}</p>}
 
@@ -163,9 +177,14 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: str
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-ink truncate">
-                      {match.champion ?? 'Campeão desconhecido'}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-ink truncate">
+                        {match.champion ?? 'Campeão desconhecido'}
+                      </p>
+                      <span className="shrink-0 text-[9px] font-semibold text-ink-muted bg-bg-elevated px-1.5 py-0.5 rounded">
+                        {getQueueLabel(match.queue_id)}
+                      </span>
+                    </div>
                     <p className="text-[10px] text-ink-muted" data-tabular>
                       {match.kills}/{match.deaths}/{match.assists} KDA
                       {cs != null && ` · ${cs} CS${csPerMin != null ? ` (${csPerMin.toFixed(1)}/min)` : ''}`}
@@ -180,7 +199,7 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: str
                     <p className="flex items-center gap-1 text-[10px] text-ink-muted justify-end" data-tabular>
                       <Clock className="h-3 w-3" /> {formatDuration(match.duration_seconds)}
                     </p>
-                    <p className="text-[10px] text-ink-muted mt-0.5">{formatDateTime(match.played_at)}</p>
+                    <p className="text-[10px] text-ink-muted mt-0.5">{timeAgo(match.played_at)}</p>
                   </div>
                 </div>
               )
@@ -192,6 +211,8 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate }: { orderId: str
             </p>
           )}
         </>
+      )}
+      </>
       )}
     </Card>
   )

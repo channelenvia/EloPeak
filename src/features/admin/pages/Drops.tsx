@@ -77,7 +77,11 @@ export function AdminDropsPage() {
               <TableBody>
                 {pendingRequests.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">#{r.order_id.slice(0, 8).toUpperCase()}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link to={`/admin/orders/${r.order_id}`} className="text-brand hover:underline">
+                        #{r.order_id.slice(0, 8).toUpperCase()}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">
                         {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
@@ -155,7 +159,11 @@ export function AdminDropsPage() {
               <TableBody>
                 {pastRequests.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">#{r.order_id.slice(0, 8).toUpperCase()}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link to={`/admin/orders/${r.order_id}`} className="text-brand hover:underline">
+                        #{r.order_id.slice(0, 8).toUpperCase()}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">
                         {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Package } from 'lucide-react'
+import { Plus, Package, ChevronDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { checkRateLimit, limits } from '@/lib/rateLimit'
@@ -11,17 +11,9 @@ import { useOwnCoachingPackages, useCoachingPackageMutations } from '@/api/coach
 
 const MAX_SERVICES = 3
 
-const SERVICE_TYPE_OPTIONS = [
-  { value: 'coaching', label: 'Coaching' },
-] as const
-
-const SERVICE_TYPE_LABEL: Record<string, string> = {
-  coaching: 'Coaching',
-}
-
 export function BoosterServicesList({ userId }: { userId: string }) {
+  const [open, setOpen]                   = useState(true)
   const [adding, setAdding]               = useState(false)
-  const [newServiceType, setNewServiceType] = useState<string>(SERVICE_TYPE_OPTIONS[0].value)
   const [editingId, setEditingId]         = useState<string | null>(null)
   const [deletingId, setDeletingId]       = useState<string | null>(null)
   const [togglingId, setTogglingId]       = useState<string | null>(null)
@@ -39,13 +31,14 @@ export function BoosterServicesList({ userId }: { userId: string }) {
       boosterId: userId,
       title: form.title.trim(),
       description: form.description.trim(),
-      serviceType: newServiceType,
+      serviceType: 'coaching',
       tempo: form.tempo.trim(),
       price: parseFloat(form.price),
       lanes: form.lanes,
       specialties: form.specialties,
+      champions: form.champions,
     }, {
-      onSuccess: () => { setAdding(false); setNewServiceType(SERVICE_TYPE_OPTIONS[0].value) },
+      onSuccess: () => setAdding(false),
       onError: () => setError('Erro ao salvar serviço. Tente novamente.'),
     })
   }
@@ -57,11 +50,12 @@ export function BoosterServicesList({ userId }: { userId: string }) {
       boosterId: userId,
       title: form.title.trim(),
       description: form.description.trim(),
-      serviceType: newServiceType,
+      serviceType: 'coaching',
       tempo: form.tempo.trim(),
       price: parseFloat(form.price),
       lanes: form.lanes,
       specialties: form.specialties,
+      champions: form.champions,
     }, {
       onSuccess: () => setEditingId(null),
       onError: () => setError('Erro ao salvar serviço. Tente novamente.'),
@@ -83,10 +77,17 @@ export function BoosterServicesList({ userId }: { userId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-bold text-ink">Meus Serviços</h2>
-          <p className="text-xs text-ink-secondary mt-0.5">Crie até {MAX_SERVICES} serviços de coach para seus clientes.</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex items-start gap-3 text-left"
+        >
+          <ChevronDown className={cn('h-4 w-4 mt-0.5 text-ink-muted shrink-0 transition-transform', !open && '-rotate-90')} />
+          <div>
+            <h2 className="text-sm font-bold text-ink">Meus Serviços</h2>
+            <p className="text-xs text-ink-secondary mt-0.5">Crie até {MAX_SERVICES} serviços de coach para seus clientes.</p>
+          </div>
+        </button>
         <div className="flex items-center gap-3 shrink-0">
           <span className={cn(
             'text-xs font-bold px-2.5 py-1 rounded-full',
@@ -98,7 +99,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
           </span>
           {canAdd && !adding && (
             <button
-              onClick={() => setAdding(true)}
+              onClick={() => { setOpen(true); setAdding(true) }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand/90 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -108,42 +109,22 @@ export function BoosterServicesList({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {open && (
+      <>
       {error && <p className="text-xs text-danger">{error}</p>}
 
       {adding && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Tipo de serviço</label>
-            <div className="flex flex-wrap gap-2">
-              {SERVICE_TYPE_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setNewServiceType(value)}
-                  className={cn(
-                    'px-3.5 py-1.5 rounded-xl text-xs font-bold border-2 transition-all',
-                    newServiceType === value
-                      ? 'bg-brand/15 border-brand text-brand'
-                      : 'border-bg-elevated text-ink-secondary hover:border-brand/40 hover:text-ink',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <BoosterServiceForm
-            initial={EMPTY_SERVICE_FORM}
-            onSave={handleCreate}
-            onCancel={() => { setAdding(false); setNewServiceType(SERVICE_TYPE_OPTIONS[0].value) }}
-            saving={savingNew}
-          />
-        </div>
+        <BoosterServiceForm
+          initial={EMPTY_SERVICE_FORM}
+          onSave={handleCreate}
+          onCancel={() => setAdding(false)}
+          saving={savingNew}
+        />
       )}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {Array.from({ length: 2 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="card p-5 space-y-3">
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-12 w-full" />
@@ -169,7 +150,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {services.map(service =>
             editingId === service.id ? (
               <BoosterServiceForm
@@ -180,22 +161,20 @@ export function BoosterServicesList({ userId }: { userId: string }) {
                 saving={savingEdit}
               />
             ) : (
-              <div key={service.id} className="flex flex-col gap-1.5">
-                <span className="self-start text-[10px] font-bold px-2 py-0.5 rounded-full bg-bg-elevated text-ink-muted uppercase tracking-wide">
-                  {SERVICE_TYPE_LABEL[service.service_type ?? ''] ?? 'Serviço'}
-                </span>
-                <BoosterServiceCard
-                  service={service}
-                  onEdit={() => { setEditingId(service.id); setAdding(false) }}
-                  onDelete={() => handleDelete(service.id)}
-                  onToggleActive={() => handleToggleActive(service)}
-                  deleting={deletingId === service.id}
-                  togglingActive={togglingId === service.id}
-                />
-              </div>
+              <BoosterServiceCard
+                key={service.id}
+                service={service}
+                onEdit={() => { setEditingId(service.id); setAdding(false) }}
+                onDelete={() => handleDelete(service.id)}
+                onToggleActive={() => handleToggleActive(service)}
+                deleting={deletingId === service.id}
+                togglingActive={togglingId === service.id}
+              />
             )
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   )

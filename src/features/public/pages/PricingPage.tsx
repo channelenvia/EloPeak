@@ -191,7 +191,7 @@ export function PricingPage() {
 
   return (
     <div className="py-16">
-      <div className="container-app max-w-5xl space-y-16">
+      <div className="container-wide space-y-16">
 
         {/* Header */}
         <div className="text-center">
@@ -282,7 +282,7 @@ export function PricingPage() {
         <section>
           <h2 className="text-xl font-bold text-ink mb-1">Vitórias / MD5</h2>
           <p className="text-sm text-ink-secondary mb-4">Preço por vitória de acordo com o seu rank atual.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
             {WIN_TIERS.map((tier) => {
               const price = getWinBoostPrice('solo_duo', tier, null)
               return (
@@ -303,7 +303,7 @@ export function PricingPage() {
           <div className="mt-8">
             <h3 className="text-sm font-bold text-ink mb-1">+ MD5: garantia de win rate — ative automaticamente se ainda não jogou o posicionamento</h3>
             <p className="text-xs text-ink-secondary mb-3">Preço da Vitória Avulsa com 50% de desconto. Valor abaixo já é o pacote completo de 5 vitórias — menos vitórias desconta proporcionalmente.</p>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
               {MD5_TIERS.map((tier) => (
                 <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
                   <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />

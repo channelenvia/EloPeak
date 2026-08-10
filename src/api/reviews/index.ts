@@ -55,18 +55,18 @@ export interface BoosterReview {
   rating: number
   content: string | null
   created_at: string
+  customer_nickname: string
+  service_type: string | null
 }
 
-export async function listBoosterReviews(boosterUserId: string, limit = 50): Promise<BoosterReview[]> {
-  const { data, error } = await supabase
-    .from('reviews')
-    .select('id, rating, content, created_at')
-    .eq('booster_id', boosterUserId)
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-    .limit(limit)
+// Nickname do cliente e serviço contratado vêm de get_public_booster_reviews
+// (migration 172, SECURITY DEFINER) -- profiles e orders não são legíveis
+// direto pelo client anônimo, então precisa de uma função que já cruza
+// reviews (is_public = true) com orders.service_type e profiles.username.
+export async function listBoosterReviews(boosterUserId: string): Promise<BoosterReview[]> {
+  const { data, error } = await supabase.rpc('get_public_booster_reviews', { p_booster_id: boosterUserId })
   if (error) throw normalizeApiError(error)
-  return data ?? []
+  return (data ?? []) as unknown as BoosterReview[]
 }
 
 export function useBoosterReviews(boosterUserId: string | undefined) {

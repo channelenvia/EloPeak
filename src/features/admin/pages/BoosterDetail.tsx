@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Trophy, Swords, Users, ExternalLink, ShieldAlert } from 'lucide-react'
 import { Button, Card, BoosterStatusBadge, Avatar, Skeleton } from '@/components/ui'
-import { formatDate, formatDateTime, formatRank, formatLastSeen } from '@/lib/utils'
+import { formatDate, formatDateTime, formatRank, formatLastSeen, safeOpggUrl } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminBoosterDetail, useBoosterActiveDropWarnings, useBoosterPerformanceByRank } from '@/api/boosters'
 import { useBoosterSlotInfo } from '@/api/orders'
@@ -11,17 +11,6 @@ const BRACKET_LABEL: Record<RankBucket, string> = {
   gold_minus: 'Ouro e abaixo',
   plat_diamond: 'Platina–Diamante',
   master_plus: 'Mestre+',
-}
-
-function safeOpggUrl(url: string | null): string | undefined {
-  if (!url) return undefined
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined
-    return parsed.toString()
-  } catch {
-    return undefined
-  }
 }
 
 const DAY_LABEL: Record<string, string> = { mon: 'Seg', tue: 'Ter', wed: 'Qua', thu: 'Qui', fri: 'Sex', sat: 'Sáb', sun: 'Dom' }

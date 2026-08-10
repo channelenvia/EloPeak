@@ -31,7 +31,7 @@ export function ClashConfigPicker() {
     boostMode, setBoostMode, clashTier, setClashTier, clashDay, setClashDay,
     setBasePrice, setEstimatedHours, setPdlModifierPct, stepAttempted,
     riotId, setRiotId, riotVerified, setRiotVerified, riotAutoFilled, setRiotAutoFilled,
-    riotLookupLoading, setRiotLookupLoading, clearRiotLookup,
+    riotLookupLoading, setRiotLookupLoading, clearRiotLookup, setClashCurrentRank,
   } = useOrderBuilderStore()
   const currency = useCurrency()
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
@@ -66,7 +66,6 @@ export function ClashConfigPicker() {
     }
     clearRiotLookup()
     setClashTier(null)
-    setClashDay(null)
 
     setRiotLookupLoading(true)
     try {
@@ -80,6 +79,12 @@ export function ClashConfigPicker() {
         return
       }
       setClashTier(rankTierToClashTier(result.tier))
+      // Rank real (tier+divisão+LP) além do tier/faixa -- só pro card de
+      // detalhes do pedido, nunca usado pra precificar (isso continua sendo
+      // só o tier de Clash). Ver setClashCurrentRank: não passa pelas regras
+      // de Master+/Duo do setCurrentRank de elo_boost, que não fazem sentido
+      // aqui.
+      setClashCurrentRank({ tier: result.tier, division: result.division ?? null }, result.league_points ?? 0)
       setRiotAutoFilled(true)
       setRiotVerified(true)
       setRiotLookupMessage('Tier preenchido automaticamente a partir do seu rank atual.')
@@ -115,6 +120,28 @@ export function ClashConfigPicker() {
         </div>
       </div>
 
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Dia</p>
+        <div className="grid grid-cols-2 gap-3">
+          {CLASH_DAYS.map((day) => (
+            <button
+              key={day}
+              type="button"
+              onClick={() => setClashDay(day)}
+              className={cn(
+                'py-3 rounded-xl text-sm font-bold border-2 transition-all',
+                clashDay === day
+                  ? 'border-brand bg-brand/10 text-brand'
+                  : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
+              )}
+            >
+              {CLASH_DAY_LABEL[day]}
+            </button>
+          ))}
+        </div>
+        {stepAttempted && !clashDay && <p className="text-xs text-danger mt-2">Selecione um dia</p>}
+      </div>
+
       {/* Riot ID: obrigatório nos dois modos — no Solo é referência do
           booster (que loga via credenciais), no Duo é o identificador que
           o booster usa pra te convidar pro time dentro do jogo. A busca
@@ -122,7 +149,7 @@ export function ClashConfigPicker() {
       <FormField
         label="Riot ID"
         required
-        hint="Informe seu Nome#TAG. O booster usa isso para identificar sua conta."
+        hint="Informe seu Nome#TAG para verificar seu Tier do Clash. O booster também usa isso para identificar sua conta."
         error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
       >
         <div className="flex flex-col sm:flex-row gap-2">
@@ -132,7 +159,6 @@ export function ClashConfigPicker() {
             onChange={e => {
               setRiotId(e.target.value)
               setClashTier(null)
-              setClashDay(null)
               setRiotLookupMessage(null)
               setRiotLookupError(null)
             }}
@@ -164,55 +190,27 @@ export function ClashConfigPicker() {
       </FormField>
 
       {riotVerified && riotAutoFilled && clashTier && detectedTierRanks && (
-        <>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">
-              Tier <span className="font-normal normal-case text-ink-muted">(detectado automaticamente via Riot ID)</span>
-            </p>
-            <div className="relative flex items-center gap-3 p-4 rounded-2xl border-2 border-brand bg-brand/10 shadow-brand">
-              <div className="flex items-center shrink-0">
-                <RankBadge tier={detectedTierRanks.low} size="xs" showLabel={false} />
-                {detectedTierRanks.high !== detectedTierRanks.low && (
-                  <RankBadge tier={detectedTierRanks.high} size="xs" showLabel={false} className="-ml-2" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-brand">{CLASH_TIER_LABEL[clashTier]}</p>
-                <p className="text-xs text-ink-secondary truncate">{CLASH_TIER_RANGE_LABEL[clashTier]}</p>
-                <p className="text-xs font-bold mt-0.5 text-brand">
-                  {currency(getClashBasePrice(boostMode, clashTier))}
-                </p>
-              </div>
-              <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">
+            Tier <span className="font-normal normal-case text-ink-muted">(detectado automaticamente via Riot ID)</span>
+          </p>
+          <div className="relative flex items-center gap-3 p-4 rounded-2xl border-2 border-brand bg-brand/10 shadow-brand">
+            <div className="flex items-center shrink-0">
+              <RankBadge tier={detectedTierRanks.low} size="xs" showLabel={false} />
+              {detectedTierRanks.high !== detectedTierRanks.low && (
+                <RankBadge tier={detectedTierRanks.high} size="xs" showLabel={false} className="-ml-2" />
+              )}
             </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Dia</p>
-            <div className="grid grid-cols-2 gap-3">
-              {CLASH_DAYS.map((day) => (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => setClashDay(day)}
-                  className={cn(
-                    'py-3 rounded-xl text-sm font-bold border-2 transition-all',
-                    clashDay === day
-                      ? 'border-brand bg-brand/10 text-brand'
-                      : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
-                  )}
-                >
-                  {CLASH_DAY_LABEL[day]}
-                </button>
-              ))}
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-brand">{CLASH_TIER_LABEL[clashTier]}</p>
+              <p className="text-xs text-ink-secondary truncate">{CLASH_TIER_RANGE_LABEL[clashTier]}</p>
+              <p className="text-xs font-bold mt-0.5 text-brand">
+                {currency(getClashBasePrice(boostMode, clashTier))}
+              </p>
             </div>
-            {stepAttempted && !clashDay && <p className="text-xs text-danger mt-2">Selecione um dia</p>}
+            <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />
           </div>
-
-          <div className="rounded-xl border border-bg-elevated bg-bg-elevated/30 p-3 text-xs text-ink-secondary">
-            O booster é responsável por organizar e montar o time necessário para a participação no Clash.
-          </div>
-        </>
+        </div>
       )}
     </div>
   )

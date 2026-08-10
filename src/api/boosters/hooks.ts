@@ -68,6 +68,11 @@ export function usePublicBooster(displayName: string | undefined) {
     queryKey: queryKeys.boosters.publicProfile(displayName ?? ''),
     queryFn: () => getPublicBooster(displayName!),
     enabled: !!displayName,
+    staleTime: 60_000,
+    // Mesmo refetch periódico do usePublicBoosters, pro badge "Online" do
+    // perfil (derivado de last_active_at, ver isBoosterOnline em lib/utils.ts)
+    // não ficar defasado em relação ao card da listagem.
+    refetchInterval: 30_000,
   })
   useRealtimeInvalidate({
     channel: `public-booster-${displayName ?? 'none'}`,

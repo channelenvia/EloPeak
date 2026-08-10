@@ -561,6 +561,7 @@ export type Database = {
         Row: {
           availability_note: string | null
           booster_id: string
+          champions: string[] | null
           created_at: string | null
           description: string
           id: string
@@ -579,6 +580,7 @@ export type Database = {
         Insert: {
           availability_note?: string | null
           booster_id: string
+          champions?: string[] | null
           created_at?: string | null
           description: string
           id?: string
@@ -597,6 +599,7 @@ export type Database = {
         Update: {
           availability_note?: string | null
           booster_id?: string
+          champions?: string[] | null
           created_at?: string | null
           description?: string
           id?: string
@@ -1535,6 +1538,7 @@ export type Database = {
           current_rank: Json | null
           customer_id: string
           customer_notes: string | null
+          discord_text_channel_id: string | null
           discord_voice_channel_id: string | null
           discount_price: number
           drop_count: number
@@ -1598,6 +1602,7 @@ export type Database = {
           current_rank?: Json | null
           customer_id: string
           customer_notes?: string | null
+          discord_text_channel_id?: string | null
           discord_voice_channel_id?: string | null
           discount_price?: number
           drop_count?: number
@@ -1661,6 +1666,7 @@ export type Database = {
           current_rank?: Json | null
           customer_id?: string
           customer_notes?: string | null
+          discord_text_channel_id?: string | null
           discord_voice_channel_id?: string | null
           discount_price?: number
           drop_count?: number
@@ -1995,9 +2001,10 @@ export type Database = {
           created_at: string
           id: string
           initiated_by: string
-          mp_refund_id: string
+          is_manual: boolean
+          mp_refund_id: string | null
           order_id: string
-          payment_id: string
+          payment_id: string | null
           reason: string
           status: string
         }
@@ -2006,9 +2013,10 @@ export type Database = {
           created_at?: string
           id?: string
           initiated_by: string
-          mp_refund_id: string
+          is_manual?: boolean
+          mp_refund_id?: string | null
           order_id: string
-          payment_id: string
+          payment_id?: string | null
           reason: string
           status?: string
         }
@@ -2017,9 +2025,10 @@ export type Database = {
           created_at?: string
           id?: string
           initiated_by?: string
-          mp_refund_id?: string
+          is_manual?: boolean
+          mp_refund_id?: string | null
           order_id?: string
-          payment_id?: string
+          payment_id?: string | null
           reason?: string
           status?: string
         }
@@ -2363,6 +2372,7 @@ export type Database = {
           is_top3: boolean | null
           lanes: string[] | null
           last_active_at: string | null
+          opgg_link: string | null
           peak_rank: Json | null
           rating: number | null
           rating_count: number | null
@@ -2389,6 +2399,10 @@ export type Database = {
       }
       add_order_coaching_topic: {
         Args: { p_content: string; p_order_id: string }
+        Returns: Json
+      }
+      admin_create_manual_refund: {
+        Args: { p_amount: number; p_order_id: string; p_reason: string }
         Returns: Json
       }
       admin_dashboard_stats: { Args: never; Returns: Json }
@@ -2538,6 +2552,19 @@ export type Database = {
       }
       get_order_chat: { Args: { p_order_id: string }; Returns: Json }
       get_order_credentials: { Args: { p_order_id: string }; Returns: Json }
+      get_order_customer_nickname: { Args: { p_order_id: string }; Returns: string | null }
+      get_order_duo_partner_riot_id: { Args: { p_order_id: string }; Returns: string | null }
+      get_public_booster_reviews: {
+        Args: { p_booster_id: string }
+        Returns: {
+          id: string
+          rating: number
+          content: string | null
+          created_at: string
+          customer_nickname: string
+          service_type: string | null
+        }[]
+      }
       get_top_boosters: {
         Args: {
           p_limit?: number
@@ -2728,10 +2755,8 @@ export type Database = {
           p_display_name: string
           p_hours_per_day_max: number
           p_hours_per_day_min: number
-          p_lanes: string[]
           p_opgg_link: string
           p_peak_tier: string
-          p_specialties: string[]
         }
         Returns: Json
       }

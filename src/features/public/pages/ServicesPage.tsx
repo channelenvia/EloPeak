@@ -43,25 +43,6 @@ const SERVICES = [
     cta: '/orders/new?service=win_boost',
   },
   {
-    icon: Users,
-    slug: 'coaching',
-    title: 'Coaching',
-    tagline: 'Aprenda com os melhores e melhore de verdade.',
-    description:
-      'Sessões 1-a-1 ao vivo com coaches de alto ELO. Revisão de VOD, coaching em jogo, fundamentos de campeão, estratégia macro e gestão mental — tudo coberto.',
-    rankRange: RANK_TIER_ORDER,
-    highlights: [
-      'Opções de sessão de horário predefinido',
-      'Aula estruturada para evolução do jogador',
-      'Coach combinado com sua função principal',
-      'Aula com foco em otimização da performance',
-      'Plano de melhoria personalizado',
-    ],
-    color: 'text-success',
-    bgColor: 'bg-success/10',
-    cta: '/orders/new?service=coaching',
-  },
-  {
     icon: Swords,
     slug: 'clash',
     title: 'Clash',
@@ -79,6 +60,25 @@ const SERVICES = [
     color: 'text-success',
     bgColor: 'bg-warning/10',
     cta: '/orders/new?service=clash',
+  },
+  {
+    icon: Users,
+    slug: 'coaching',
+    title: 'Coaching',
+    tagline: 'Aprenda com os melhores e melhore de verdade.',
+    description:
+      'Sessões 1-a-1 ao vivo com coaches de alto ELO. Revisão de VOD, coaching em jogo, fundamentos de campeão, estratégia macro e gestão mental — tudo coberto.',
+    rankRange: RANK_TIER_ORDER,
+    highlights: [
+      'Opções de sessão de horário predefinido',
+      'Aula estruturada para evolução do jogador',
+      'Coach combinado com sua função principal',
+      'Aula com foco em otimização da performance',
+      'Plano de melhoria personalizado',
+    ],
+    color: 'text-success',
+    bgColor: 'bg-success/10',
+    cta: '/orders/new?service=coaching',
   },
 ]
 
@@ -98,7 +98,7 @@ export function ServicesPage() {
 
   return (
     <div className="py-16">
-      <div className="container-app space-y-20">
+      <div className="container-wide space-y-20">
         {/* Header */}
         <div className="text-center max-w-2xl xl:max-w-none mx-auto">
           <p className="section-label mb-3">League of Legends</p>
@@ -111,7 +111,7 @@ export function ServicesPage() {
         {/* Services */}
         <div className="space-y-8">
           {SERVICES.map(({ icon: Icon, slug, title, tagline, description, rankRange, highlights, color, bgColor }) => (
-            <div key={title} id={slug.replace(/_/g, '-')} className="card p-8 flex flex-col md:flex-row md:items-center gap-12 scroll-mt-24">
+            <div key={title} id={slug.replace(/_/g, '-')} className="card p-8 flex flex-col md:flex-row md:items-center gap-12 xl:gap-16 scroll-mt-24">
               <div className="md:w-2/5 space-y-4">
                 <div className={`h-12 w-12 rounded-2xl ${bgColor} flex items-center justify-center`}>
                   <Icon className={`h-6 w-6 ${color}`} />

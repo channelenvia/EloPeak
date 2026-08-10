@@ -6,10 +6,10 @@ import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert } from '@/compon
 import { supabase } from '@/lib/supabase'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { cn, RANK_TIER_ORDER } from '@/lib/utils'
-import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, DUO_BOOST_PCT, MD5_DISCOUNT_PCT, applyLpModifier, lpModifierPct, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
+import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, DUO_BOOST_PCT, applyLpModifier, lpModifierPct, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
 import { isMasterPlusCurrentTier } from '@/lib/boostDomain'
 import type { Division, QueueType, RankTier } from '@/types'
-import { Search, Info, Lock } from 'lucide-react'
+import { Search, Info, Lock, Check } from 'lucide-react'
 import { CoachPackagePicker } from './CoachPackagePicker'
 import { ClashConfigPicker } from './ClashConfigPicker'
 
@@ -375,39 +375,40 @@ export function StepConfigure() {
             nesse caso, então o botão só some/trava quando descobrimos. */}
         {serviceType === 'elo_boost' && (
           <FormField label="Modalidade">
-            <div className="flex gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setBoostMode('solo')}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
+                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
                   boostMode === 'solo'
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
+                    ? 'border-brand bg-brand/10 shadow-brand'
+                    : 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
                 )}
               >
-                Solo Boost
+                <p className={cn('text-sm font-bold', boostMode === 'solo' ? 'text-brand' : 'text-ink')}>Solo Boost</p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">O booster joga direto na sua conta.</p>
+                {boostMode === 'solo' && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
               <button
                 type="button"
                 onClick={() => setBoostMode('duo')}
                 disabled={currentIsMasterPlus}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
+                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
                   boostMode === 'duo'
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
-                  currentIsMasterPlus && 'opacity-50 cursor-not-allowed hover:border-bg-elevated',
+                    ? 'border-brand bg-brand/10 shadow-brand'
+                    : 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+                  currentIsMasterPlus && 'opacity-50 cursor-not-allowed hover:border-bg-elevated hover:bg-bg-card',
                 )}
               >
-                Duo Boost <span className="font-normal opacity-70">(+{DUO_BOOST_PCT}%)</span>
+                <p className={cn('text-sm font-bold', boostMode === 'duo' ? 'text-brand' : 'text-ink')}>Duo Boost</p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
+                  {currentIsMasterPlus ? 'Indisponível para Mestre ou superior.' : 'Você joga junto com o booster na duo queue.'}
+                </p>
+                {boostMode === 'duo' && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
             </div>
-            <p className="text-xs text-ink-muted mt-1.5">
-              {currentIsMasterPlus
-                ? 'Duo Boost indisponível para Mestre ou superior.'
-                : 'Duo Boost: você joga junto com o booster na duo queue.'}
-            </p>
           </FormField>
         )}
 
@@ -419,45 +420,50 @@ export function StepConfigure() {
             ainda. Mesmo padrão visual do seletor de Tipo de Fila abaixo. */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && (
           <FormField label="Vitórias ou MD5">
-            <div className="flex gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 disabled
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all cursor-not-allowed',
-                  !isMd5
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary opacity-50',
+                  'relative text-left p-4 rounded-2xl border-2 cursor-not-allowed transition-all duration-150',
+                  !isMd5 ? 'border-brand bg-brand/10 shadow-brand' : 'border-bg-elevated bg-bg-card opacity-50',
                 )}
               >
-                <span className="inline-flex items-center gap-1.5">
+                <p className={cn('text-sm font-bold inline-flex items-center gap-1.5', !isMd5 ? 'text-brand' : 'text-ink')}>
                   Vitórias
                   {riotVerified && isMd5 && <Lock className="h-3 w-3 opacity-60" />}
-                </span>
+                </p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
+                  {!riotVerified
+                    ? 'Ativa se sua conta já tiver rank nesta fila.'
+                    : !isMd5
+                      ? 'Conta já possui rank nesta fila — vitórias líquidas garantidas.'
+                      : 'Indisponível — conta ainda no posicionamento.'}
+                </p>
+                {!isMd5 && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
               <button
                 type="button"
                 disabled
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all cursor-not-allowed',
-                  isMd5
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary opacity-50',
+                  'relative text-left p-4 rounded-2xl border-2 cursor-not-allowed transition-all duration-150',
+                  isMd5 ? 'border-brand bg-brand/10 shadow-brand' : 'border-bg-elevated bg-bg-card opacity-50',
                 )}
               >
-                <span className="inline-flex items-center gap-1.5">
-                  MD5 <span className="font-normal opacity-70">(-{MD5_DISCOUNT_PCT}%)</span>
+                <p className={cn('text-sm font-bold inline-flex items-center gap-1.5', isMd5 ? 'text-brand' : 'text-ink')}>
+                  MD5
                   {riotVerified && !isMd5 && <Lock className="h-3 w-3 opacity-60" />}
-                </span>
+                </p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
+                  {!riotVerified
+                    ? 'Ativa se sua conta ainda estiver no posicionamento nesta fila.'
+                    : isMd5
+                      ? 'Conta no posicionamento — garantia de 80%+ de win rate.'
+                      : 'Indisponível — conta já possui rank nesta fila.'}
+                </p>
+                {isMd5 && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
             </div>
-            <p className="text-xs text-ink-muted mt-1.5">
-              {!riotVerified
-                ? 'Detectado automaticamente ao verificar seu Riot ID abaixo.'
-                : isMd5
-                  ? 'Conta ainda no posicionamento nesta fila — MD5 ativado, garantia de 80%+ de win rate.'
-                  : 'Conta já possui rank nesta fila — MD5 indisponível (anti-fraude).'}
-            </p>
           </FormField>
         )}
 
@@ -468,39 +474,40 @@ export function StepConfigure() {
             serviceType). */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && (
           <FormField label="Modalidade">
-            <div className="flex gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setBoostMode('solo')}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
+                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
                   boostMode === 'solo'
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
+                    ? 'border-brand bg-brand/10 shadow-brand'
+                    : 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
                 )}
               >
-                {isMd5 ? 'Solo MD5' : 'Solo Vitórias'}
+                <p className={cn('text-sm font-bold', boostMode === 'solo' ? 'text-brand' : 'text-ink')}>{isMd5 ? 'Solo MD5' : 'Solo Vitórias'}</p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">O booster joga direto na sua conta.</p>
+                {boostMode === 'solo' && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
               <button
                 type="button"
                 onClick={() => setBoostMode('duo')}
                 disabled={currentIsMasterPlus}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
+                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
                   boostMode === 'duo'
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-bg-elevated bg-bg-card text-ink-secondary hover:border-brand/30',
-                  currentIsMasterPlus && 'opacity-50 cursor-not-allowed hover:border-bg-elevated',
+                    ? 'border-brand bg-brand/10 shadow-brand'
+                    : 'border-bg-elevated bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+                  currentIsMasterPlus && 'opacity-50 cursor-not-allowed hover:border-bg-elevated hover:bg-bg-card',
                 )}
               >
-                {isMd5 ? 'Duo MD5' : 'Duo Vitórias'} <span className="font-normal opacity-70">(+{DUO_BOOST_PCT}%)</span>
+                <p className={cn('text-sm font-bold', boostMode === 'duo' ? 'text-brand' : 'text-ink')}>{isMd5 ? 'Duo MD5' : 'Duo Vitórias'}</p>
+                <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
+                  {currentIsMasterPlus ? 'Indisponível para Mestre ou superior.' : 'Você joga junto com o booster na duo queue.'}
+                </p>
+                {boostMode === 'duo' && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
             </div>
-            <p className="text-xs text-ink-muted mt-1.5">
-              {currentIsMasterPlus
-                ? `Duo ${isMd5 ? 'MD5' : 'Vitórias'} indisponível para Mestre ou superior.`
-                : `Duo ${isMd5 ? 'MD5' : 'Vitórias'}: o booster joga com Riot ID próprio ou conta da plataforma, junto com você na duo queue.`}
-            </p>
           </FormField>
         )}
 

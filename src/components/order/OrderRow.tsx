@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
-import { Zap, ArrowRight } from 'lucide-react'
+import { Zap, ArrowRight, Hash } from 'lucide-react'
 import { Card, OrderStatusBadge, RankBadge } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
+import { CLASH_DAY_LABEL, CLASH_TIER_BOUNDARY_RANKS, getClashDateParts } from '@/lib/clashDomain'
 import type { Order, RankTier, Division } from '@/types'
 
 interface OrderRowProps {
@@ -42,8 +43,33 @@ export function OrderRow({ order, currency, subtitle, showIcon = true }: OrderRo
                 </div>
               )}
               {hasWinProgress && (
-                <span className="hidden md:inline text-xs text-ink-muted">
-                  {order.wins_played}/{order.wins_purchased} vitórias
+                <div className="hidden md:flex items-center gap-1">
+                  {currentRank && <RankBadge tier={currentRank.tier} division={currentRank.division} size="xs" showLabel={false} />}
+                  <ArrowRight className="h-3 w-3 text-ink-muted" />
+                  <span className="text-xs font-bold text-ink" data-tabular>
+                    {Math.max(0, (order.wins_purchased ?? 0) - order.wins_played)}
+                  </span>
+                  <span className="text-xs text-ink-muted">restantes</span>
+                </div>
+              )}
+              {order.service_type === 'clash' && order.clash_tier && (
+                <div className="hidden md:flex items-center gap-1">
+                  <RankBadge tier={CLASH_TIER_BOUNDARY_RANKS[order.clash_tier].high} division={null} size="xs" showLabel={false} />
+                  <ArrowRight className="h-3 w-3 text-ink-muted" />
+                  {order.clash_day && (() => {
+                    const { day, month } = getClashDateParts(order.created_at, order.clash_day)
+                    return (
+                      <span className="text-xs font-medium text-ink" data-tabular>
+                        {day}/{month} · {CLASH_DAY_LABEL[order.clash_day]}
+                      </span>
+                    )
+                  })()}
+                </div>
+              )}
+              {order.riot_id && (
+                <span className="hidden md:inline-flex items-center gap-1 text-xs text-ink-muted">
+                  <Hash className="h-3 w-3" />
+                  {order.riot_id}
                 </span>
               )}
             </div>

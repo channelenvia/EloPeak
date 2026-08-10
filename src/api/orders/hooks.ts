@@ -5,12 +5,12 @@ import { useRealtimeInvalidate } from '@/api/core/realtime'
 import type { OrderStatus, ServiceType } from '@/types'
 import { secondsRemaining } from './cooldown'
 import {
-  getBoosterOrder, getBoosterSlotInfo, getCustomerOrderState, getOrder, getPendingDropRequest,
+  getBoosterOrder, getBoosterSlotInfo, getCustomerOrderState, getOrder, getOrderCustomerNickname, getOrderDuoPartnerRiotId, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderCoachingTopics,
   listOrderMatches, listOrderStatusHistory,
 } from './queries'
 import {
-  acceptBoostOrder, addOrderCoachingTopic, adminDropOrder, adminOverrideOrderStatus, cancelPendingOrder,
+  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminOverrideOrderStatus, cancelPendingOrder,
   confirmOrderCompletion, disputeOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
   requestOrderSupport, revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
@@ -39,6 +39,22 @@ export function useOrder(orderId: string | undefined) {
     enabled: !!orderId,
   })
   return query
+}
+
+export function useOrderDuoPartnerRiotId(orderId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.orders.duoPartnerRiotId(orderId ?? ''),
+    queryFn: () => getOrderDuoPartnerRiotId(orderId!),
+    enabled: !!orderId && enabled,
+  })
+}
+
+export function useOrderCustomerNickname(orderId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.orders.customerNickname(orderId ?? ''),
+    queryFn: () => getOrderCustomerNickname(orderId!),
+    enabled: !!orderId,
+  })
 }
 
 export function useBoosterOrder(orderId: string | undefined) {
@@ -293,6 +309,18 @@ export function useAdminDropOrder(orderId: string) {
   return useMutation({
     mutationFn: (reason: string) => adminDropOrder({ orderId, reason }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
+  })
+}
+
+// Sem orderId fixo no hook -- o admin digita o número do pedido no
+// formulário (não estamos na página do pedido), então invalida usando o
+// orderId que veio nas variables do próprio mutate(). A lista de reembolsos
+// (queryKeys.admin.refunds()) já se atualiza sozinha via realtime.
+export function useAdminCreateManualRefund() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminCreateManualRefund,
+    onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
 }
 

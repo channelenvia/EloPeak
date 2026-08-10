@@ -31,18 +31,29 @@ describe('ClashConfigPicker', () => {
     })
   })
 
-  it('inicia em Solo Clash e esconde tier e dia antes da verificação', () => {
+  it('inicia em Solo Clash, dia já disponível, tier escondido antes da verificação', () => {
     renderPicker()
     const state = useOrderBuilderStore.getState()
     expect(state.boostMode).toBe('solo')
     expect(state.clashTier).toBeNull()
     expect(state.clashDay).toBeNull()
     expect(state.basePrice).toBe(0)
-    expect(screen.queryByText(/^Tier/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Domingo' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/detectado automaticamente via Riot ID/)).not.toBeInTheDocument()
+    // Dia não depende mais da verificação do Riot ID -- fica logo abaixo da
+    // Modalidade, acima do campo de Riot ID.
+    expect(screen.getByRole('button', { name: 'Domingo' })).toBeInTheDocument()
   })
 
-  it('verifica o Riot ID, preenche o tier e libera a escolha do dia', async () => {
+  it('escolhe o dia sem precisar verificar o Riot ID antes', async () => {
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.click(screen.getByRole('button', { name: 'Domingo' }))
+    expect(useOrderBuilderStore.getState().clashDay).toBe('sunday')
+    expect(useOrderBuilderStore.getState().riotVerified).toBe(false)
+  })
+
+  it('verifica o Riot ID e preenche o tier', async () => {
     const user = userEvent.setup()
     renderPicker()
 
@@ -53,42 +64,32 @@ describe('ClashConfigPicker', () => {
     expect(useOrderBuilderStore.getState().clashTier).toBe('tier_3')
     expect(useOrderBuilderStore.getState().estimatedHours).toBe(4)
     expect(useOrderBuilderStore.getState().pdlModifierPct).toBeNull()
-    expect(screen.getByRole('button', { name: 'Domingo' })).toBeInTheDocument()
   })
 
-  it('depois da verificação, o usuário escolhe o dia', async () => {
-    const user = userEvent.setup()
-    renderPicker()
-
-    await user.type(screen.getByPlaceholderText('NomeDoInvocador#TAG'), 'Fulano#BR1')
-    await user.click(screen.getByRole('button', { name: 'Verificar elo' }))
-    await screen.findByRole('button', { name: 'Domingo' })
-    await user.click(screen.getByRole('button', { name: 'Domingo' }))
-    expect(useOrderBuilderStore.getState().clashDay).toBe('sunday')
-  })
-
-  it('com stepAttempted, não exibe erros de campos ainda bloqueados', () => {
+  it('com stepAttempted, cobra o dia (campo já ativo) mas não o tier (ainda bloqueado)', () => {
     useOrderBuilderStore.getState().reset()
     useOrderBuilderStore.getState().setService('clash', 'clash')
     useOrderBuilderStore.getState().setStepAttempted(true)
     render(<ClashConfigPicker />)
 
     expect(screen.queryByText('Selecione um tier')).not.toBeInTheDocument()
-    expect(screen.queryByText('Selecione um dia')).not.toBeInTheDocument()
+    expect(screen.getByText('Selecione um dia')).toBeInTheDocument()
   })
 
-  it('editar o Riot ID depois da verificação esconde tier e dia novamente', async () => {
+  it('editar o Riot ID depois da verificação esconde o tier de novo, mas mantém o dia já escolhido', async () => {
     const user = userEvent.setup()
     renderPicker()
 
+    await user.click(screen.getByRole('button', { name: 'Domingo' }))
     const riotIdInput = screen.getByPlaceholderText('NomeDoInvocador#TAG')
     await user.type(riotIdInput, 'Fulano#BR1')
     await user.click(screen.getByRole('button', { name: 'Verificar elo' }))
-    await screen.findByRole('button', { name: 'Domingo' })
+    await screen.findByText(/detectado automaticamente via Riot ID/)
     await user.type(riotIdInput, '2')
 
     expect(useOrderBuilderStore.getState().riotVerified).toBe(false)
     expect(useOrderBuilderStore.getState().clashTier).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Domingo' })).not.toBeInTheDocument()
+    expect(useOrderBuilderStore.getState().clashDay).toBe('sunday')
+    expect(screen.queryByText(/detectado automaticamente via Riot ID/)).not.toBeInTheDocument()
   })
 })

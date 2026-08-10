@@ -15,9 +15,13 @@ interface TestimonialCardProps extends Pick<PublicReview, 'rating' | 'content' |
   avatar_icon_id?: number
   service_label?: string
   className?: string
+  // No perfil público do próprio booster o badge "Booster: X" é redundante
+  // (a página inteira já é dele) -- default true preserva o comportamento
+  // atual do carrossel da home.
+  showBoosterBadge?: boolean
 }
 
-export function TestimonialCard({ rating, content, booster_display_name, customer_name, avatar_icon_id, service_label, className }: TestimonialCardProps) {
+export function TestimonialCard({ rating, content, booster_display_name, customer_name, avatar_icon_id, service_label, className, showBoosterBadge = true }: TestimonialCardProps) {
   return (
     <div className={cn('card relative p-5 flex flex-col gap-4 overflow-hidden', className)}>
       <Quote className="absolute -top-2 -right-1 h-16 w-16 text-ink/[0.04] rotate-180" strokeWidth={1} />
@@ -39,9 +43,11 @@ export function TestimonialCard({ rating, content, booster_display_name, custome
       </div>
       <p className="text-sm text-ink-secondary leading-relaxed relative">&ldquo;{content}&rdquo;</p>
       <div className="flex items-center gap-2 flex-wrap relative">
-        <span className="inline-flex items-center gap-1.5 self-start text-xs font-medium px-2.5 py-1 rounded-full border border-brand/40 text-brand bg-brand/5">
-          Booster: {booster_display_name}
-        </span>
+        {showBoosterBadge && (
+          <span className="inline-flex items-center gap-1.5 self-start text-xs font-medium px-2.5 py-1 rounded-full border border-brand/40 text-brand bg-brand/5">
+            Booster: {booster_display_name}
+          </span>
+        )}
         {service_label && (
           <span className="inline-flex items-center gap-1.5 self-start text-xs font-medium px-2.5 py-1 rounded-full border border-ink-muted/30 text-ink-muted">
             {service_label}

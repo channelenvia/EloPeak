@@ -48,11 +48,16 @@ export function BoosterServiceCard({
         <p className="text-xs text-ink-secondary leading-relaxed flex-1">{service.description}</p>
       )}
 
-      {(service.lanes?.length || service.specialties?.length) && (
+      {(service.lanes?.length || service.specialties?.length || service.champions?.length) && (
         <div className="flex flex-wrap gap-1.5">
           {service.lanes?.map(l => (
             <span key={l} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
               {LANE_LABEL[l] ?? l}
+            </span>
+          ))}
+          {service.champions?.map(c => (
+            <span key={c} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+              {c}
             </span>
           ))}
           {service.specialties?.map(s => (

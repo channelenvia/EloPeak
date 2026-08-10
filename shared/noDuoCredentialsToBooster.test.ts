@@ -17,6 +17,7 @@ describe('Contas Duo: booster nunca vê login/senha cru', () => {
   const boosterFiles = [
     'src/features/booster/pages/Accounts.tsx',
     'src/features/booster/pages/JobDetail.tsx',
+    'src/components/order/DuoAccountSection.tsx',
     'src/api/duoAccounts/queries.ts',
   ]
 
@@ -34,11 +35,12 @@ describe('Contas Duo: booster nunca vê login/senha cru', () => {
     expect(content).toContain('adminGetDuoAccountCredentials')
   })
 
-  it('JobDetail.tsx (booster) usa reserva + token opaco de conta Duo (camada de API)', () => {
+  it('DuoAccountSection.tsx (booster) usa reserva + token opaco de conta Duo (camada de API)', () => {
     // As chamadas em si vivem em src/api/duoAccounts/mutations.ts
     // (useReserveDuoAccount/useGetDuoAccountAccessToken) desde a introdução
-    // da camada de API tipada -- JobDetail.tsx consome os hooks.
-    const page = read('src/features/booster/pages/JobDetail.tsx')
+    // da camada de API tipada -- src/components/order/DuoAccountSection.tsx
+    // (extraído de JobDetail.tsx) consome os hooks.
+    const page = read('src/components/order/DuoAccountSection.tsx')
     expect(page).toContain('useReserveDuoAccount')
     expect(page).toContain('useGetDuoAccountAccessToken')
     const api = read('src/api/duoAccounts/mutations.ts')

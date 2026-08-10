@@ -131,7 +131,9 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
         <MessageCircle className="h-4 w-4 text-brand" />
         <div>
           <h3 className="text-sm font-semibold text-ink">Chat do pedido</h3>
-          <p className="text-[11px] text-ink-muted">{messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}</p>
+          {available && (
+            <p className="text-[11px] text-ink-muted">{messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}</p>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {viewerRole === 'admin' && available && (

@@ -80,10 +80,10 @@ function clashIntent(overrides: Record<string, unknown> = {}) {
 
 const req = new Request('http://localhost/test')
 
-Deno.test('Clash Solo tier_4 -- preço final bate com a tabela fixa (R$20,00), sem cupom', async () => {
+Deno.test('Clash Solo tier_4 -- preço final bate com a tabela fixa (R$26,00), sem cupom', async () => {
   const outcome = await validateAndPriceIntent(req, clashIntent(), USER_ID, fakeServiceClient(), '', null)
   assert(outcome.ok, `esperava sucesso, veio erro: ${!outcome.ok ? await outcome.response.clone().text() : ''}`)
-  assertEquals(outcome.priced.totalPrice, 20)
+  assertEquals(outcome.priced.totalPrice, 26)
   assertEquals(outcome.priced.couponApplied, false)
   assertEquals(outcome.normalized.clashTier, 'tier_4')
   assertEquals(outcome.normalized.clashDay, 'saturday')
@@ -105,11 +105,31 @@ Deno.test('Clash Duo mantém riot_id no normalized igual ao Solo', async () => {
   assertEquals(outcome.normalized.riotId, 'Cliente#BR2')
 })
 
-Deno.test('Clash Duo tier_4 -- preço final bate com a tabela fixa (R$59,90)', async () => {
+Deno.test('Clash Duo tier_4 -- preço final bate com a tabela fixa (R$77,87)', async () => {
   const outcome = await validateAndPriceIntent(req, clashIntent({ boost_mode: 'duo' }), USER_ID, fakeServiceClient(), '', null)
   assert(outcome.ok)
-  assertEquals(outcome.priced.totalPrice, 59.9)
+  assertEquals(outcome.priced.totalPrice, 77.87)
   assertEquals(outcome.normalized.boostMode, 'duo')
+})
+
+Deno.test('Clash sem current_rank/current_lp no intent (cliente antigo) normaliza pra null/0, sem quebrar nem mudar o preço', async () => {
+  const outcome = await validateAndPriceIntent(req, clashIntent(), USER_ID, fakeServiceClient(), '', null)
+  assert(outcome.ok)
+  assertEquals(outcome.normalized.currentRank, null)
+  assertEquals(outcome.normalized.currentLp, 0)
+  assertEquals(outcome.priced.totalPrice, 26)
+})
+
+Deno.test('Clash com current_rank/current_lp reais (rank capturado na consulta à Riot) é persistido no normalized, sem afetar o preço (que segue vindo só do tier)', async () => {
+  const outcome = await validateAndPriceIntent(
+    req,
+    clashIntent({ current_rank: { tier: 'gold', division: 'II' }, current_lp: 45 }),
+    USER_ID, fakeServiceClient(), '', null,
+  )
+  assert(outcome.ok, `esperava sucesso, veio erro: ${!outcome.ok ? await outcome.response.clone().text() : ''}`)
+  assertEquals(outcome.normalized.currentRank, { tier: 'gold', division: 'II' })
+  assertEquals(outcome.normalized.currentLp, 45)
+  assertEquals(outcome.priced.totalPrice, 26)
 })
 
 Deno.test('Cupom ELOPEAK30 aplica 30% de desconto no Clash (regressão -- Clash só entrou na whitelist de elegibilidade nesta rodada de auditoria)', async () => {
@@ -119,8 +139,8 @@ Deno.test('Cupom ELOPEAK30 aplica 30% de desconto no Clash (regressão -- Clash 
   assert(outcome.ok)
   assertEquals(outcome.priced.couponApplied, true)
   assertEquals(outcome.priced.discountPct, 30)
-  // 20 * 0.30 = 6 de desconto -> total 14
-  assertEquals(outcome.priced.totalPrice, 14)
+  // 26 * 0.30 = 7.80 de desconto -> total 18.20
+  assertEquals(outcome.priced.totalPrice, 18.2)
 })
 
 Deno.test('Cupom com código desconhecido não aplica desconto, mas não é erro (segue sem desconto)', async () => {
@@ -129,7 +149,7 @@ Deno.test('Cupom com código desconhecido não aplica desconto, mas não é erro
   )
   assert(outcome.ok)
   assertEquals(outcome.priced.couponApplied, false)
-  assertEquals(outcome.priced.totalPrice, 20)
+  assertEquals(outcome.priced.totalPrice, 26)
 })
 
 Deno.test('Addon válido do catálogo (solo_standard, reaproveitado pelo Solo Clash) é aceito e soma no preço final', async () => {
@@ -144,7 +164,29 @@ Deno.test('Addon válido do catálogo (solo_standard, reaproveitado pelo Solo Cl
   )
   assert(outcome.ok, `esperava sucesso: ${!outcome.ok ? await outcome.response.clone().text() : ''}`)
   assertEquals(outcome.extras.length, 1)
-  assertEquals(outcome.priced.totalPrice, 25) // 20 base + 5 do addon
+  assertEquals(outcome.priced.totalPrice, 31) // 26 base + 5 do addon
+})
+
+Deno.test('Solo Clash rejeita addon fora do seu subconjunto (mono_champ é do Elo Boost, não do Clash) mesmo existindo em service_extras', async () => {
+  const extras: ExtraRow[] = [
+    { id: 'extra-2', code: 'mono_champ', name: 'Mono Champion', price_modifier: 0, price_modifier_pct: 10, sort_order: 1 },
+  ]
+  const outcome = await validateAndPriceIntent(
+    req, clashIntent({ addon_codes: ['mono_champ'] }), USER_ID, fakeServiceClient({ extras }), '', null,
+  )
+  assert(!outcome.ok)
+  assertEquals(outcome.response.status, 400)
+})
+
+Deno.test('Duo Clash aceita duo_voice mas rejeita undetectable_duo (fora do subconjunto do Clash)', async () => {
+  const extras: ExtraRow[] = [
+    { id: 'extra-3', code: 'undetectable_duo', name: 'Duo Indetectável', price_modifier: 0, price_modifier_pct: 15, sort_order: 1 },
+  ]
+  const outcome = await validateAndPriceIntent(
+    req, clashIntent({ boost_mode: 'duo', addon_codes: ['undetectable_duo'] }), USER_ID, fakeServiceClient({ extras }), '', null,
+  )
+  assert(!outcome.ok)
+  assertEquals(outcome.response.status, 400)
 })
 
 Deno.test('Addon inexistente/inativo no catálogo é rejeitado com 400', async () => {

@@ -10,6 +10,7 @@ import {
   resolveAddonLabel,
   NO_DIVISION_TIERS,
 } from '../../../shared/boostDomain.ts'
+import { isAddonCodeValidForClash } from '../../../shared/clashDomain.ts'
 import { errorResponse, jsonResponse } from './responses.ts'
 import type { supabaseAdmin } from './supabaseAdmin.ts'
 import {
@@ -193,12 +194,16 @@ const md5IntentSchema = z.object({
   coupon_code: couponCodeSchema,
 }).strict()
 
-// Solo Clash / Duo Clash — sem rank+divisão específico (só o tier), sem
-// LP/PDL, sem vitórias. Dia é obrigatório e restrito a sábado ou domingo --
-// qualquer outro valor é rejeitado pelo próprio z.enum. Riot ID é obrigatório
-// nos dois modos: no Solo, é referência do booster antes de logar via
-// credenciais; no Duo, é o identificador que o booster usa pra convidar o
-// cliente pro time dentro do jogo (não há handoff de credenciais no Duo).
+// Solo Clash / Duo Clash — preço e elegibilidade dependem só do tier (faixa),
+// não de rank+divisão exato, então current_rank/current_lp aqui são
+// informativos (exibição no card de detalhes), nunca usados pra precificar
+// ou validar o tier. Ambos opcionais: pedidos antigos e qualquer client que
+// não os envie continuam válidos, current_rank cai em null. Dia é
+// obrigatório e restrito a sábado ou domingo -- qualquer outro valor é
+// rejeitado pelo próprio z.enum. Riot ID é obrigatório nos dois modos: no
+// Solo, é referência do booster antes de logar via credenciais; no Duo, é o
+// identificador que o booster usa pra convidar o cliente pro time dentro do
+// jogo (não há handoff de credenciais no Duo).
 const clashIntentSchema = z.object({
   service_type: z.literal('clash'),
   service_id: z.string().uuid(),
@@ -207,6 +212,8 @@ const clashIntentSchema = z.object({
   server: z.string().trim().min(2).max(16),
   clash_tier: z.enum(['tier_4', 'tier_3', 'tier_2', 'tier_1']),
   clash_day: z.enum(['saturday', 'sunday']),
+  current_rank: genericRankSchema.nullable().optional().default(null),
+  current_lp: z.number().int().min(0).max(9999).optional().default(0),
   addon_codes: z.array(z.string().min(1)).max(10).default([]),
   customer_notes: z.string().max(500).nullable().default(null),
   riot_id: riotIdSchema,
@@ -536,9 +543,9 @@ export async function validateAndPriceIntent(
       queueType: 'solo_duo',
       boostMode: clash.boost_mode,
       server: clash.server,
-      currentRank: null,
+      currentRank: clash.current_rank ? { tier: clash.current_rank.tier, division: clash.current_rank.division ?? null } : null,
       targetRank: null,
-      currentLp: 0,
+      currentLp: clash.current_lp ?? 0,
       avgLpGain: 20,
       avgLpLoss: 15,
       winsPurchased: null,
@@ -820,10 +827,11 @@ export async function validateAndPriceIntent(
 
   if (hasDuplicateAddonCodes(normalized.addonCodes)) return { ok: false, response: badRequest(req, 'Addon duplicado') }
 
-  // Clash reaproveita o mesmo catálogo do Elo Boost: Solo Clash valida
-  // contra 'solo_standard' (mesmo de Solo Boost/Vitórias/MD5), Duo Clash
-  // contra 'duo_standard' (mesmo de Duo Boost) — mesmos extras, decisão de
-  // produto (não tem whitelist própria de Clash).
+  // Clash reaproveita a mesma LINHA/tabela do catálogo do Elo Boost: Solo
+  // Clash lê de 'solo_standard' (mesmo de Solo Boost/Vitórias/MD5), Duo
+  // Clash de 'duo_standard' (mesmo de Duo Boost) — mas só aceita o
+  // subconjunto de códigos em CLASH_ADDON_CODES (whitelist própria do
+  // Clash), não a whitelist inteira do fluxo.
   const addonFlow: BoostFlow | null = flow ?? (
     normalized.serviceType === 'win_boost' || normalized.serviceType === 'md5' || normalized.serviceType === 'clash'
       ? (normalized.boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
@@ -832,7 +840,10 @@ export async function validateAndPriceIntent(
 
   if (addonFlow) {
     for (const code of addonCodes) {
-      if (!isAddonCodeValidForFlow(addonFlow, code)) return { ok: false, response: badRequest(req, `Addon inválido para este fluxo: ${code}`) }
+      const valid = normalized.serviceType === 'clash'
+        ? isAddonCodeValidForClash(normalized.boostMode, code)
+        : isAddonCodeValidForFlow(addonFlow, code)
+      if (!valid) return { ok: false, response: badRequest(req, `Addon inválido para este fluxo: ${code}`) }
     }
     if (addonCodes.length > 0) {
       const { data: rows, error: extraErr } = await serviceClient

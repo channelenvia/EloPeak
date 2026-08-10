@@ -385,13 +385,15 @@ export interface Payment {
 
 export interface Refund {
   id: string
-  payment_id: string
+  payment_id: string | null
   order_id: string
-  mp_refund_id: string
+  mp_refund_id: string | null
   amount: number
   reason: string
   initiated_by: string
   status: 'pending' | 'succeeded' | 'failed'
+  /** true = admin registrou manualmente (PIX manual, fora do Mercado Pago). */
+  is_manual: boolean
   created_at: string
 }
 
@@ -423,10 +425,13 @@ export interface BoosterService {
   availability_note: string | null
   is_active: boolean
   rules: string | null
-  // Pacotes de coach: até 2 lanes e especialidades de um vocabulário fixo
-  // (src/lib/lolTaxonomy.ts) — null pra registros antigos não-coaching.
+  // Pacotes de coach: até 2 lanes de um vocabulário fixo (src/lib/lolTaxonomy.ts)
+  // — null pra registros antigos não-coaching. Especialidades combinam o
+  // mesmo vocabulário fixo com texto livre do booster (até 5 no total).
+  // Champions: texto livre do booster, sem taxonomia fixa (até 3).
   lanes: string[] | null
   specialties: string[] | null
+  champions: string[] | null
   created_at: string
   updated_at: string
 }

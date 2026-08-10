@@ -47,7 +47,7 @@ export function FAQPage() {
           <h1 className="text-4xl font-extrabold text-ink mb-4">{t('faq.title')}</h1>
           <p className="text-ink-secondary">
             {t('faq.cantFind')}{' '}
-            <a href="https://discord.gg/aRPXe9pnwP" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{t('faq.contactSupport')}</a>.
+            <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{t('faq.contactSupport')}</a>.
           </p>
         </div>
 

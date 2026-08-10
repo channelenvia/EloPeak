@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -7,6 +7,7 @@ import { CheckCircle2, Zap, Tv, Crosshair, User, Trophy, Shield, Lightbulb, Mic 
 import { Skeleton } from '@/components/ui'
 import { getWinBoostPrice } from '@/lib/pricing'
 import { getBoostFlow, isMasterPlusCurrentTier, resolveAddonLabel } from '@/lib/boostDomain'
+import { CLASH_ADDON_CODES } from '@/lib/clashDomain'
 import type { ServiceExtra } from '@/types'
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -61,7 +62,14 @@ export function StepExtras() {
   // por tipo de modalidade. A ordem vem de `sort_order` (Acesso Prioritário
   // sempre por último — ver a seed em supabase/migrations).
   const { data, isLoading } = useBoostAddons(flow)
-  const extras = data ?? EMPTY_ADDONS
+  const allExtras = data ?? EMPTY_ADDONS
+  // Clash só oferece um subconjunto do catálogo do fluxo (Solo Clash:
+  // Transmissão + Acesso Prioritário; Duo Clash: Chamada de Voz + Acesso
+  // Prioritário) — ver CLASH_ADDON_CODES em shared/clashDomain.ts, também
+  // aplicado na validação da Edge Function.
+  const extras = useMemo(() => isClash
+    ? allExtras.filter(e => e.code && CLASH_ADDON_CODES[boostMode].includes(e.code))
+    : allExtras, [isClash, allExtras, boostMode])
 
   useEffect(() => {
     const selected = extras.filter(e => selectedExtraIds.has(e.id))

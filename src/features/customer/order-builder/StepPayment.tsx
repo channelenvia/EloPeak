@@ -13,7 +13,7 @@ import { cn, isUuid } from '@/lib/utils'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
 import { getCustomerOrderState, savePendingOrderFromIntent, generatePix as generatePixRequest } from '@/api/orders'
 import type { PixPaymentResponse } from '@/api/orders'
-import { CheckCircle2, Clock, QrCode, ShieldCheck, Info, ChevronLeft } from 'lucide-react'
+import { CheckCircle2, Clock, QrCode, ShieldCheck, ChevronLeft } from 'lucide-react'
 
 // PIX states
 type PixState =
@@ -23,6 +23,16 @@ type PixState =
   | { phase: 'confirmed' }
   | { phase: 'expired'; order_id: string }
   | { phase: 'error'; message: string; order_id?: string }
+
+// Cache em memória (nível de módulo, não de componente -- sobrevive ao
+// fechar/reabrir do popup, já que o Modal desmonta o conteúdo enquanto
+// fechado) do último PIX gerado por pedido. Sem isso, reabrir o popup pro
+// MESMO pedido ainda pendente (ex.: fechou sem confirmar "Sair e reiniciar",
+// abriu de novo) refazia a consulta de estado + geração de PIX inteira a
+// cada abertura -- requisição nova toda vez, sem necessidade (o PIX gerado
+// ainda vale por vários minutos).
+const PIX_CACHE_TTL_MS = 60_000
+const pixCache = new Map<string, { pix: Extract<PixState, { phase: 'waiting' }>; cachedAt: number }>()
 
 function pixErrorMessage(err: unknown) {
   if (!(err instanceof EdgeFunctionError)) {
@@ -236,27 +246,46 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       service_type: store.serviceType,
       service_id: store.serviceId!,
       game_id: store.gameId!,
-      queue_type: store.queueType,
       server: store.server,
-      // Clash não coleta rank+divisão específico (só o tier, enviado em
-      // clash_tier abaixo) — nunca reenvia um currentRank de uma
-      // configuração anterior de outro serviço na mesma sessão.
-      current_rank: store.serviceType === 'clash' ? null : store.currentRank,
       customer_notes: store.customerNotes || null,
       coupon_code: store.couponCode,
+    }
+
+    if (store.serviceType === 'clash') {
+      // clashIntentSchema (backend) é .strict() e não define queue_type --
+      // Clash não tem fila, só o tier (clash_tier abaixo). current_rank/
+      // current_lp são aceitos (opcionais, só informativos pro card de
+      // detalhes) -- ver ClashConfigPicker::lookupRiotRank, que os preenche
+      // a partir da mesma consulta que já deriva o tier.
+      return {
+        ...base,
+        boost_mode: store.boostMode,
+        clash_tier: store.clashTier,
+        clash_day: store.clashDay,
+        current_rank: store.currentRank,
+        current_lp: store.currentLp,
+        addon_codes: addonCodes,
+        riot_id: store.riotId,
+      }
+    }
+
+    const baseWithRank = {
+      ...base,
+      queue_type: store.queueType,
+      current_rank: store.currentRank,
     }
 
     if (store.serviceType === 'elo_boost') {
       return flow === 'master_plus'
         ? {
-            ...base,
+            ...baseWithRank,
             target_rank: store.targetRank,
             boost_mode: 'solo',
             addon_codes: addonCodes,
             riot_id: store.riotId,
           }
         : {
-            ...base,
+            ...baseWithRank,
             target_rank: store.targetRank,
             boost_mode: store.boostMode,
             addon_codes: addonCodes,
@@ -267,7 +296,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
 
     if (store.serviceType === 'md5') {
       return {
-        ...base,
+        ...baseWithRank,
         boost_mode: store.boostMode,
         wins_purchased: store.winsPurchased,
         addon_codes: addonCodes,
@@ -275,19 +304,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       }
     }
 
-    if (store.serviceType === 'clash') {
-      return {
-        ...base,
-        boost_mode: store.boostMode,
-        clash_tier: store.clashTier,
-        clash_day: store.clashDay,
-        addon_codes: addonCodes,
-        riot_id: store.riotId,
-      }
-    }
-
     return {
-      ...base,
+      ...baseWithRank,
       target_rank: store.targetRank,
       boost_mode: store.boostMode,
       wins_purchased: store.winsPurchased,
@@ -394,7 +412,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       return
     }
 
-    setPix({
+    const waitingState: Extract<PixState, { phase: 'waiting' }> = {
       phase: 'waiting',
       qr_code: pixData.qr_code,
       qr_base64: pixData.qr_code_base64 ?? null,
@@ -402,7 +420,9 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       payment_id: String(pixData.payment_id),
       order_id: orderId,
       total_price: Number(pixData.total_price),
-    })
+    }
+    setPix(waitingState)
+    pixCache.set(orderId, { pix: waitingState, cachedAt: Date.now() })
     setSearchParams({ order: orderId }, { replace: true })
     queryClient.invalidateQueries({ queryKey: ['orders', 'customer'] })
     queryClient.invalidateQueries({ queryKey: ['resumable-customer-order'] })
@@ -439,6 +459,18 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     if (!profile || !pendingOrderId || restoredOrderRef.current === pendingOrderId) return
     restoredOrderRef.current = pendingOrderId
     setSavedOrderId(pendingOrderId)
+
+    const cached = pixCache.get(pendingOrderId)
+    const cacheFresh = !!cached
+      && Date.now() - cached.cachedAt < PIX_CACHE_TTL_MS
+      && new Date(cached.pix.expires_at).getTime() > Date.now()
+    if (cacheFresh) {
+      setSavedTotalPrice(cached.pix.total_price)
+      setPix(cached.pix)
+      startPolling(pendingOrderId)
+      return
+    }
+
     setIsSavingOrder(true)
     void (async () => {
       const state = await getCustomerOrderState(pendingOrderId).catch(() => null)
@@ -603,17 +635,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         </div>
       )}
 
-      {/* Seu pedido ainda não existe no banco neste ponto -- só é criado
-          quando o cliente clica em "Gerar PIX" (ver comentário perto de
-          persistPendingOrder). Deixa isso explícito antes que ele confunda
-          "terminei de configurar" com "meu pedido tá salvo". */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-xs text-ink-secondary">
-        <Info className="h-4 w-4 text-brand shrink-0 mt-0.5" />
-        <span>
-          Para salvar seu pedido, clique em <strong className="text-ink">Gerar PIX</strong>. Depois disso, ele fica salvo em <strong className="text-ink">Meus Pedidos</strong>, aguardando pagamento.
-        </span>
-      </div>
-
       {/* Amount summary */}
       <div className="card-brand p-5 flex items-center justify-between rounded-2xl">
         <div>
@@ -645,12 +666,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
 
       {pix.phase === 'error' && <ErrorAlert message={pix.message} />}
       {saveError && pix.phase !== 'error' && <ErrorAlert message={saveError} />}
-
-      {savedOrderId && !saveError && (
-        <p className="text-xs text-success text-center">
-          Pedido salvo em Meus pedidos como Aguardando pagamento.
-        </p>
-      )}
 
       <div className={cn('flex items-center', insideModal ? 'justify-center' : 'justify-between')}>
         {/* "Voltar" (troca de step do wizard) não faz sentido dentro do

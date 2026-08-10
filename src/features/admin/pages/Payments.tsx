@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { CreditCard, DollarSign, ReceiptText } from 'lucide-react'
 import { Card, EmptyState, Skeleton } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -79,7 +80,11 @@ export function AdminPaymentsPage() {
               {payments.map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell><span className="font-mono text-xs text-ink-secondary">{payment.mp_payment_id.slice(-12)}</span></TableCell>
-                  <TableCell><span className="font-mono text-xs font-bold text-brand">{payment.order_id.slice(0, 8).toUpperCase()}</span></TableCell>
+                  <TableCell>
+                    <Link to={`/admin/orders/${payment.order_id}`} className="font-mono text-xs font-bold text-brand hover:underline">
+                      {payment.order_id.slice(0, 8).toUpperCase()}
+                    </Link>
+                  </TableCell>
                   <TableCell className="font-semibold text-ink" data-tabular>{currency(payment.amount)}</TableCell>
                   <TableCell className="capitalize">{payment.payment_method_type ?? '—'}</TableCell>
                   <TableCell>

@@ -1,13 +1,15 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Star, Clock, CheckCircle2, Trophy, Zap, DollarSign, Package, MessageSquare } from 'lucide-react'
-import { Button, Card, RankBadge, Avatar, Skeleton, StarRating, EmptyState } from '@/components/ui'
-import { timeAgo, formatRank, formatDate, formatLastSeen, getServiceLabel } from '@/lib/utils'
+import { ArrowLeft, Clock, CheckCircle2, Trophy, Zap, Package, MessageSquare, ExternalLink, Eye } from 'lucide-react'
+import { Button, Card, Modal, RankBadge, Avatar, Skeleton, StarRating, EmptyState } from '@/components/ui'
+import { formatRank, formatLastSeen, isBoosterOnline, getServiceLabel, safeOpggUrl } from '@/lib/utils'
 import { LANE_LABEL, SPECIALTY_LABEL } from '@/lib/lolTaxonomy'
-import type { RankTier } from '@/types'
+import type { RankTier, BoosterService } from '@/types'
 import { useCurrency } from '@/hooks/useCurrency'
 import { usePublicBooster, useBoosterPerformanceByRank } from '@/api/boosters'
 import { usePublicCoachingPackages } from '@/api/coaching'
 import { useBoosterReviews } from '@/api/reviews'
+import { TestimonialCard } from '../components/TestimonialCard'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,7 @@ const RANK_GROUPS: { key: RankGroup; label: string; sublabel: string; tiers: Ran
 export function BoosterPublicProfilePage() {
   const { displayName } = useParams<{ displayName: string }>()
   const currency = useCurrency()
+  const [viewingService, setViewingService] = useState<BoosterService | null>(null)
 
   const { data: booster, isLoading } = usePublicBooster(displayName)
   const { data: services = [] } = usePublicCoachingPackages(booster?.user_id)
@@ -36,13 +39,10 @@ export function BoosterPublicProfilePage() {
   const { data: performanceSegments = [] } = useBoosterPerformanceByRank(booster?.user_id)
 
   if (isLoading) return (
-    <div className="max-w-6xl mx-auto px-5 sm:px-8 py-16">
+    <div className="container-wide py-16">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Skeleton className="h-64 w-full rounded-2xl lg:col-span-1" />
-        <div className="lg:col-span-2 space-y-6">
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <Skeleton className="h-64 w-full rounded-2xl" />
-        </div>
+        <Skeleton className="h-64 lg:h-[500px] w-full rounded-2xl lg:col-span-1" />
+        <Skeleton className="h-64 lg:h-[500px] w-full rounded-2xl lg:col-span-2" />
       </div>
     </div>
   )
@@ -59,8 +59,9 @@ export function BoosterPublicProfilePage() {
   const hasRankStats = performanceSegments.some(s => s.total_matches > 0)
   const rankGroups = RANK_GROUPS.filter(group =>
     performanceSegments.some(s => s.rank_bucket === group.key && s.total_matches > 0))
-  const hasLanes      = booster.lanes && booster.lanes.length > 0
-  const hasSpecialties = booster.specialties && booster.specialties.length > 0
+  // TestimonialCard (mesmo componente da home) sempre renderiza o comentário
+  // -- igual TestimonialsCarousel, que só busca reviews com content != null.
+  const reviewsWithContent = reviews.filter((r): r is typeof r & { content: string } => !!r.content)
 
   const statCells: {
     key: string
@@ -71,9 +72,7 @@ export function BoosterPublicProfilePage() {
     rankTier?: RankTier
     rankDivision?: string | null
   }[] = [
-    { key: 'completed', icon: CheckCircle2, label: 'Concluídos',       value: String(booster.total_completed), color: 'text-success' },
-    { key: 'rating',    icon: Star,         label: 'Avaliação',        value: booster.rating_count > 0 ? `${booster.rating.toFixed(1)} / 5` : '—', color: 'text-warning' },
-    { key: 'lastSeen',  icon: Clock,        label: 'Visto por último', value: booster.last_active_at ? timeAgo(booster.last_active_at) : '—', color: 'text-ink-secondary' },
+    { key: 'completed', icon: CheckCircle2, label: 'Concluídos', value: String(booster.total_completed), color: 'text-success' },
     {
       key: 'peakRank',
       label: 'Rank Máximo',
@@ -85,17 +84,18 @@ export function BoosterPublicProfilePage() {
   ]
 
   return (
-    <div className="max-w-6xl mx-auto px-5 sm:px-8 py-16 space-y-10">
+    <div className="container-wide py-16 space-y-10">
       {/* Back */}
       <Button asChild variant="ghost" size="sm" className="-ml-2">
         <Link to="/boosters"><ArrowLeft className="h-4 w-4 mr-1" /> Todos os Boosters</Link>
       </Button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      {/* ── Linha 1: mini-perfil + desempenho por elo, mesma altura fixa ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
 
-        {/* ── Sidebar: perfil ── */}
-        <div className="lg:col-span-1 lg:sticky lg:top-24 space-y-6">
-          <Card padding="lg" className="text-center space-y-3">
+        {/* ── Mini-perfil ── */}
+        <div className="lg:col-span-1">
+          <Card padding="lg" className="h-full lg:h-[500px] overflow-y-auto text-center space-y-4">
             <Avatar src={booster.avatar_url} name={booster.display_name} size="xl" className="mx-auto" />
 
             <div className="space-y-1">
@@ -107,19 +107,28 @@ export function BoosterPublicProfilePage() {
                   </span>
                 )}
               </div>
-              <p className="text-[10px] font-medium text-ink-muted">
-                {formatLastSeen(booster.last_active_at)}
-              </p>
+              {isBoosterOnline(booster.last_active_at) ? (
+                <p className="text-[10px] font-semibold text-success flex items-center justify-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                  Online
+                </p>
+              ) : (
+                <p className="text-[10px] font-medium text-ink-muted">
+                  {formatLastSeen(booster.last_active_at)}
+                </p>
+              )}
             </div>
 
-            {/* Estatísticas — 2x2 logo abaixo do nome/badge */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            {/* Concluídos + rank pico */}
+            <div className="grid grid-cols-2 gap-2">
               {statCells.map(({ key, icon: Icon, label, value, color, rankTier, rankDivision }) => (
                 <div key={key} className="rounded-xl bg-bg-elevated/50 p-2.5 flex flex-col items-center gap-1">
                   {rankTier ? (
                     <RankBadge tier={rankTier} division={rankDivision as never} size="xs" showLabel={false} />
                   ) : Icon ? (
-                    <Icon className={`h-4 w-4 ${color}`} />
+                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-bg-elevated border border-bg-overlay">
+                      <Icon className={`h-6 w-6 ${color}`} />
+                    </span>
                   ) : null}
                   <p className="text-xs font-bold text-ink text-center leading-tight">{value}</p>
                   <p className="text-[9px] text-ink-muted uppercase tracking-wide">{label}</p>
@@ -127,137 +136,34 @@ export function BoosterPublicProfilePage() {
               ))}
             </div>
 
-            {booster.rating_count > 0 && (
-              <div className="flex justify-center">
-                <StarRating rating={booster.rating} count={booster.rating_count} />
-              </div>
-            )}
-
-            {booster.current_rank && (
-              <div className="flex flex-col items-center gap-1 py-1">
-                <RankBadge
-                  tier={booster.current_rank.tier as RankTier}
-                  division={booster.current_rank.division}
-                  size="md"
-                  showLabel={false}
-                />
-                <p className="text-[10px] font-semibold text-ink-secondary">
-                  {formatRank(booster.current_rank.tier as RankTier, booster.current_rank.division)}
-                </p>
-              </div>
+            {safeOpggUrl(booster.opgg_link) && (
+              <a
+                href={safeOpggUrl(booster.opgg_link)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Ver no OP.GG
+              </a>
             )}
 
             {booster.bio && (
               <p className="text-sm text-ink-secondary leading-relaxed">{booster.bio}</p>
             )}
 
-            {/* Lanes */}
-            {hasLanes && (
-              <div className="flex flex-wrap gap-1.5 justify-center pt-1">
-                {booster.lanes!.map(lane => (
-                  <span
-                    key={lane}
-                    className="px-2.5 py-0.5 rounded-full bg-brand/10 border border-brand/20 text-[11px] font-bold text-brand"
-                  >
-                    {LANE_LABEL[lane] ?? lane}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Specialties */}
-            {hasSpecialties && (
-              <div className="flex flex-wrap gap-1.5 justify-center">
-                {booster.specialties!.map(s => (
-                  <span
-                    key={s}
-                    className="px-2.5 py-0.5 rounded-full bg-bg-elevated text-[11px] font-medium text-ink-secondary"
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* CTA — direto pro configurador de pedido */}
+            <div className="rounded-xl bg-brand/10 border border-brand/20 p-4 space-y-2">
+              <p className="text-sm font-bold text-ink">Quer boostar com {booster.display_name}?</p>
+              <Button asChild size="sm" className="w-full">
+                <Link to={`/orders/new?booster=${booster.user_id}`}>Fazer Pedido</Link>
+              </Button>
+            </div>
           </Card>
         </div>
 
-        {/* ── Main content ── */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Serviços */}
-          {services.length > 0 && (
-            <Card padding="md">
-              <div className="flex items-center gap-2 mb-4">
-                <Package className="h-4 w-4 text-brand" />
-                <h2 className="text-sm font-bold text-ink">Serviços</h2>
-              </div>
-              <p className="text-xs text-ink-muted mb-4">
-                Pacotes oferecidos diretamente por {booster.display_name} — cada um com escopo, tempo estimado e preço fechado.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {services.map(s => (
-                  <div key={s.id} className="rounded-xl border border-bg-elevated bg-bg-elevated/30 p-4 flex flex-col gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-ink">{s.title}</p>
-                      {s.service_type && (
-                        <p className="text-[10px] font-semibold text-brand uppercase tracking-wide mt-0.5">{getServiceLabel(s.service_type)}</p>
-                      )}
-                    </div>
-                    {s.description && (
-                      <p className="text-xs text-ink-secondary leading-relaxed flex-1">{s.description}</p>
-                    )}
-                    {(s.lanes?.length || s.specialties?.length) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {s.lanes?.map(l => (
-                          <span key={l} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
-                            {LANE_LABEL[l] ?? l}
-                          </span>
-                        ))}
-                        {s.specialties?.map(sp => (
-                          <span key={sp} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-elevated text-ink-secondary">
-                            {SPECIALTY_LABEL[sp] ?? sp}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3 mt-auto pt-2 border-t border-bg-elevated">
-                      {s.tempo && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-ink-muted" />
-                          <span className="text-[11px] text-ink-secondary">{s.tempo}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 ml-auto">
-                        <DollarSign className="h-3 w-3 text-brand" />
-                        <span className="text-sm font-bold text-brand">{currency(s.price)}</span>
-                      </div>
-                    </div>
-                    <Button asChild size="sm" className="w-full mt-1">
-                      <Link to={
-                        s.service_type === 'coaching'
-                          ? `/orders/new?service=coaching&booster=${booster.user_id}&coach_package=${s.id}`
-                          : `/orders/new?booster=${booster.user_id}`
-                      }>Contratar</Link>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* CTA — logo abaixo dos serviços */}
-          <Card padding="md" variant="brand" className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <p className="text-sm font-bold text-ink">Quer boostar com {booster.display_name}?</p>
-              <p className="text-xs text-ink-secondary mt-0.5">Faça um pedido e o booster poderá aceitar.</p>
-            </div>
-            <Button asChild size="sm" className="w-full sm:w-auto shrink-0">
-              <Link to={`/orders/new?booster=${booster.user_id}`}>Fazer Pedido</Link>
-            </Button>
-          </Card>
-
-          {/* Rank stats */}
-          <Card padding="md">
+        {/* ── Desempenho por Faixa de Elo ── */}
+        <div className="lg:col-span-2">
+          <Card padding="md" className="h-full lg:h-[500px] overflow-y-auto">
             <div className="flex items-center gap-2 mb-4">
               <Zap className="h-4 w-4 text-brand" />
               <h2 className="text-sm font-bold text-ink">Desempenho por Faixa de Elo</h2>
@@ -296,49 +202,162 @@ export function BoosterPublicProfilePage() {
               </div>
             )}
           </Card>
-
         </div>
       </div>
 
-      {/* ── Avaliações — carrossel full-width no rodapé ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <MessageSquare className="h-4 w-4 text-brand" />
-          <h2 className="text-sm font-bold text-ink">Avaliações</h2>
-        </div>
-        {!reviews.length ? (
-          <EmptyState icon={MessageSquare} title="Este booster ainda não recebeu avaliações." />
-        ) : reviews.length < 5 ? (
-          // Poucas avaliações reais -- lista estática, sem duplicar o array
-          // pro efeito de marquee (com 1-2 cards, o loop duplicado só parecia
-          // avaliação repetida, não um carrossel de verdade).
-          <div className="flex flex-wrap gap-4">
-            {reviews.map((review) => (
-              <div key={review.id} className="w-72 shrink-0 rounded-xl border border-bg-elevated bg-bg-card p-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <StarRating rating={review.rating} size="xs" showValue={false} />
-                  <span className="text-[10px] text-ink-muted">{formatDate(review.created_at)}</span>
+      {/* ── Linha 2: Serviços, largura total ── */}
+      {services.length > 0 && (
+        <Card padding="md">
+          <div className="flex items-center gap-2 mb-4">
+            <Package className="h-4 w-4 text-brand" />
+            <h2 className="text-sm font-bold text-ink">Serviços</h2>
+          </div>
+          <p className="text-xs text-ink-muted mb-4">
+            Pacotes oferecidos diretamente por {booster.display_name} — cada um com escopo, tempo estimado e preço fechado.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {services.map(s => (
+              <div key={s.id} className="rounded-xl border border-bg-elevated bg-bg-elevated/30 p-5 flex flex-col gap-2.5">
+                <div>
+                  <p className="text-sm font-bold text-ink">{s.title}</p>
+                  {s.service_type && (
+                    <p className="text-[10px] font-semibold text-brand uppercase tracking-wide mt-0.5">{getServiceLabel(s.service_type)}</p>
+                  )}
                 </div>
-                {review.content && <p className="text-xs text-ink-secondary leading-relaxed line-clamp-4">{review.content}</p>}
+                {s.description && (
+                  <p className="text-xs text-ink-secondary leading-relaxed flex-1">{s.description}</p>
+                )}
+                {(s.lanes?.length || s.champions?.length || s.specialties?.length) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.lanes?.map(l => (
+                      <span key={l} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
+                        {LANE_LABEL[l] ?? l}
+                      </span>
+                    ))}
+                    {s.champions?.map(c => (
+                      <span key={c} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+                        {c}
+                      </span>
+                    ))}
+                    {s.specialties?.map(sp => (
+                      <span key={sp} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-elevated text-ink-secondary">
+                        {SPECIALTY_LABEL[sp] ?? sp}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 mt-auto pt-2 border-t border-bg-elevated">
+                  {s.tempo && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-ink-muted" />
+                      <span className="text-[11px] text-ink-secondary">{s.tempo}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <span className="text-sm font-bold text-brand">{currency(s.price)}</span>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setViewingService(s)}>
+                  <Eye className="h-3.5 w-3.5" /> Visualizar
+                </Button>
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* ── Linha 3: Avaliações — lista full-width no rodapé, sem grid ── */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-brand" />
+            <h2 className="text-sm font-bold text-ink">Avaliações</h2>
+          </div>
+          {booster.rating_count > 0 && (
+            <StarRating rating={booster.rating} count={booster.rating_count} size="sm" />
+          )}
+        </div>
+        {!reviewsWithContent.length ? (
+          <EmptyState icon={MessageSquare} title="Este booster ainda não recebeu avaliações." />
         ) : (
+          // Mesmo card e mesmo mecanismo de esteira do TestimonialsCarousel da
+          // home (src/features/public/components/TestimonialsCarousel.tsx) --
+          // duplica a lista sempre (mesmo com poucas avaliações) pra fechar o
+          // loop visual sem emenda, já que a animação desloca -50%.
           <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
-            <div className="flex w-max gap-4 animate-marquee group-hover:[animation-play-state:paused]">
-              {[...reviews, ...reviews].map((review, i) => (
-                <div key={`${review.id}-${i}`} className="w-72 shrink-0 rounded-xl border border-bg-elevated bg-bg-card p-4">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <StarRating rating={review.rating} size="xs" showValue={false} />
-                    <span className="text-[10px] text-ink-muted">{formatDate(review.created_at)}</span>
-                  </div>
-                  {review.content && <p className="text-xs text-ink-secondary leading-relaxed line-clamp-4">{review.content}</p>}
-                </div>
+            <div className="flex w-max gap-5 animate-marquee group-hover:[animation-play-state:paused]">
+              {[...reviewsWithContent, ...reviewsWithContent].map((review, i) => (
+                <TestimonialCard
+                  key={`${review.id}-${i}`}
+                  rating={review.rating}
+                  content={review.content!}
+                  booster_display_name={booster.display_name}
+                  customer_name={review.customer_nickname}
+                  service_label={getServiceLabel(review.service_type)}
+                  showBoosterBadge={false}
+                  className="w-80 shrink-0"
+                />
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* ── Detalhe do serviço (Visualizar) ── */}
+      <Modal
+        open={!!viewingService}
+        onOpenChange={(open) => { if (!open) setViewingService(null) }}
+        title={viewingService?.title ?? ''}
+        maxWidth="lg"
+      >
+        {viewingService && (
+          <div className="space-y-4">
+            {viewingService.service_type && (
+              <p className="text-[10px] font-semibold text-brand uppercase tracking-wide">{getServiceLabel(viewingService.service_type)}</p>
+            )}
+            {viewingService.description && (
+              <p className="text-sm text-ink-secondary leading-relaxed">{viewingService.description}</p>
+            )}
+            {(viewingService.lanes?.length || viewingService.champions?.length || viewingService.specialties?.length) && (
+              <div className="flex flex-wrap gap-1.5">
+                {viewingService.lanes?.map(l => (
+                  <span key={l} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
+                    {LANE_LABEL[l] ?? l}
+                  </span>
+                ))}
+                {viewingService.champions?.map(c => (
+                  <span key={c} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+                    {c}
+                  </span>
+                ))}
+                {viewingService.specialties?.map(sp => (
+                  <span key={sp} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-elevated text-ink-secondary">
+                    {SPECIALTY_LABEL[sp] ?? sp}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-4 pt-3 border-t border-bg-elevated">
+              {viewingService.tempo && (
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-ink-muted" />
+                  <span className="text-sm text-ink-secondary">{viewingService.tempo}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span className="text-lg font-bold text-brand">{currency(viewingService.price)}</span>
+              </div>
+            </div>
+            <Button asChild className="w-full">
+              <Link to={
+                viewingService.service_type === 'coaching'
+                  ? `/orders/new?service=coaching&booster=${booster.user_id}&coach_package=${viewingService.id}`
+                  : `/orders/new?booster=${booster.user_id}`
+              }>Contratar</Link>
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

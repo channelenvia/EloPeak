@@ -103,6 +103,22 @@ serve(async (req) => {
       // authoritative price. Nothing about rank/mode/addon compatibility is
       // trusted from the client beyond "which combination are you asking for".
 
+      // Limite de 2 pedidos "aguardando pagamento" simultâneos por cliente --
+      // sem isso, o configurador (que agora permite sair do popup de PIX sem
+      // cancelar o pedido, ver "Sair e reiniciar") deixava o cliente acumular
+      // pedidos pendentes sem limite. Checado ANTES de validar/precificar o
+      // intent (que pode chamar a API da Riot) pra não gastar essa chamada
+      // numa tentativa que vai ser rejeitada de qualquer jeito.
+      const { count: pendingCount, error: pendingCountErr } = await serviceClient
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', user.id)
+        .eq('status', 'awaiting_payment')
+      if (pendingCountErr) return errorResponse(req, 'Failed to check pending orders', 500)
+      if ((pendingCount ?? 0) >= 2) {
+        return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
+      }
+
       const outcome = await validateAndPriceIntent(
         req, body.intent, user.id, serviceClient, RIOT_API_KEY, body.preferred_booster_id ?? null,
       )

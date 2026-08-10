@@ -26,7 +26,7 @@ export async function getBoosterAccessState(userId: string): Promise<BoosterAcce
 export async function getOwnProfessionalProfile(userId: string): Promise<ProfessionalProfileData | null> {
   const { data, error } = await supabase
     .from('booster_profiles')
-    .select('display_name, display_name_changed_at, bio, lanes, specialties, peak_rank, opgg_link, available_days, hours_per_day_min, hours_per_day_max')
+    .select('display_name, display_name_changed_at, bio, peak_rank, opgg_link, available_days, hours_per_day_min, hours_per_day_max')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw normalizeApiError(error)

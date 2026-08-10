@@ -18,4 +18,5 @@ export interface SaveCoachingPackageParams {
   serviceType: string
   lanes: string[]
   specialties: string[]
+  champions: string[]
 }

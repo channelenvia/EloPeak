@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
 import { Card, OrderStatusBadge, Skeleton, EmptyState, StarRating } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatDate, timeAgo, getServiceLabel } from '@/lib/utils'
+import { formatDate, timeAgo, getOrderServiceName } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminCustomerDetail, useAdminCustomerOrders, useAdminCustomerReviews } from '@/api/customers'
 
@@ -77,7 +77,7 @@ export function AdminCustomerDetailPage() {
                       #{order.id.slice(0, 8).toUpperCase()}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-ink">{getServiceLabel(order.service_type)}</TableCell>
+                  <TableCell className="text-ink">{getOrderServiceName(order)}</TableCell>
                   <TableCell className="font-semibold text-ink">{currency(order.total_price)}</TableCell>
                   <TableCell><OrderStatusBadge status={order.status} /></TableCell>
                   <TableCell>{timeAgo(order.created_at)}</TableCell>

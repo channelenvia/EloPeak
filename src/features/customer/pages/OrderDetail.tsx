@@ -1,7 +1,6 @@
 import { useOrderSupportEscalation } from '@/api/admin'
 import { useMarkOrderChatRead, useOrderChat } from '@/api/chat'
 import { useBoosterServiceDetails } from '@/api/coaching'
-import type { CustomerOrderState } from '@/api/orders'
 import {
     getCustomerOrderState,
     useCancelPendingOrder,
@@ -11,10 +10,13 @@ import {
     useOrder, useOrderStatusHistory,
     useRequestCustomerOrderDrop,
     useRequestOrderSupport,
-    useSetOrderCredentials,
     useSyncOrderMatches,
 } from '@/api/orders'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
+import { CredentialsSection } from '@/components/order/CredentialsSection'
+import { DuoPartnerRiotId } from '@/components/order/DuoPartnerRiotId'
+import { OrderAccountSection } from '@/components/order/OrderAccountSection'
+import { ClashDetailsBlock } from '@/components/order/ClashDetailsBlock'
 import { OrderChat } from '@/components/order/OrderChat'
 import { OrderCoachingTopics } from '@/components/order/OrderCoachingTopics'
 import { OrderDetailWidget } from '@/components/order/OrderDetailWidget'
@@ -26,12 +28,12 @@ import { OrderRankSummary } from '@/components/order/OrderRankSummary'
 import { OrderReviewSection } from '@/components/order/OrderReviewSection'
 import { OrderTimeline } from '@/components/order/OrderTimeline'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
-import { Button, Card, ErrorAlert, GuaranteeNotice, Modal, OrderStatusBadge, Skeleton } from '@/components/ui'
+import { Button, Card, ErrorAlert, Modal, OrderStatusBadge, Skeleton } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
-import { CLASH_DAY_LABEL, CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL } from '@/lib/clashDomain'
+import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { EdgeFunctionError } from '@/lib/invokeEdgeFunction'
 import { supabase } from '@/lib/supabase'
-import { formatDateTime, formatEstimatedDelivery, getServiceLabel, sortOrderExtras } from '@/lib/utils'
+import { formatDateTime, formatEstimatedDelivery, getOrderModeType, getOrderServiceName, sortOrderExtras } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import type { BoosterProfile, Order, OrderStatus } from '@/types'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,9 +41,11 @@ import {
     AlertTriangle,
     CalendarDays,
     CheckCircle2,
+    ClipboardList,
     Clock,
+    Gamepad2,
     Hash,
-    History, KeyRound, Lock,
+    History, Lock,
     MessageCircleWarning,
     QrCode,
     ShieldCheck,
@@ -84,7 +88,7 @@ function AssignedBoosterValue({ order }: { order: Order }) {
 }
 
 // Link do Discord de suporte, mesmo usado em BoosterStatusScreens.tsx/FAQPage.tsx.
-const SUPPORT_DISCORD_URL = 'https://discord.gg/aRPXe9pnwP'
+const SUPPORT_DISCORD_URL = 'https://discord.gg/v3yDtTDA8t'
 
 // Prazo estourado: acionamento de suporte auditado no backend (migration 083)
 // continua acontecendo (fire-and-forget) no primeiro clique, mas agora o
@@ -255,16 +259,17 @@ function PendingPaymentSection({ order }: { order: Order }) {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/25 bg-warning/10 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-warning min-w-0">
-          <QrCode className="h-4 w-4 shrink-0" />
-          <span className="font-semibold whitespace-nowrap">Pagamento pendente</span>
-          <span className="text-ink-muted truncate hidden sm:inline">— este pedido ainda não foi pago.</span>
-        </div>
-        <Button size="sm" onClick={() => setOpen(true)} leftIcon={<QrCode className="h-4 w-4" />} className="shrink-0">
-          Ver PIX
-        </Button>
-      </div>
+      {/* Mesma pill compacta ao lado do código do pedido que OrderReviewSection
+          já usa pra "Avaliar booster" -- não mais um banner de linha inteira
+          separado do header. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30 hover:bg-warning/25 transition-colors"
+      >
+        <QrCode className="h-3 w-3" />
+        Pagamento pendente
+      </button>
 
       <Modal
         open={open}
@@ -274,12 +279,12 @@ function PendingPaymentSection({ order }: { order: Order }) {
         maxWidth="xl"
       >
         {!pix ? (
-        <div className="grid grid-cols-2 gap-3 max-w-md">
-          <Button className="w-full" loading={generatePix.isPending} onClick={loadPix} leftIcon={<QrCode className="h-4 w-4" />}>
-            Efetuar pagamento
+        <div className="flex items-center justify-between">
+          <Button size="lg" variant="danger-ghost" loading={cancelOrderMutation.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />} className="w-40 shrink-0">
+            Cancelar
           </Button>
-          <Button className="w-full" variant="danger" loading={cancelOrderMutation.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
-            Cancelar pedido
+          <Button size="lg" loading={generatePix.isPending} onClick={loadPix} leftIcon={<QrCode className="h-4 w-4" />} className="w-full md:w-auto min-w-[200px]">
+            Gerar PIX
           </Button>
         </div>
       ) : expired ? (
@@ -307,76 +312,6 @@ function PendingPaymentSection({ order }: { order: Order }) {
       {error && <div className="mt-3"><ErrorAlert message={error} /></div>}
       </Modal>
     </>
-  )
-}
-
-function CredentialsSection({ order, state, forceOpenSignal }: { order: Order; state?: CustomerOrderState; forceOpenSignal?: unknown }) {
-  const [login, setLogin] = useState('')
-  const [password, setPassword] = useState('')
-  const [saved, setSaved] = useState(false)
-  const saveCredentials = useSetOrderCredentials(order.id)
-
-  if (!state?.requires_credentials) return null
-  const canSet = state.can_submit_credentials === true
-  if (!canSet && !state.credentials_set) return null
-
-  function submit() {
-    saveCredentials.mutate({ orderId: order.id, login: login.trim(), password }, {
-      onSuccess: () => {
-        setSaved(true)
-        setLogin('')
-        setPassword('')
-        setTimeout(() => setSaved(false), 3000)
-      },
-    })
-  }
-
-  return (
-    <OrderDetailWidget
-      icon={KeyRound}
-      label="Conta do pedido"
-      status={state.credentials_set ? 'Salvas' : 'Pendente'}
-      forceOpenSignal={forceOpenSignal}
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <KeyRound className="h-4 w-4 text-brand" />
-        <h3 className="text-sm font-semibold text-ink">Conta do pedido</h3>
-        {state.credentials_set && (
-          <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-lg">
-            <ShieldCheck className="h-3 w-3" /> Salvas
-          </span>
-        )}
-      </div>
-      <p className="text-xs text-ink-muted mb-4">
-        Envie as credenciais uma única vez para gerar um token criptografado de acesso. O booster verá apenas o token; login e senha não são exibidos.
-      </p>
-      <div className="mb-4">
-        <GuaranteeNotice title="Evite entrar na conta durante o pedido" variant="warning">
-          O booster faz login e joga direto na sua conta nesse tipo de serviço. Para não
-          atrapalhar o progresso nem gerar divergência de resultado, evite entrar na conta até
-          o pedido ser finalizado — acompanhe o andamento por aqui e pelo chat com o booster.
-        </GuaranteeNotice>
-      </div>
-      {canSet && (
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-semibold text-ink-secondary block mb-1">Login / E-mail da conta</label>
-            <input type="text" value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Ex: SeuUsuario#BR1" className="input-base w-full text-sm" autoComplete="username" maxLength={160} />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-ink-secondary block mb-1">Senha da conta</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input-base w-full text-sm" autoComplete="current-password" maxLength={256} />
-            <p className="text-[10px] text-ink-muted mt-1">O valor enviado é transformado em payload criptografado no banco. Não compartilhe a senha no chat.</p>
-          </div>
-          <Button size="sm" className="w-full" loading={saveCredentials.isPending} disabled={!login.trim() || password.length < 4} onClick={submit} variant={saved ? 'success' : 'primary'}>
-            {saved ? 'Credenciais salvas!' : state.credentials_set ? 'Atualizar credenciais' : 'Salvar credenciais'}
-          </Button>
-          {saveCredentials.isError && (
-            <ErrorAlert message={saveCredentials.error instanceof Error ? saveCredentials.error.message : 'Erro'} />
-          )}
-        </div>
-      )}
-    </OrderDetailWidget>
   )
 }
 
@@ -465,13 +400,15 @@ export function OrderDetailPage() {
   }, [unreadChatCount])
 
   // Deep link pós-pagamento (StepPayment.tsx navega pra cá com #credentials
-  // quando o pedido exige credenciais) -- vira sinal pro widget "Conta do
-  // pedido" abrir seu popover sozinho, no lugar do scrollIntoView antigo (a
-  // seção agora vive dentro de um popover fechado por padrão, não mais um
-  // card sempre visível na página).
-  const credentialsDeepLink = window.location.hash === '#credentials' && !!order && !!customerState?.requires_credentials
-    ? true
-    : undefined
+  // quando o pedido exige credenciais) -- a seção "Conta do pedido" volta a
+  // ser sempre visível (não mais um popover), então só precisa rolar até
+  // ela, sem sinal de "abrir" nenhum.
+  const accountSectionRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (window.location.hash === '#credentials' && order && customerState?.requires_credentials) {
+      accountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [order, customerState?.requires_credentials])
 
   useEffect(() => {
     if (order?.status === 'canceled') navigate('/orders/new?new=1', { replace: true })
@@ -503,24 +440,35 @@ export function OrderDetailPage() {
   }
 
   const isBoostFlow = order.service_type === 'elo_boost' || order.service_type === 'win_boost' || order.service_type === 'md5'
-  const modeLabel = order.service_type === 'elo_boost'
-    ? (order.boost_mode === 'duo' ? 'Duo Boost' : 'Solo Boost')
-    : order.service_type === 'md5' ? (order.boost_mode === 'duo' ? 'Duo MD5' : 'MD5')
-    : order.service_type === 'win_boost' ? (order.boost_mode === 'duo' ? 'Duo Vitórias' : 'Vitórias')
-    : getServiceLabel(order.service_type)
+  const isClash = order.service_type === 'clash'
+  const modeLabel = getOrderModeType(order)
+  const clashClosingLabel = isClash && order.clash_day
+    ? (() => {
+        const { day, month } = getClashDateParts(order.created_at, order.clash_day!)
+        return `Até 23h de ${day}/${month} (${CLASH_DAY_LABEL[order.clash_day!]})`
+      })()
+    : 'Não disponível'
 
   const infoItems: OrderInfoGridItem[] = [
-    ...(isBoostFlow ? [{ icon: Shuffle, label: 'Modo do pedido', value: modeLabel }] : []),
-    ...(isBoostFlow ? [{ icon: Users, label: 'Fila', value: order.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex' }] : []),
-    ...((isBoostFlow || order.service_type === 'clash') ? [{ icon: Hash, label: 'Riot ID', value: order.riot_id ?? 'Não informado' }] : []),
-    { icon: Clock, label: 'Entrega estimada', value: order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível' },
+    { icon: Gamepad2, label: 'Serviço', value: getOrderServiceName(order) },
+    ...((isBoostFlow || isClash) ? [{ icon: Shuffle, label: 'Modo do pedido', value: modeLabel }] : []),
+    ...(isBoostFlow
+      ? [{ icon: Users, label: 'Fila', value: order.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex' }]
+      : isClash && order.clash_day
+        ? [{ icon: Users, label: 'Dia', value: (() => {
+            const { day, month } = getClashDateParts(order.created_at, order.clash_day!)
+            return `${day}/${month} · ${CLASH_DAY_LABEL[order.clash_day!]}`
+          })() }]
+        : []),
     ...((order.service_type === 'win_boost' || order.service_type === 'md5') && order.wins_purchased != null
       ? [{ icon: Trophy, label: 'Vitórias Contratadas', value: `${order.wins_purchased}` }]
       : []),
-    ...(order.service_type === 'coaching' && order.sessions_purchased
+    ...(order.service_type === 'coaching' && order.sessions_purchased != null
       ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
       : []),
+    ...((isBoostFlow || isClash) ? [{ icon: Hash, label: 'Riot ID', value: order.riot_id ?? 'Não informado' }] : []),
     { icon: UserCheck, label: 'Booster associado', value: <AssignedBoosterValue order={order} /> },
+    { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: t('customer.order.totalPaid'), value: currency(order.total_price) },
   ]
 
@@ -539,6 +487,7 @@ export function OrderDetailPage() {
           // adiciona algo novo (ação de avaliar, alerta de atraso, link pra
           // análise de drop) fica aqui, nunca repetindo o rótulo do status.
           <>
+            <PendingPaymentSection order={order} />
             <OrderReviewSection order={order} />
             <DropLockedBadge order={order} />
             {['in_progress', 'paused', 'awaiting_customer'].includes(order.status) && <LateOrderSupportBadge order={order} />}
@@ -547,7 +496,7 @@ export function OrderDetailPage() {
         extra={(
           <>
             <span className="text-xs text-ink-muted">
-              {getServiceLabel(order.service_type)} · {t('customer.order.created', { date: formatDateTime(order.created_at) })}
+              {getOrderServiceName(order)} · {t('customer.order.created', { date: formatDateTime(order.created_at) })}
             </span>
             {order.drop_count > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
@@ -577,20 +526,17 @@ export function OrderDetailPage() {
 
       {confirmCompletion.isError && <ErrorAlert message={confirmCompletion.error instanceof Error ? confirmCompletion.error.message : 'Erro ao confirmar'} />}
 
-      <PendingPaymentSection order={order} />
-
       {/* Detalhes do pedido (60%) + chat sempre visível (40%) */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Card padding="lg" className="lg:col-span-3 h-[450px] overflow-y-auto">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-sm font-semibold text-ink">{t('customer.order.details')}</h3>
+          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-subtle">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-brand" />
+              <h3 className="text-sm font-semibold text-ink">{t('customer.order.details')}</h3>
+            </div>
             <OrderDetailWidget icon={History} label="Histórico do Pedido" compact>
               <OrderTimeline history={history} bare />
             </OrderDetailWidget>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5 mb-5">
-            <CredentialsSection order={order} state={customerState} forceOpenSignal={credentialsDeepLink} />
           </div>
 
           {order.service_type === 'coaching' && coachPackage && (
@@ -606,18 +552,13 @@ export function OrderDetailPage() {
           )}
 
           {order.service_type === 'clash' && order.clash_tier && (
-            <div className="mb-4 pb-4 border-b border-border-subtle space-y-2">
-              <p className="text-base font-bold text-ink">{order.boost_mode === 'duo' ? 'Duo Clash' : 'Solo Clash'}</p>
-              <p className="text-sm text-ink-secondary leading-relaxed">
-                {order.boost_mode === 'duo'
-                  ? 'Você vai jogar junto com o booster.'
-                  : 'O booster vai jogar na sua conta.'}
-              </p>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs text-ink-muted">
-                <span>{CLASH_TIER_LABEL[order.clash_tier]}: <span className="font-semibold text-ink">{CLASH_TIER_RANGE_LABEL[order.clash_tier]}</span></span>
-                {order.clash_day && <span>Dia: <span className="font-semibold text-ink">{CLASH_DAY_LABEL[order.clash_day]}</span></span>}
-              </div>
-            </div>
+            <ClashDetailsBlock
+              viewerRole="customer"
+              boostMode={order.boost_mode}
+              clashTier={order.clash_tier}
+              clashDay={order.clash_day}
+              createdAt={order.created_at}
+            />
           )}
 
           <OrderRankSummary order={order} />
@@ -657,30 +598,58 @@ export function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Histórico de partidas / coaching */}
-      {order.service_type === 'coaching'
-        ? ['assigned', 'in_progress', 'paused', 'awaiting_customer', 'completed'].includes(order.status) && (
-          <OrderCoachingTopics orderId={order.id} />
-        )
-        : order.riot_id && order.service_type !== 'clash' && ['in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'completed'].includes(order.status) && (
-          <OrderMatchHistory
-            orderId={order.id}
-            sync={order.status === 'in_progress' || order.status === 'paused' ? {
-              onSync: () => syncMatches.mutate(),
-              syncing: syncMatches.isPending,
-              cooldownSeconds: syncMatches.cooldownSeconds,
-              error: syncMatches.isError ? (syncMatches.error instanceof Error ? syncMatches.error.message : 'Erro ao sincronizar partidas') : null,
-              resultMessage: syncMatches.data
-                ? (syncMatches.data.synced
-                  ? (syncMatches.data.new_matches ? `${syncMatches.data.new_matches} nova(s) partida(s) registrada(s).` : 'Nenhuma partida nova encontrada.')
-                  : 'Conta Riot não encontrada. Confira o Riot ID cadastrado no pedido.')
-                : null,
-            } : undefined}
-            pdlEstimate={order.service_type === 'elo_boost'
-              ? { gain: order.avg_pdl_gain, loss: order.avg_pdl_loss, label: order.pdl_bracket ? 'PDL' : 'LP' }
-              : null}
-          />
-        )}
+      {/* Histórico de partidas / coaching (60%) + conta do pedido (40%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3 h-[350px]">
+          {order.service_type === 'coaching' ? (
+            ['assigned', 'in_progress', 'paused', 'awaiting_customer', 'completed'].includes(order.status) ? (
+              <OrderCoachingTopics orderId={order.id} />
+            ) : (
+              <Card padding="md" className="h-full flex items-center justify-center">
+                <p className="text-xs text-ink-muted text-center">Disponível quando o pedido for aceito.</p>
+              </Card>
+            )
+          ) : order.service_type !== 'clash' ? (() => {
+            const started = !!order.riot_id && ['in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'completed'].includes(order.status)
+            const syncable = order.status === 'in_progress' || order.status === 'paused'
+            return (
+              <OrderMatchHistory
+                orderId={order.id}
+                locked={!started ? 'O histórico de partidas fica disponível quando o booster iniciar o pedido.' : undefined}
+                sync={syncable || !started ? {
+                  onSync: () => syncMatches.mutate(),
+                  syncing: syncMatches.isPending,
+                  cooldownSeconds: syncMatches.cooldownSeconds,
+                  error: syncMatches.isError ? (syncMatches.error instanceof Error ? syncMatches.error.message : 'Erro ao sincronizar partidas') : null,
+                  resultMessage: syncMatches.data
+                    ? (syncMatches.data.synced
+                      ? (syncMatches.data.new_matches ? `${syncMatches.data.new_matches} nova(s) partida(s) registrada(s).` : 'Nenhuma partida nova encontrada.')
+                      : 'Conta Riot não encontrada. Confira o Riot ID cadastrado no pedido.')
+                    : null,
+                } : undefined}
+                pdlEstimate={order.service_type === 'elo_boost'
+                  ? { gain: order.avg_pdl_gain, loss: order.avg_pdl_loss, label: order.pdl_bracket ? 'PDL' : 'LP' }
+                  : null}
+              />
+            )
+          })() : null}
+        </div>
+
+        <div ref={accountSectionRef} className="lg:col-span-2 h-[350px]">
+          <OrderAccountSection
+            status={order.boost_mode !== 'duo' && customerState?.requires_credentials ? (
+              <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-lg ${customerState.credentials_set ? 'text-success bg-success/10' : 'text-warning bg-warning/10'}`}>
+                {customerState.credentials_set && <ShieldCheck className="h-3 w-3" />}
+                {customerState.credentials_set ? 'Salvas' : 'Pendente'}
+              </span>
+            ) : undefined}
+          >
+            {order.boost_mode === 'duo'
+              ? <DuoPartnerRiotId orderId={order.id} />
+              : <CredentialsSection order={order} state={customerState} />}
+          </OrderAccountSection>
+        </div>
+      </div>
 
       <CustomerDropModal order={order} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
 

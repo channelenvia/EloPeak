@@ -13,6 +13,8 @@ export const queryKeys = {
       ['orders', 'admin', filters ?? {}] as const,
     detail: (orderId: string) => ['orders', 'detail', orderId] as const,
     state: (orderId: string) => ['orders', 'state', orderId] as const,
+    duoPartnerRiotId: (orderId: string) => ['orders', 'duo-partner-riot-id', orderId] as const,
+    customerNickname: (orderId: string) => ['orders', 'customer-nickname', orderId] as const,
     availableJobs: () => ['orders', 'available-jobs'] as const,
     chat: (orderId: string) => ['orders', 'chat', orderId] as const,
     matches: (orderId: string) => ['orders', 'matches', orderId] as const,

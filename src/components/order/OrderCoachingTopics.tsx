@@ -21,7 +21,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
   }
 
   return (
-    <Card padding="md">
+    <Card padding="md" className="h-full overflow-y-auto">
       <div className="flex items-center gap-2 mb-3">
         <ListChecks className="h-4 w-4 text-brand" />
         <h3 className="text-sm font-semibold text-ink">Tópicos do coaching</h3>

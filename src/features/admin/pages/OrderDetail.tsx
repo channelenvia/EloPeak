@@ -1,7 +1,10 @@
 import { useAdminResolveOrderSupport, useOrderSupportEscalation } from '@/api/admin'
-import { useAdminDuoAccounts } from '@/api/duoAccounts'
 import { useAdminDropOrder, useAdminOverrideOrderStatus, useOrder, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
+import { AccessTokenSection } from '@/components/order/AccessTokenSection'
+import { ClashDetailsBlock } from '@/components/order/ClashDetailsBlock'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
+import { DuoPartnerRiotId } from '@/components/order/DuoPartnerRiotId'
+import { OrderAccountSection } from '@/components/order/OrderAccountSection'
 import { OrderChat } from '@/components/order/OrderChat'
 import { OrderDetailWidget } from '@/components/order/OrderDetailWidget'
 import { OrderInfoGrid, type OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
@@ -10,29 +13,31 @@ import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { OrderProgress } from '@/components/order/OrderProgress'
 import { OrderRankSummary } from '@/components/order/OrderRankSummary'
 import { OrderTimeline } from '@/components/order/OrderTimeline'
-import { Button, Card, ErrorAlert, Modal, OrderStatusBadge, PageLoader } from '@/components/ui'
+import { Button, Card, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
-import { CLASH_DAY_LABEL, CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL } from '@/lib/clashDomain'
+import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { supabase } from '@/lib/supabase'
-import { formatDateTime, formatEstimatedDelivery, getServiceLabel, PAYMENT_STATUS_LABEL, sortOrderExtras, timeAgo } from '@/lib/utils'
-import type { OrderStatus } from '@/types'
+import { cn, formatDateTime, formatEstimatedDelivery, getOrderModeType, getOrderServiceName, orderRequiresAccountAccess, sortOrderExtras, timeAgo } from '@/lib/utils'
+import type { Order, OrderStatus } from '@/types'
 import { useQuery } from '@tanstack/react-query'
 import {
     CalendarDays,
-    Check, Clock,
+    Check, CheckCircle2, ChevronDown, Clock,
+    ClipboardList,
     Copy,
-    CreditCard,
     Gamepad2,
     Hash,
     History, Lock,
     MessageCircleWarning,
-    RefreshCw,
+    PauseCircle,
+    Undo2,
     Shuffle, Trophy,
     User,
     Users,
     Wallet,
+    XCircle,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 type BoosterRef = { id: string; user_id: string; display_name: string } | undefined
@@ -50,22 +55,23 @@ function BoosterLink({ userId, booster }: { userId: string; booster: BoosterRef 
 // 'drop_requested' fica de fora porque já tem sua própria fila em /admin/drops.
 const DROPPABLE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 'awaiting_customer']
 
-const FORWARD_STATUS: Partial<Record<OrderStatus, { value: OrderStatus; label: string }[]>> = {
-  awaiting_assignment: [{ value: 'assigned', label: 'Marcar como atribuído' }],
-  assigned: [{ value: 'in_progress', label: 'Iniciar pedido' }],
-  in_progress: [{ value: 'awaiting_customer', label: 'Marcar objetivo alcançado' }],
-  awaiting_customer: [{ value: 'completed', label: 'Confirmar conclusão' }],
-  disputed: [
-    { value: 'in_progress', label: 'Reabrir pedido' },
-    { value: 'completed', label: 'Confirmar conclusão' },
-  ],
-}
-
-const EXCEPTIONAL_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
-  { value: 'disputed', label: 'Marcar como disputado' },
-  { value: 'refunded', label: 'Marcar como reembolsado' },
-  { value: 'canceled', label: 'Cancelar pedido' },
+// Únicos 5 status que o admin altera manualmente por aqui -- o resto do
+// ciclo de vida (atribuído, em andamento, aguardando cliente etc.) já
+// acontece sozinho via as ações normais do booster/cliente.
+const STATUS_ACTIONS: { value: OrderStatus; label: string; icon: typeof CheckCircle2; tone: 'success' | 'warning' | 'neutral' | 'danger' }[] = [
+  { value: 'completed',        label: 'Marcar como concluído',            icon: CheckCircle2, tone: 'success' },
+  { value: 'paused',           label: 'Marcar como pausado',              icon: PauseCircle,  tone: 'warning' },
+  { value: 'awaiting_payment', label: 'Marcar como aguardando pagamento', icon: Wallet,       tone: 'warning' },
+  { value: 'refunded',         label: 'Marcar como reembolsado',          icon: Undo2,        tone: 'neutral' },
+  { value: 'canceled',         label: 'Cancelar pedido',                  icon: XCircle,      tone: 'danger'  },
 ]
+
+const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
+  success: 'text-success hover:bg-success/10',
+  warning: 'text-warning hover:bg-warning/10',
+  neutral: 'text-ink-secondary hover:bg-bg-elevated',
+  danger:  'text-danger hover:bg-danger/10',
+}
 
 function SupportEscalationCard({ orderId }: { orderId: string }) {
   const { data: escalation } = useOrderSupportEscalation(orderId)
@@ -122,12 +128,54 @@ function AdminDropModal({ orderId, open, onClose }: { orderId: string; open: boo
   )
 }
 
+// Mesmo padrão do menu de ações dos boosters (ver BoosterActionsMenu em
+// Boosters.tsx): botão "Ações" + Popover ancorado com a lista, em vez de um
+// modal central. Só os 5 status que o admin realmente precisa setar manualmente.
+function AdminStatusActionsMenu({ order }: { order: Order }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const updateStatus = useAdminOverrideOrderStatus(order.id)
+
+  const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        variant="secondary"
+        size="sm"
+        onClick={() => setMenuOpen((v) => !v)}
+        rightIcon={<ChevronDown className={cn('h-3.5 w-3.5 transition-transform', menuOpen && 'rotate-180')} />}
+      >
+        Alterar status
+      </Button>
+
+      <Popover open={menuOpen} onClose={() => setMenuOpen(false)} anchorRef={triggerRef} className="w-64 p-2 space-y-1">
+        {STATUS_ACTIONS.filter(({ value }) => value !== order.status).map(({ value, label, icon: Icon, tone }) => (
+          <button
+            key={value}
+            type="button"
+            disabled={updateStatus.isPending}
+            onClick={() => { updateStatus.mutate({ orderId: order.id, newStatus: value }); setMenuOpen(false) }}
+            className={cn(itemClass, STATUS_ACTION_TONE_CLASS[tone])}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            {label}
+          </button>
+        ))}
+        {updateStatus.isError && (
+          <p className="px-3 py-1.5 text-xs text-danger">{updateStatus.error instanceof Error ? updateStatus.error.message : 'Erro'}</p>
+        )}
+      </Popover>
+    </>
+  )
+}
+
 export function AdminOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const currency = useCurrency()
-  const [dropModalOpen, setDropModalOpen] = useState(false)
   const [nickCopied, setNickCopied] = useState(false)
-  const [showStatusPanel, setShowStatusPanel] = useState(false)
+  const [dropModalOpen, setDropModalOpen] = useState(false)
 
   const { data: order, isLoading: loadingOrder, isError: orderError, refetch: refetchOrder } = useOrder(id)
   const { data: history } = useOrderStatusHistory(id)
@@ -150,10 +198,6 @@ export function AdminOrderDetailPage() {
     enabled: !!order,
   })
 
-  const { data: allDuoAccounts } = useAdminDuoAccounts()
-  const reservedDuoAccount = allDuoAccounts?.find((a) => a.reserved_order_id === order?.id)
-
-  const updateStatus = useAdminOverrideOrderStatus(id ?? '')
   const syncMatches = useSyncOrderMatches(id ?? '')
 
   if (loadingOrder) return <PageLoader />
@@ -170,11 +214,14 @@ export function AdminOrderDetailPage() {
   if (!order) return null
 
   const isBoostFlow = order.service_type === 'elo_boost' || order.service_type === 'win_boost' || order.service_type === 'md5'
-  const modeLabel = order.service_type === 'elo_boost'
-    ? (order.boost_mode === 'duo' ? 'Duo Boost' : 'Solo Boost')
-    : order.service_type === 'md5' ? 'MD5'
-    : order.service_type === 'win_boost' ? 'Vitórias'
-    : getServiceLabel(order.service_type)
+  const isClash = order.service_type === 'clash'
+  const modeLabel = getOrderModeType(order)
+  const clashClosingLabel = isClash && order.clash_day
+    ? (() => {
+        const { day, month } = getClashDateParts(order.created_at, order.clash_day!)
+        return `Até 23h de ${day}/${month} (${CLASH_DAY_LABEL[order.clash_day!]})`
+      })()
+    : 'Não disponível'
 
   async function copyNickname() {
     if (!order?.riot_id) return
@@ -187,10 +234,24 @@ export function AdminOrderDetailPage() {
   const dropLimitReached = order.drop_count >= 2
 
   const infoItems: OrderInfoGridItem[] = [
-    { icon: User, label: 'Nome do cliente', value: parties?.customerUsername ?? 'Carregando…' },
-    ...(isBoostFlow ? [{ icon: Shuffle, label: 'Modo do pedido', value: modeLabel }] : []),
-    ...(isBoostFlow ? [{ icon: Users, label: 'Fila', value: order.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex' }] : []),
-    ...((isBoostFlow || order.service_type === 'clash') ? [{
+    { icon: Gamepad2, label: 'Serviço', value: getOrderServiceName(order) },
+    ...((isBoostFlow || isClash) ? [{ icon: Shuffle, label: 'Modo do pedido', value: modeLabel }] : []),
+    ...(isBoostFlow
+      ? [{ icon: Users, label: 'Fila', value: order.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex' }]
+      : isClash && order.clash_day
+        ? [{ icon: Users, label: 'Dia', value: (() => {
+            const { day, month } = getClashDateParts(order.created_at, order.clash_day!)
+            return `${day}/${month} · ${CLASH_DAY_LABEL[order.clash_day!]}`
+          })() }]
+        : []),
+    ...((order.service_type === 'win_boost' || order.service_type === 'md5') && order.wins_purchased != null
+      ? [{ icon: Trophy, label: 'Vitórias Contratadas', value: `${order.wins_purchased}` }]
+      : []),
+    ...(order.service_type === 'coaching' && order.sessions_purchased != null
+      ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
+      : []),
+    { icon: User, label: 'Cliente', value: parties?.customerUsername ?? 'Carregando…' },
+    ...((isBoostFlow || isClash) ? [{
       icon: Hash, label: 'Riot ID', value: order.riot_id ? (
         <span className="inline-flex items-center justify-center gap-1.5">
           {order.riot_id}
@@ -200,23 +261,13 @@ export function AdminOrderDetailPage() {
         </span>
       ) : 'Não informado',
     }] : []),
-    { icon: Clock, label: 'Entrega estimada', value: order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível' },
     {
       icon: User, label: 'Booster associado', value: order.assigned_booster_id
         ? <BoosterLink userId={order.assigned_booster_id} booster={parties?.boosterByUserId.get(order.assigned_booster_id)} />
         : 'Não associado',
     },
-    ...((order.service_type === 'win_boost' || order.service_type === 'md5') && order.wins_purchased
-      ? [{ icon: Trophy, label: 'Vitórias Contratadas', value: `${order.wins_purchased}` }]
-      : []),
-    ...(order.service_type === 'coaching' && order.sessions_purchased
-      ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
-      : []),
-    ...(order.service_type === 'clash' && order.boost_mode === 'duo'
-      ? [{ icon: Gamepad2, label: 'Conta Duo', value: reservedDuoAccount ? reservedDuoAccount.label : 'Não reservada' }]
-      : []),
+    { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: 'Total pago', value: currency(order.total_price) },
-    { icon: CreditCard, label: 'Situação do pagamento', value: order.payment_status ? PAYMENT_STATUS_LABEL[order.payment_status] : 'Não disponível' },
   ]
 
   return (
@@ -253,73 +304,32 @@ export function AdminOrderDetailPage() {
         onDrop={dropVisible ? () => setDropModalOpen(true) : undefined}
         dropDisabled={dropLimitReached}
         dropTooltip="Limite de drops atingido."
-        primary={(
-          <Button variant="secondary" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => setShowStatusPanel((v) => !v)}>
-            Alterar status
-          </Button>
-        )}
+        primary={<AdminStatusActionsMenu order={order} />}
       />
 
       <SupportEscalationCard orderId={order.id} />
 
-        {showStatusPanel && (
-          <Card padding="md">
-            <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-ink-secondary" />
-              Alterar Status
-            </h3>
-
-            {!!FORWARD_STATUS[order.status]?.length && (
-              <div className="space-y-1.5 mb-3 max-w-md">
-                {FORWARD_STATUS[order.status]!.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => updateStatus.mutate({ orderId: order.id, newStatus: value })}
-                    disabled={updateStatus.isPending}
-                    className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-brand/10 text-brand hover:bg-brand/15 transition-colors disabled:opacity-50"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">Ações excepcionais</p>
-            <div className="space-y-1.5 max-w-md">
-              {EXCEPTIONAL_STATUS_OPTIONS.filter(({ value }) => value !== order.status).map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => updateStatus.mutate({ orderId: order.id, newStatus: value })}
-                  disabled={updateStatus.isPending}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-ink-secondary hover:bg-bg-elevated hover:text-ink transition-colors disabled:opacity-50"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {updateStatus.isError && (
-              <ErrorAlert message={updateStatus.error instanceof Error ? updateStatus.error.message : 'Erro'} className="mt-2" />
-            )}
-          </Card>
-        )}
-
         {/* Detalhes do pedido (60%) + chat sempre visível (40%) */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <Card padding="lg" className="lg:col-span-3 h-[450px] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-ink">Detalhes do pedido</h3>
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-subtle">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-brand" />
+                <h3 className="text-sm font-semibold text-ink">Detalhes do pedido</h3>
+              </div>
               <OrderDetailWidget icon={History} label="Histórico do Pedido" compact>
                 <OrderTimeline history={history} bare />
               </OrderDetailWidget>
             </div>
 
             {order.service_type === 'clash' && order.clash_tier && (
-              <div className="mb-4 pb-4 border-b border-border-subtle">
-                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-muted">
-                  <span>{CLASH_TIER_LABEL[order.clash_tier]}: <span className="font-semibold text-ink">{CLASH_TIER_RANGE_LABEL[order.clash_tier]}</span></span>
-                  {order.clash_day && <span>Dia: <span className="font-semibold text-ink">{CLASH_DAY_LABEL[order.clash_day]}</span></span>}
-                </div>
-              </div>
+              <ClashDetailsBlock
+                viewerRole="admin"
+                boostMode={order.boost_mode}
+                clashTier={order.clash_tier}
+                clashDay={order.clash_day}
+                createdAt={order.created_at}
+              />
             )}
 
             <OrderRankSummary order={order} />
@@ -349,26 +359,56 @@ export function AdminOrderDetailPage() {
           </div>
         </div>
 
-        {/* Histórico de partidas */}
-        {['assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'completed'].includes(order.status) && (
-          <OrderMatchHistory
-            orderId={order.id}
-            sync={order.status === 'in_progress' || order.status === 'paused' ? {
-              onSync: () => syncMatches.mutate(),
-              syncing: syncMatches.isPending,
-              cooldownSeconds: syncMatches.cooldownSeconds,
-              error: syncMatches.isError ? (syncMatches.error instanceof Error ? syncMatches.error.message : 'Erro ao sincronizar partidas') : null,
-              resultMessage: syncMatches.data
-                ? (syncMatches.data.synced
-                  ? (syncMatches.data.new_matches ? `${syncMatches.data.new_matches} nova(s) partida(s) registrada(s).` : 'Nenhuma partida nova encontrada.')
-                  : 'Conta Riot não encontrada. Confira o Riot ID cadastrado no pedido.')
-                : null,
-            } : undefined}
-            pdlEstimate={order.service_type === 'elo_boost'
-              ? { gain: order.avg_pdl_gain, loss: order.avg_pdl_loss, label: order.pdl_bracket ? 'PDL' : 'LP' }
-              : null}
-          />
-        )}
+        {/* Histórico de partidas (60%) + conta do pedido (40%) */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 h-[350px]">
+            {['assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'completed'].includes(order.status) ? (
+              <OrderMatchHistory
+                orderId={order.id}
+                sync={order.status === 'in_progress' || order.status === 'paused' ? {
+                  onSync: () => syncMatches.mutate(),
+                  syncing: syncMatches.isPending,
+                  cooldownSeconds: syncMatches.cooldownSeconds,
+                  error: syncMatches.isError ? (syncMatches.error instanceof Error ? syncMatches.error.message : 'Erro ao sincronizar partidas') : null,
+                  resultMessage: syncMatches.data
+                    ? (syncMatches.data.synced
+                      ? (syncMatches.data.new_matches ? `${syncMatches.data.new_matches} nova(s) partida(s) registrada(s).` : 'Nenhuma partida nova encontrada.')
+                      : 'Conta Riot não encontrada. Confira o Riot ID cadastrado no pedido.')
+                    : null,
+                } : undefined}
+                pdlEstimate={order.service_type === 'elo_boost'
+                  ? { gain: order.avg_pdl_gain, loss: order.avg_pdl_loss, label: order.pdl_bracket ? 'PDL' : 'LP' }
+                  : null}
+              />
+            ) : (
+              <Card padding="md" className="h-full flex items-center justify-center">
+                <p className="text-xs text-ink-muted text-center">Histórico de partidas aparece assim que o pedido começar.</p>
+              </Card>
+            )}
+          </div>
+
+          <div className="lg:col-span-2 h-[350px]">
+            <OrderAccountSection
+              status={
+                order.boost_mode !== 'duo' && orderRequiresAccountAccess(order) ? (
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg ${order.credentials_set ? 'text-success bg-success/10' : 'text-warning bg-warning/10'}`}>
+                    {order.credentials_set ? 'Salvas' : 'Pendente'}
+                  </span>
+                ) : undefined
+              }
+            >
+              {order.boost_mode === 'duo' ? (
+                <DuoPartnerRiotId orderId={order.id} />
+              ) : orderRequiresAccountAccess(order) ? (
+                <AccessTokenSection order={order} />
+              ) : (
+                <p className="text-xs text-ink-muted text-center py-8">
+                  Este serviço não exige credenciais de conta.
+                </p>
+              )}
+            </OrderAccountSection>
+          </div>
+        </div>
 
       <AdminDropModal orderId={order.id} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
     </div>

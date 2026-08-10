@@ -1,22 +1,22 @@
 import { Link } from 'react-router-dom'
-import { Clock, ArrowRight } from 'lucide-react'
-import { Card, OrderStatusBadge, RankBadge } from '@/components/ui'
-import { formatRank, formatDate, getServiceLabel, formatEstimatedDelivery, boosterEarningsShare, sortOrderExtras } from '@/lib/utils'
+import { Clock } from 'lucide-react'
+import { Card, OrderStatusBadge } from '@/components/ui'
+import { formatDate, getOrderServiceName, formatEstimatedDelivery, boosterEarningsShare } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
-import type { Division, Order, RankTier } from '@/types'
+import { OrderCardDetails } from '@/components/order/OrderCardDetails'
+import type { Order } from '@/types'
 
 interface CompletedOrderCardProps {
   order: Order
   isTop3?: boolean | null
 }
 
-// Shared card used by the "Pedidos Concluídos" page and the Earnings
-// monthly-services list — one place for the field spec both need:
-// tipo de serviço, rank atual → rank objetivo, valor do booster, tempo estimado.
+// Shared card used by the "Pedidos" page and the Dashboard's monthly-services
+// list. Mesmo padrão visual do CustomerOrderCard (via OrderCardDetails) --
+// só o rodapé difere: valor do booster + prazo estimado no lugar de total
+// pago + data de criação.
 export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
   const currency = useCurrency()
-  const currentRank = order.current_rank as { tier: RankTier; division: Division } | null
-  const targetRank = order.target_rank as { tier: RankTier; division: Division } | null
 
   return (
     <Link to={`/booster/jobs/${order.id}`}>
@@ -24,31 +24,12 @@ export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
             <p className="text-xs font-mono text-ink-muted">#{order.id.slice(0, 8).toUpperCase()}</p>
-            <p className="text-sm font-semibold text-ink truncate">{getServiceLabel(order.service_type)}</p>
+            <p className="text-sm font-semibold text-ink truncate">{getOrderServiceName(order)}</p>
           </div>
           <OrderStatusBadge status={order.status} />
         </div>
 
-        {currentRank && targetRank && (
-          <div className="flex items-center gap-2 mb-3">
-            <RankBadge tier={currentRank.tier} division={currentRank.division} size="xs" showLabel={false} />
-            <ArrowRight className="h-3.5 w-3.5 text-ink-muted shrink-0" />
-            <RankBadge tier={targetRank.tier} division={targetRank.division} size="xs" showLabel={false} />
-            <span className="text-xs text-ink-secondary">
-              {formatRank(currentRank.tier, currentRank.division)} → {formatRank(targetRank.tier, targetRank.division)}
-            </span>
-          </div>
-        )}
-
-        {order.extras?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {sortOrderExtras(order.extras).map((extra) => (
-              <span key={extra.extra_id} className="text-[9px] font-medium bg-bg-elevated text-ink-secondary px-1.5 py-0.5 rounded-md">
-                {extra.name}
-              </span>
-            ))}
-          </div>
-        )}
+        <OrderCardDetails order={order} />
 
         <div className="flex items-center justify-between pt-3 border-t border-bg-elevated">
           <div>

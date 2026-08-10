@@ -8,8 +8,6 @@ export interface ProfessionalProfileData {
   display_name: string
   display_name_changed_at: string | null
   bio: string | null
-  lanes: string[] | null
-  specialties: string[] | null
   peak_rank: Rank | null
   opgg_link: string | null
   available_days: string[] | null
@@ -32,8 +30,6 @@ export interface OnboardBoosterParams {
 export interface UpdateProfessionalProfileParams {
   displayName: string
   bio: string
-  lanes: string[]
-  specialties: string[]
   peakTier: string
   opggLink: string
   availableDays: string[]

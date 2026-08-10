@@ -122,6 +122,13 @@ interface OrderBuilderState {
   // o MD5.
   setServiceId: (id: string) => void
   setCurrentRank: (rank: Rank) => void
+  // Guarda o rank real (tier+divisão+LP) detectado pela consulta à Riot do
+  // Clash -- puramente informativo pro card de detalhes, não deve disparar
+  // nenhuma das regras específicas de elo_boost do setCurrentRank (forçar
+  // solo em Master+, resetar rank alvo/addons/winPackage etc.), que não se
+  // aplicam a Clash e causariam bugs (ex.: verificar um rank Grão-Mestre
+  // trocaria silenciosamente Duo Clash pra Solo).
+  setClashCurrentRank: (rank: Rank, lp: number) => void
   setTargetRank: (rank: Rank | null) => void
   setQueueType: (queue: QueueType) => void
   setBoostMode: (mode: BoostMode) => void
@@ -160,6 +167,15 @@ interface OrderBuilderState {
   setExtrasPrice: (price: number) => void
   setEstimatedHours: (hours: number | null) => void
   setPdlModifierPct: (pct: number | null) => void
+  // Pedido que o cliente escolheu explicitamente abandonar via "Sair e
+  // reiniciar" (continua pagável em Meus Pedidos, só não deve mais ser
+  // auto-retomado). Persistido (sobrevive a fechar aba/navegar pra Meus
+  // Pedidos e voltar) -- diferente de ?new=1 na URL, que só vale pra UMA
+  // visita. Fica inerte sozinho assim que esse pedido sai de
+  // "awaiting_payment" (pago/cancelado/expirado): get_customer_order_state
+  // nunca mais o devolve, então a comparação simplesmente para de bater.
+  dismissedOrderId: string | null
+  setDismissedOrderId: (id: string | null) => void
   reset: () => void
 }
 
@@ -207,6 +223,7 @@ const initialState = {
   extrasPrice: 0,
   estimatedHours: null,
   pdlModifierPct: null as number | null,
+  dismissedOrderId: null as string | null,
 }
 
 // Estado "sem consulta Riot": tudo que foi derivado de uma conta consultada
@@ -286,6 +303,15 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
     targetRank: null,
     clashTier: null,
     clashDay: null,
+    // Idem pra seleções específicas de UM serviço só -- sem isso, configurar
+    // Coaching (escolhe pacote) ou Elo Boost (escolhe pacote de vitórias
+    // extras) e depois trocar pra Vitórias mandava booster_service_id/
+    // win_package pro backend, que rejeita com 400 ("Pacote de coach/de
+    // vitórias extras não é aceito em Vitórias") -- um "body inválido" real,
+    // não só um resíduo inofensivo no store.
+    winPackage: null,
+    selectedCoachPackage: null,
+    sessionsPurchased: null,
   }),
 
   setCurrentRank: (currentRank) => set((state) => {
@@ -307,6 +333,8 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
       currentPdl: forcedMasterPlus ? state.currentPdl : 0,
     }
   }),
+
+  setClashCurrentRank: (currentRank, lp) => set({ currentRank, currentLp: lp }),
 
   setTargetRank: (targetRank) => set({ targetRank }),
   // Trocar de fila invalida a consulta anterior (rank e elegibilidade de MD5
@@ -405,17 +433,18 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
   setStepAttempted: (stepAttempted) => set({ stepAttempted }),
   setSelectedCoachPackage: (selectedCoachPackage) => set({ selectedCoachPackage }),
 
-  setCurrentLp: (currentLp) => set({ currentLp }),
-  setAvgLpGain: (avgLpGain) => set({ avgLpGain }),
-  setAvgLpLoss: (avgLpLoss) => set({ avgLpLoss }),
-  setCurrentPdl: (currentPdl) => set({ currentPdl }),
-  setAvgPdlGain: (avgPdlGain) => set({ avgPdlGain }),
-  setAvgPdlLoss: (avgPdlLoss) => set({ avgPdlLoss }),
-  setCouponCode: (couponCode) => set({ couponCode }),
-  setBasePrice: (basePrice) => set({ basePrice }),
-  setExtrasPrice: (extrasPrice) => set({ extrasPrice }),
-  setEstimatedHours: (estimatedHours) => set({ estimatedHours }),
-  setPdlModifierPct: (pdlModifierPct) => set({ pdlModifierPct }),
+  setCurrentLp: (currentLp) => set((state) => state.currentLp === currentLp ? state : { currentLp }),
+  setAvgLpGain: (avgLpGain) => set((state) => state.avgLpGain === avgLpGain ? state : { avgLpGain }),
+  setAvgLpLoss: (avgLpLoss) => set((state) => state.avgLpLoss === avgLpLoss ? state : { avgLpLoss }),
+  setCurrentPdl: (currentPdl) => set((state) => state.currentPdl === currentPdl ? state : { currentPdl }),
+  setAvgPdlGain: (avgPdlGain) => set((state) => state.avgPdlGain === avgPdlGain ? state : { avgPdlGain }),
+  setAvgPdlLoss: (avgPdlLoss) => set((state) => state.avgPdlLoss === avgPdlLoss ? state : { avgPdlLoss }),
+  setCouponCode: (couponCode) => set((state) => state.couponCode === couponCode ? state : { couponCode }),
+  setBasePrice: (basePrice) => set((state) => state.basePrice === basePrice ? state : { basePrice }),
+  setExtrasPrice: (extrasPrice) => set((state) => state.extrasPrice === extrasPrice ? state : { extrasPrice }),
+  setEstimatedHours: (estimatedHours) => set((state) => state.estimatedHours === estimatedHours ? state : { estimatedHours }),
+  setPdlModifierPct: (pdlModifierPct) => set((state) => state.pdlModifierPct === pdlModifierPct ? state : { pdlModifierPct }),
+  setDismissedOrderId: (dismissedOrderId) => set({ dismissedOrderId }),
 
   reset: () => set({ ...initialState, selectedExtraIds: new Set<string>() }),
     }),

@@ -150,6 +150,21 @@ export async function getCustomerOrderState(orderId?: string): Promise<CustomerO
   return state
 }
 
+export async function getOrderDuoPartnerRiotId(orderId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_order_duo_partner_riot_id', { p_order_id: orderId })
+  if (error) throw normalizeApiError(error)
+  return (data as string | null) ?? null
+}
+
+// Booster não consegue ler profiles.username do cliente direto (RLS só
+// libera a própria linha ou admin) -- get_order_customer_nickname (migration
+// 171) expõe isso restrito a quem tá atribuído ao pedido.
+export async function getOrderCustomerNickname(orderId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_order_customer_nickname', { p_order_id: orderId })
+  if (error) throw normalizeApiError(error)
+  return (data as string | null) ?? null
+}
+
 export async function getBoosterSlotInfo(boosterId: string): Promise<SlotInfo & { allowed: boolean }> {
   const { data, error } = await supabase.rpc('can_booster_accept_order', {
     p_booster_user_id: boosterId,

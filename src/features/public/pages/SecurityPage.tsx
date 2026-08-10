@@ -68,7 +68,7 @@ export function SecurityPage() {
 
   return (
     <div className="py-16">
-      <div className="container-app max-w-5xl space-y-16">
+      <div className="container-wide space-y-16">
         <div className="text-center">
           <p className="section-label mb-3">{t('security.sectionLabel')}</p>
           <h1 className="text-4xl font-extrabold text-ink mb-4">{t('security.title')}</h1>

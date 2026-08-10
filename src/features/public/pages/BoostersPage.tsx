@@ -163,7 +163,7 @@ export function BoostersPage() {
   const rest = sorted.filter(b => !top3Ids.has(b.id))
 
   return (
-    <div className="max-w-screen-xl mx-auto px-5 sm:px-8 py-16">
+    <div className="container-wide py-16">
       {/* Header */}
       <div className="text-center mb-14">
         <div className="inline-flex items-center gap-2 bg-brand/10 border border-brand/20 text-brand text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
@@ -179,7 +179,7 @@ export function BoostersPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {Array.from({ length: 10 }).map((_, i) => <BoosterCardSkeleton key={i} />)}
         </div>
       ) : !sorted.length ? (

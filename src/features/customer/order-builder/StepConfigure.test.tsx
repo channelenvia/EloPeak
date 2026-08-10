@@ -57,8 +57,8 @@ describe('StepConfigure — Modalidade (Solo/Duo Boost)', () => {
 
   it('mostra Solo Boost e Duo Boost, Solo selecionado por padrão', () => {
     renderStepConfigure()
-    expect(screen.getByRole('button', { name: 'Solo Boost' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Duo Boost/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solo Boost/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Duo Boost/ })).toBeInTheDocument()
     expect(useOrderBuilderStore.getState().boostMode).toBe('solo')
   })
 
@@ -74,8 +74,8 @@ describe('StepConfigure — Modalidade (Solo/Duo Boost)', () => {
     useOrderBuilderStore.getState().setCurrentRank({ tier: 'grandmaster', division: null })
     renderStepConfigure()
 
-    expect(screen.getByRole('button', { name: /Duo Boost/ })).toBeDisabled()
-    expect(screen.getByText('Duo Boost indisponível para Mestre ou superior.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Duo Boost/ })).toBeDisabled()
+    expect(screen.getByText('Indisponível para Mestre ou superior.')).toBeInTheDocument()
     // setCurrentRank já força solo automaticamente pra Mestre+ (store).
     expect(useOrderBuilderStore.getState().boostMode).toBe('solo')
   })
@@ -95,7 +95,7 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
 
   it('antes de verificar o Riot ID, mostra Vitórias como padrão e a dica de detecção automática', () => {
     renderStepConfigure()
-    expect(screen.getByText('Detectado automaticamente ao verificar seu Riot ID abaixo.')).toBeInTheDocument()
+    expect(screen.getByText('Ativa se sua conta já tiver rank nesta fila.')).toBeInTheDocument()
     expect(useOrderBuilderStore.getState().isMd5).toBe(false)
   })
 
@@ -103,8 +103,11 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     const user = userEvent.setup()
     renderStepConfigure()
 
-    const vitoriasBtn = screen.getByRole('button', { name: /Vitórias/ })
-    const md5Btn = screen.getByRole('button', { name: /MD5/ })
+    // Nome parcial (regex ancorada no início) -- "Solo Vitórias"/"Duo
+    // Vitórias" do seletor de Modalidade (StepConfigure.tsx) também contêm
+    // a substring "Vitórias" e quebrariam um match solto.
+    const vitoriasBtn = screen.getByRole('button', { name: /^Vitórias/ })
+    const md5Btn = screen.getByRole('button', { name: /^MD5/ })
     expect(vitoriasBtn).toBeDisabled()
     expect(md5Btn).toBeDisabled()
 
@@ -117,7 +120,7 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     useOrderBuilderStore.getState().setIsMd5(true)
     renderStepConfigure()
 
-    expect(screen.getByText(/MD5 ativado, garantia de 80%\+ de win rate/)).toBeInTheDocument()
+    expect(screen.getByText(/garantia de 80%\+ de win rate/)).toBeInTheDocument()
   })
 
   it('depois de verificado com isMd5=false (conta já rankeada), mostra a mensagem de MD5 indisponível', () => {
@@ -125,6 +128,6 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     useOrderBuilderStore.getState().setIsMd5(false)
     renderStepConfigure()
 
-    expect(screen.getByText(/MD5 indisponível \(anti-fraude\)/)).toBeInTheDocument()
+    expect(screen.getByText('Indisponível — conta já possui rank nesta fila.')).toBeInTheDocument()
   })
 })

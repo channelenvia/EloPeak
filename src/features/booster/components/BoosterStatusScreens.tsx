@@ -17,8 +17,8 @@ export function PendingScreen() {
       </div>
       <p className="text-xs text-ink-muted">
         Dúvidas? Fale conosco no Discord:{' '}
-        <a href="https://discord.gg/aRPXe9pnwP" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/aRPXe9pnwP
+        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+          discord.gg/v3yDtTDA8t
         </a>
       </p>
     </div>
@@ -39,7 +39,7 @@ export function RejectedScreen() {
         </p>
       </div>
       <a
-        href="https://discord.gg/aRPXe9pnwP"
+        href="https://discord.gg/v3yDtTDA8t"
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-sm text-brand font-semibold hover:underline"
@@ -71,8 +71,8 @@ export function SuspendedScreen({ suspendedUntil }: { suspendedUntil: string | n
       </div>
       <p className="text-xs text-ink-muted">
         Abra um ticket no nosso Discord pra entender o motivo ou contestar a suspensão:{' '}
-        <a href="https://discord.gg/aRPXe9pnwP" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/aRPXe9pnwP
+        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+          discord.gg/v3yDtTDA8t
         </a>
       </p>
     </div>
@@ -93,8 +93,8 @@ export function RemovedScreen() {
       </div>
       <p className="text-xs text-ink-muted">
         Dúvidas? Fale com o suporte no Discord:{' '}
-        <a href="https://discord.gg/aRPXe9pnwP" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/aRPXe9pnwP
+        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+          discord.gg/v3yDtTDA8t
         </a>
       </p>
     </div>
