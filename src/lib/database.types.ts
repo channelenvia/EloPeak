@@ -2485,7 +2485,7 @@ export type Database = {
       }
       booster_payout_totals: { Args: { p_booster_id: string }; Returns: Json }
       can_booster_accept_order: {
-        Args: { p_boost_mode: string; p_booster_user_id: string }
+        Args: { p_boost_mode: string; p_booster_user_id: string; p_service_type?: string }
         Returns: Json
       }
       cancel_payout_request: { Args: { p_request_id: string }; Returns: Json }

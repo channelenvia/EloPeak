@@ -119,6 +119,9 @@ export function AvailableJobsPage() {
     // Pedido exclusivo pra mim, ainda dentro da janela: usa o slot bônus
     // (máx 1), independente dos 3 slots normais estarem cheios ou não.
     if (exclusiveTimeLeft(job, profile?.id)) return !slotInfo.exclusive_slot_used
+    // Coaching não disputa os slots normais -- ilimitado pra qualquer booster
+    // aprovado (normal ou Top3).
+    if (job.service_type === 'coaching') return true
     if (slotInfo.total_count >= slotInfo.max_total) return false
     return true
   }
@@ -166,6 +169,7 @@ export function AvailableJobsPage() {
         <div className="bg-warning/10 border border-warning/20 rounded-xl px-4 py-3 text-sm text-warning font-medium">
           Você atingiu o limite de {slotInfo.max_total} pedidos ativos. Conclua um pedido para liberar um slot.
           {!slotInfo.exclusive_slot_used && ' Você ainda pode aceitar 1 pedido exclusivo, se algum estiver vinculado a você.'}
+          {' Pedidos de coaching não entram nesse limite -- pode aceitar quantos quiser.'}
         </div>
       )}
 
