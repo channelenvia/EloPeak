@@ -1,0 +1,80 @@
+# Dependencies
+scripts/
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist_new/
+dist_v2/
+build/
+
+# Booster Launcher desktop app (built binary, not source)
+Booster Launcher/
+launcher
+
+# Environment - NEVER commit secrets
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env.*.example
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs and coverage
+*.log
+coverage/
+
+# Supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+supabase/.env.*
+supabase/functions/.env
+supabase/functions/.env.local
+!supabase/functions/.env.example
+
+# Old migrations kept locally for reference only — not pushed, to stop
+# bloating commits. New migrations in supabase/migrations/ still get committed.
+supabase/migrations_archive/
+
+# Deploy tooling
+.vercel/
+
+# AI tooling - not part of the codebase
+.planning/
+.superpowers/
+docs/
+.claude/
+.agents/
+graphify-out/
+.playwright/
+.playwright-mcp
+
+# Keys and certs — never commit
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+*.mobileprovision

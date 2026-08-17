@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /apply
+Disallow: /dashboard
+Disallow: /orders
+Disallow: /booster
+Disallow: /admin
+
+Sitemap: https://SEU-DOMINIO-AQUI.com/sitemap.xml

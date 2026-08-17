@@ -1,0 +1,108 @@
+import { Shield, Lock, Eye, Cpu, Server, CreditCard, Check } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { SEOHead } from '@/components/SEOHead'
+import { ScrollReveal } from '@/components/motion/ScrollReveal'
+
+export function SecurityPage() {
+  const { t } = useTranslation()
+
+  const PILLARS = [
+    {
+      icon: Shield,
+      title: t('security.pillars.accountProtection'),
+      items: [
+        t('security.items.vpn'),
+        t('security.items.offline'),
+        t('security.items.noCredentials'),
+        t('security.items.cleanIp'),
+      ],
+    },
+    {
+      icon: Lock,
+      title: t('security.pillars.authSessions'),
+      items: [
+        t('security.items.bcrypt'),
+        t('security.items.jwt'),
+        t('security.items.revocation'),
+        t('security.items.2fa'),
+      ],
+    },
+    {
+      icon: CreditCard,
+      title: t('security.pillars.paymentSecurity'),
+      items: [
+        t('security.items.payment'),
+        t('security.items.pci'),
+        t('security.items.webhook'),
+        t('security.items.idempotent'),
+      ],
+    },
+    {
+      icon: Eye,
+      title: t('security.pillars.privacy'),
+      items: [
+        t('security.items.minimal'),
+        t('security.items.noEmail'),
+        t('security.items.privateUrls'),
+        t('security.items.deletion'),
+      ],
+    },
+    {
+      icon: Cpu,
+      title: t('security.pillars.accessControl'),
+      items: [
+        t('security.items.rls'),
+        t('security.items.boosters'),
+        t('security.items.audit'),
+        t('security.items.serverSide'),
+      ],
+    },
+    {
+      icon: Server,
+      title: t('security.pillars.infrastructure'),
+      items: [
+        t('security.items.encrypted'),
+        t('security.items.soc2'),
+        t('security.items.backups'),
+      ],
+    },
+  ]
+
+  return (
+    <div className="py-16 relative overflow-hidden">
+      <SEOHead
+        title="Segurança"
+        description="Como o EloPeak protege sua conta durante o boosting: VPN dedicada, boosters verificados e garantia de reembolso."
+      />
+      <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
+      <div className="container-wide space-y-16 relative">
+        <ScrollReveal className="text-center">
+          <p className="section-label mb-3">{t('security.sectionLabel')}</p>
+          <h1 className="text-4xl font-extrabold text-ink mb-4">{t('security.title')}</h1>
+          <p className="text-lg text-ink-secondary max-w-xl mx-auto">
+            {t('security.subtitle')}
+          </p>
+        </ScrollReveal>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {PILLARS.map(({ icon: Icon, title, items }) => (
+            <div key={title} className="card p-6 space-y-4">
+              <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
+                <Icon className="h-5 w-5 text-success" />
+              </div>
+              <h3 className="font-semibold text-ink">{title}</h3>
+              <ul className="space-y-2">
+                {items.map((item) => (
+                  <li key={item} className="text-xs text-ink-secondary flex items-start gap-2">
+                    <Check className="h-3.5 w-3.5 text-success mt-px shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
