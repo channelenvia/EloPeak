@@ -6,12 +6,13 @@ import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert } from '@/compon
 import { supabase } from '@/lib/supabase'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { cn, RANK_TIER_ORDER } from '@/lib/utils'
-import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, DUO_BOOST_PCT, applyLpModifier, lpModifierPct, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
+import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, DUO_BOOST_PCT, applyLpModifier, lpModifierPct, applyMasterPlusPdlDiscount, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
 import { isMasterPlusCurrentTier } from '@/lib/boostDomain'
 import type { Division, QueueType, RankTier } from '@/types'
 import { Search, Info, Lock, Check } from 'lucide-react'
 import { CoachPackagePicker } from './CoachPackagePicker'
 import { ClashConfigPicker } from './ClashConfigPicker'
+import { LaneSelectField } from '@/components/order/LaneSelectField'
 
 // Mesmo formato aceito pelo backend (riot-account-rank bodySchema): 1-16 chars
 // antes do #, 2-5 alfanuméricos depois. Validar no cliente evita um 400
@@ -46,8 +47,9 @@ export function StepConfigure() {
     winsPurchased,
     isMd5, md5MatchesRemaining,
     currentLp, avgLpGain, avgLpLoss,
-    currentPdl,
+    currentPdl, avgPdlGain,
     riotId, riotAutoFilled, riotVerified, riotLookupLoading, stepAttempted,
+    customerLanes, setCustomerLanes,
     setService, setCurrentRank, setTargetRank, setQueueType, setBoostMode,
     setWinsPurchased,
     setIsMd5, setMd5MatchesRemainingFromApi,
@@ -118,8 +120,8 @@ export function StepConfigure() {
     setCurrentRank({ tier: result.tier, division: result.division ?? null })
     if (isMasterPlusCurrentTier(result.tier)) {
       setCurrentPdl(Math.max(0, Math.min(9999, result.league_points ?? 0)))
-      setAvgPdlGain(30)
-      setAvgPdlLoss(30)
+      setAvgPdlGain(typeof result.avg_lp_gain === 'number' ? Math.max(1, result.avg_lp_gain) : 30)
+      setAvgPdlLoss(typeof result.avg_lp_loss === 'number' ? Math.max(1, result.avg_lp_loss) : 30)
     } else {
       setCurrentLp(Math.max(0, Math.min(99, result.league_points ?? 0)))
       if (typeof result.avg_lp_gain === 'number') setAvgLpGain(Math.max(1, Math.min(50, result.avg_lp_gain)))
@@ -279,7 +281,14 @@ export function StepConfigure() {
           setEstimatedHours(null)
           return
         }
-        setBasePrice(price)
+        const discountedPrice = applyMasterPlusPdlDiscount(
+          price,
+          targetRank.tier as 'grandmaster' | 'challenger',
+          currentPdl,
+          avgPdlGain,
+          masterPlusCutoffs,
+        )
+        setBasePrice(discountedPrice)
         const masterPlusHours = estimateEloBoostHours({
           currentRank,
           targetRank,
@@ -356,7 +365,7 @@ export function StepConfigure() {
     }
   }, [
     serviceType, currentRank, targetRank, boostMode, winsPurchased, queueType,
-    currentLp, avgLpGain, avgLpLoss, currentPdl, currentIsMasterPlus, isStandardToMasterPlus,
+    currentLp, avgLpGain, avgLpLoss, currentPdl, avgPdlGain, currentIsMasterPlus, isStandardToMasterPlus,
     masterPlusPriceRow, masterPlusCutoffs,
     setBasePrice, setEstimatedHours, setPdlModifierPct,
   ])
@@ -659,22 +668,64 @@ export function StepConfigure() {
           </FormField>
         )}
 
-        {/* Número de vitórias/partidas — controle único: grade 1..5, ou até as
-            partidas restantes detectadas pela Riot quando MD5. O rótulo vira
-            "Número de Partidas" no MD5. */}
+        {/* Rank + Vitórias/Partidas — win boost / MD5, seção única dividida ao
+            meio (mesmo padrão visual do split Rank Atual/Rank Alvo do elo
+            boost logo abaixo): rank da última temporada à esquerda, número
+            de vitórias/partidas à direita, como se fosse o "alvo" de um
+            configurador de elo boost. Só após verificar o elo. */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && riotVerified && (
-          <FormField label={isMd5 ? 'Número de Partidas' : 'Número de Vitórias'} required>
-            <WinCountButtons
-              value={winsPurchased}
-              max={isMd5 ? Math.max(1, md5MatchesRemaining ?? 5) : 5}
-              onChange={setWinsPurchased}
-            />
-            <p className="text-xs text-ink-muted mt-1.5">
-              {isMd5
-                ? `Máximo ${Math.max(1, md5MatchesRemaining ?? 5)} (partidas restantes detectadas pela Riot)`
-                : 'Máximo 5'}
-            </p>
-          </FormField>
+          <div className="rounded-2xl border border-border-subtle overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-2">
+              {/* ── Rank column ── */}
+              <div className="p-4 space-y-4 border-b border-border-subtle md:border-b-0 md:border-r">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+                  {isMd5 ? 'Rank da Última Temporada' : 'Rank Atual'}
+                </p>
+                <RankLockGrid
+                  tiers={RANK_TIER_ORDER}
+                  current={null}
+                  selectedTier={currentRank?.tier ?? null}
+                  selectedDivision={currentRank?.division ?? null}
+                  onChange={(tier, division) => setCurrentRank({ tier, division })}
+                  disabled={serviceType === 'win_boost' || riotAutoFilled}
+                />
+                {stepAttempted && !currentRank ? (
+                  <p className="text-xs text-danger">Selecione um rank</p>
+                ) : isMd5 ? (
+                  <p className="text-xs text-ink-muted">Sem LP - apenas o rank final da temporada passada.</p>
+                ) : null}
+              </div>
+
+              {/* ── Vitórias/Partidas column ── */}
+              <div className="p-4 space-y-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+                  {isMd5 ? 'Número de Partidas' : 'Número de Vitórias'}
+                </p>
+                <WinCountButtons
+                  value={winsPurchased}
+                  max={isMd5 ? Math.max(1, md5MatchesRemaining ?? 5) : 5}
+                  onChange={setWinsPurchased}
+                />
+                <p className="text-xs text-ink-muted">
+                  {isMd5
+                    ? `Máximo ${Math.max(1, md5MatchesRemaining ?? 5)} (partidas restantes detectadas pela Riot)`
+                    : 'Máximo 5'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Rotas — logo após a seção que aparece depois de consultar o Riot
+            ID (rank + vitórias acima). Rótulo/sentido mudam com boostMode
+            dentro do próprio LaneSelectField. */}
+        {(serviceType === 'win_boost' || serviceType === 'md5') && riotVerified && (
+          <LaneSelectField
+            lanes={customerLanes}
+            onChange={setCustomerLanes}
+            boostMode={boostMode}
+            error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
+          />
         )}
 
         {/* Rank selection — elo boost (split two-column layout). Só após
@@ -709,7 +760,7 @@ export function StepConfigure() {
                     {currentIsMasterPlus ? (
                       <PdlFieldRow fields={[
                         { label: 'PDL Atual', value: currentPdl, min: 0, max: 9999, onChange: setCurrentPdl, disabled: true },
-                        { label: 'Média PDL', value: 30, min: 30, max: 30, onChange: setAvgPdlGain, disabled: true },
+                        { label: 'Média PDL', value: avgPdlGain, min: 1, max: 99, onChange: setAvgPdlGain, disabled: true },
                       ]} />
                     ) : (
                       <PdlFieldRow fields={[
@@ -769,23 +820,15 @@ export function StepConfigure() {
           </div>
         )}
 
-        {/* Rank — win boost / MD5. Só após verificar o elo. */}
-        {(serviceType === 'win_boost' || serviceType === 'md5') && riotVerified && (
-          <FormField
-            label={isMd5 ? 'Rank da Última Temporada' : 'Rank Atual'}
-            required
-            hint={isMd5 ? 'Sem LP - apenas o rank final da temporada passada.' : undefined}
-            error={stepAttempted && !currentRank ? 'Selecione um rank' : undefined}
-          >
-            <RankLockGrid
-              tiers={RANK_TIER_ORDER}
-              current={null}
-              selectedTier={currentRank?.tier ?? null}
-              selectedDivision={currentRank?.division ?? null}
-              onChange={(tier, division) => setCurrentRank({ tier, division })}
-              disabled={serviceType === 'win_boost' || riotAutoFilled}
-            />
-          </FormField>
+        {/* Rotas — logo após a seção de ranks acima (mesma regra do
+            win_boost/md5: rótulo/sentido mudam com boostMode). */}
+        {serviceType === 'elo_boost' && riotVerified && (
+          <LaneSelectField
+            lanes={customerLanes}
+            onChange={setCustomerLanes}
+            boostMode={boostMode}
+            error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
+          />
         )}
 
         {/* Coaching — escolhe um pacote real de um booster; preço vem do

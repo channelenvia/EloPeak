@@ -69,6 +69,16 @@ export function safeOpggUrl(url: string | null | undefined): string | undefined 
 
 // ─── Order status display ─────────────────────────────────────────────────────
 
+// Mesmo cálculo de prazo do CountdownTimer (src/components/order/CountdownTimer.tsx)
+// -- reaproveitado aqui pro badge de status trocar "Em Andamento" por
+// "Atrasado" quando o prazo estourou, em vez de deixar isso só como um
+// aviso separado que o usuário podia não notar.
+export function isOrderOverdue(order: Pick<Order, 'match_sync_started_at' | 'estimated_hours'>): boolean {
+  if (!order.match_sync_started_at || order.estimated_hours == null) return false
+  const deadline = new Date(order.match_sync_started_at).getTime() + order.estimated_hours * 60 * 60 * 1000
+  return deadline - Date.now() <= 0
+}
+
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   draft: 'Rascunho',
   awaiting_payment: 'Aguardando Pagamento',
@@ -333,11 +343,14 @@ export function getOrderMatchSyncGate(order: Pick<Order, 'match_sync_started_at'
 
 // Share of order.total_price the booster receives before an authoritative
 // payout_records row exists (mirrors trg_fn_order_completed_booster_stats,
-// migration 069): 55% normally, 60% for Top3 boosters.
+// migration 20260824050000): 55% normally, 60% for Top3 boosters, always 70%
+// for coaching (fixed, doesn't vary with is_top3).
 export const BOOSTER_EARNINGS_SHARE_NORMAL = 0.55
 export const BOOSTER_EARNINGS_SHARE_TOP3 = 0.60
+export const BOOSTER_EARNINGS_SHARE_COACHING = 0.70
 
-export function boosterEarningsShare(isTop3?: boolean | null): number {
+export function boosterEarningsShare(isTop3?: boolean | null, serviceType?: string | null): number {
+  if (serviceType === 'coaching') return BOOSTER_EARNINGS_SHARE_COACHING
   return isTop3 ? BOOSTER_EARNINGS_SHARE_TOP3 : BOOSTER_EARNINGS_SHARE_NORMAL
 }
 

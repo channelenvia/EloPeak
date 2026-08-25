@@ -181,6 +181,7 @@ serve(async (req) => {
           riot_id: normalized.riotId,
           booster_service_id: normalized.boosterServiceId,
           md5_matches_remaining: md5MatchesRemaining,
+          customer_lanes: normalized.customerLanes.length ? normalized.customerLanes : null,
         })
         .select('id, customer_id, total_price, mp_payment_id')
         .single()

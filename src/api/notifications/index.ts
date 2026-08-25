@@ -73,7 +73,18 @@ export function useNotifications(userId: string | undefined) {
 // nunca fica presa em "9+" nem some quando existem não lidas fora do
 // intervalo carregado. Escuta INSERT (nova notificação) e UPDATE (lida em
 // outra aba/dispositivo) pra manter o número em dia via Realtime.
-export function useUnreadNotificationsCount(userId: string | undefined) {
+//
+// `channelSuffix` existe porque este hook pode estar montado 2x ao mesmo
+// tempo pro MESMO userId -- AppSidebar chama pra decidir a bolinha vermelha
+// do rail recolhido, e o NotificationBell que ela mesma renderiza (quando
+// expandida) chama de novo pro sino inteiro. useRealtimeInvalidate exige
+// nome de canal único por assinatura ativa (ver core/realtime.ts) -- sem
+// distinguir, a segunda montagem remove o canal da primeira, deixando a
+// assinatura órfã (updates em tempo real morrem silenciosamente pra uma
+// delas, caindo pro poll de 30s). A query em si continua deduplicada
+// normalmente pelo React Query (mesma queryKey), só o canal precisa ser
+// distinto.
+export function useUnreadNotificationsCount(userId: string | undefined, channelSuffix = '') {
   const query = useQuery({
     queryKey: queryKeys.notifications.unreadCount(userId ?? ''),
     queryFn: () => getUnreadNotificationsCount(userId!),
@@ -82,7 +93,7 @@ export function useUnreadNotificationsCount(userId: string | undefined) {
   })
 
   useRealtimeInvalidate({
-    channel: `notifications-unread-count-${userId ?? 'none'}`,
+    channel: `notifications-unread-count-${userId ?? 'none'}${channelSuffix ? `-${channelSuffix}` : ''}`,
     table: 'notifications',
     filter: userId ? `user_id=eq.${userId}` : undefined,
     queryKeys: userId ? [queryKeys.notifications.unreadCount(userId)] : [],

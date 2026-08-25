@@ -6,8 +6,7 @@ import { Button, LogoMark } from '@/components/ui'
 import { AmbientBackground } from '@/components/AmbientBackground'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
-
-const DISCORD_SUPPORT_URL = import.meta.env.VITE_DISCORD_TICKET_URL as string | undefined
+import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
 
 export function PublicLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)

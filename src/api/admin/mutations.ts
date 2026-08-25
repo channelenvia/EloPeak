@@ -10,11 +10,3 @@ export async function resolveDropRequest(params: { requestId: string; approve: b
     drop_limit_reached: 'Este pedido já atingiu o limite de 2 drops aprovados.',
   })
 }
-
-export async function waiveDropPenalty(params: { requestId: string; adminNote?: string }) {
-  const { data, error } = await supabase.rpc('waive_drop_penalty', {
-    p_request_id: params.requestId, p_admin_note: params.adminNote,
-  })
-  if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string })
-}

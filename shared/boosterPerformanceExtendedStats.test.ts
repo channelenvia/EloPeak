@@ -8,7 +8,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
 const migrationPromise = readFile(
-  new URL('../supabase/migrations/140_booster_performance_extended_stats.sql', import.meta.url),
+  new URL('../supabase/migrations_archive/140_booster_performance_extended_stats.sql', import.meta.url),
   'utf8',
 )
 

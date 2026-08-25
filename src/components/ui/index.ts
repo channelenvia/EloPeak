@@ -1,5 +1,4 @@
 export * from './Avatar'
-export * from './HexGridBackground'
 export * from './RankBadge'
 export * from './RankLockGrid'
 export * from './WinCountButtons'

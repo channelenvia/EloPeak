@@ -13,12 +13,14 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'
 import { UserProfilePanel } from '@/components/UserProfilePanel'
 import { AppSidebar, type SidebarNavSection } from '@/components/layout/AppSidebar'
+import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 
 export function AdminLayout() {
   const { pathname } = useLocation()
   const { t } = useTranslation()
   const { profile } = useAuthStore()
   const [panelOpen, setPanelOpen] = useState(false)
+  useChatMentionSound()
 
   const NAV_SECTIONS: SidebarNavSection[] = [
     {

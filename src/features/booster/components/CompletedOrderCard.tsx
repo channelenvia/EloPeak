@@ -35,12 +35,12 @@ export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
         </div>
 
         <div className="flex-1">
-          <OrderCardDetails order={order} />
+          <OrderCardDetails order={order} viewerRole="booster" />
         </div>
 
         <OrderCardFooter
           order={order}
-          value={order.total_price * boosterEarningsShare(isTop3)}
+          value={order.total_price * boosterEarningsShare(isTop3, order.service_type)}
           valueLabel="Seu valor"
           currency={currency}
           valueTone="success"

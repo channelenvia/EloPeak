@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
+import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false)
@@ -54,7 +55,9 @@ export function FAQPage() {
           <h1 className="text-4xl font-extrabold text-ink mb-4">{t('faq.title')}</h1>
           <p className="text-ink-secondary">
             {t('faq.cantFind')}{' '}
-            <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{t('faq.contactSupport')}</a>.
+            {DISCORD_SUPPORT_URL
+              ? <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{t('faq.contactSupport')}</a>
+              : <span className="text-brand">{t('faq.contactSupport')}</span>}.
           </p>
         </ScrollReveal>
 

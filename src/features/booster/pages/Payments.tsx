@@ -2,12 +2,11 @@ import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Wallet, Banknote, PiggyBank, Hourglass, Send, FileText, XCircle, ShieldAlert, CalendarClock } from 'lucide-react'
+import { Wallet, Banknote, PiggyBank, Hourglass, Send, FileText, XCircle, CalendarClock } from 'lucide-react'
 import { Button, Card, Skeleton, EmptyState, StatCard, ErrorAlert, CurrencyMaskedInput } from '@/components/ui'
 import { formatDateTime, cn, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_REQUEST_STATUS_COLOR } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useCurrency } from '@/hooks/useCurrency'
-import { useBoosterActiveDropWarnings, useBoosterBlockedUntil } from '@/api/boosters'
 import { isWithdrawalWindowOpen, nextWithdrawalDayLabel } from '@/lib/payoutWithdrawalWindow'
 import {
   useBoosterPayoutTotals, useBoosterPayoutRequests, useRequestPayout, useCancelPayoutRequest,
@@ -140,9 +139,6 @@ export function BoosterPaymentsPage() {
   const { data: totals, isLoading: loadingTotals } = useBoosterPayoutTotals(profile?.id)
   const { data: requests, isLoading: loadingRequests } = useBoosterPayoutRequests(profile?.id)
   const cancelRequest = useCancelPayoutRequest(profile?.id)
-  const { data: activeWarnings } = useBoosterActiveDropWarnings(profile?.id)
-  const { data: blockedUntil } = useBoosterBlockedUntil(profile?.id)
-  const isBlocked = !!blockedUntil && new Date(blockedUntil) > new Date()
 
   const BALANCE_BOXES = [
     { label: 'Total Ganho', value: totals?.total_earned ?? 0, icon: Wallet, color: 'text-success bg-success/10' },
@@ -162,21 +158,6 @@ export function BoosterPaymentsPage() {
         <h1 className="text-2xl font-bold text-ink">Pagamentos</h1>
         <p className="text-sm text-ink-secondary mt-1">Saldo, saques e histórico de solicitações.</p>
       </div>
-
-      {(!!activeWarnings || isBlocked) && (
-        <Card padding="md" className="ring-1 ring-warning/30">
-          <div className="flex items-center gap-2 mb-1">
-            <ShieldAlert className="h-4 w-4 text-warning" />
-            <h3 className="text-base font-semibold text-ink">Advertências de drop</h3>
-          </div>
-          <p className="text-xs text-ink-secondary">
-            <span className="font-bold text-ink">{activeWarnings ?? 0}/5</span> advertências ativas (expiram 30 dias após serem geradas).
-            {isBlocked && (
-              <> Você está impedido de pegar novos pedidos até <span className="font-bold text-danger">{formatDateTime(blockedUntil!)}</span>.</>
-            )}
-          </p>
-        </Card>
-      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {BALANCE_BOXES.map(({ label, value, icon, color }) => (

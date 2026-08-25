@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Copy, KeyRound, Landmark, RefreshCcw } from 'lucide-react'
+import { Copy, KeyRound, RefreshCcw } from 'lucide-react'
 import { Button, ErrorAlert, RankBadge } from '@/components/ui'
 import {
     lookupDuoAccountRiotRank,
@@ -107,12 +107,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
 
   return (
     <div>
-      <h3 className="text-base font-semibold text-ink mb-3 flex items-center gap-2">
-        <Landmark className="h-4 w-4 text-brand" />
-        Conta Duo
-      </h3>
-
-      <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-bg-elevated p-1 max-w-md">
+      <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-bg-elevated p-1">
         <button
           type="button"
           onClick={() => setAccountSource('platform')}
@@ -130,7 +125,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
       </div>
 
       {accountSource === 'own' ? (
-        <div className="space-y-2 max-w-md">
+        <div className="space-y-2">
           <p className="text-xs text-ink-secondary">
             Use sua própria conta pra jogar com o cliente — só o Riot ID, sem token (você já tem acesso).
           </p>
@@ -167,7 +162,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
       ) : isLoading ? (
         <p className="text-xs text-ink-muted">Carregando contas...</p>
       ) : reserved && !switching ? (
-        <div className="space-y-3 max-w-md">
+        <div className="space-y-3">
           <div className="flex items-center justify-between bg-bg-elevated rounded-xl px-3 py-2.5">
             <div>
               <p className="text-sm font-semibold text-ink">{reserved.riot_id ?? reserved.label}</p>
@@ -205,7 +200,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
           )}
         </div>
       ) : (
-        <div className="space-y-2 max-w-md">
+        <div className="space-y-2">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nick..." className="input-base w-full text-xs" />
           <p className="text-[10px] text-ink-muted">
             {clientStep != null

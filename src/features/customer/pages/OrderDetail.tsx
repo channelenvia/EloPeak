@@ -21,11 +21,13 @@ import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { OrderReviewSection } from '@/components/order/OrderReviewSection'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
+import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { Button, ErrorAlert, Modal, OrderStatusBadge, Skeleton } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { EdgeFunctionError } from '@/lib/invokeEdgeFunction'
 import { formatDateTime, formatEstimatedDelivery, getOrderServiceName } from '@/lib/utils'
+import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { useAuthStore } from '@/stores/authStore'
 import type { Order, OrderStatus } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
@@ -37,6 +39,7 @@ import {
     Hash,
     History, Lock,
     QrCode,
+    Route,
     Shuffle,
     UserCheck,
     Users,
@@ -390,6 +393,7 @@ export function OrderDetailPage() {
       ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
       : []),
     ...((isBoostFlow || isClash) ? [{ icon: Hash, label: 'Riot ID', value: order.riot_id ?? 'Não informado' }] : []),
+    ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
     { icon: UserCheck, label: 'Booster associado', value: <AssignedBoosterValue order={order} /> },
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: t('customer.order.totalPaid'), value: currency(order.total_price) },

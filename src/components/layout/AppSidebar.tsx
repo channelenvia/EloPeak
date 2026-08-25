@@ -7,6 +7,7 @@ import { useSidebarStore } from '@/stores/sidebarStore'
 import { Avatar, LogoMark } from '@/components/ui'
 import { NotificationBell } from '@/components/NotificationBell'
 import { UserProfilePanel } from '@/components/UserProfilePanel'
+import { useUnreadNotificationsCount } from '@/api/notifications'
 
 export interface SidebarNavItem {
   href: string
@@ -57,6 +58,7 @@ function defaultIsActive(pathname: string, href: string, homeHref: string): bool
 export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, breakpoint = 'md' }: AppSidebarProps) {
   const { pathname } = useLocation()
   const { profile } = useAuthStore()
+  const { data: unreadCount = 0 } = useUnreadNotificationsCount(profile?.id, 'rail')
   const { pinned, togglePinned } = useSidebarStore()
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -167,10 +169,16 @@ export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, break
           ) : (
             <button
               onClick={() => setPanelOpen(true)}
-              className="focus-ring flex w-full items-center justify-center rounded-full hover:ring-2 hover:ring-brand/40 transition-all"
+              className="focus-ring relative flex w-full items-center justify-center rounded-full hover:ring-2 hover:ring-brand/40 transition-all"
               title={profile?.username ?? 'Perfil'}
             >
               <Avatar src={profile?.avatar_url} name={profile?.username} size="sm" />
+              {/* Rail recolhido não tem espaço pro sino inteiro (NotificationBell
+                  só aparece expandido, ver ramo acima) -- esta bolinha vermelha é
+                  o único sinal de notificação não lida nesse estado. */}
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-1/4 h-2.5 w-2.5 rounded-full bg-danger ring-2 ring-bg-surface" />
+              )}
             </button>
           )}
         </div>

@@ -8,7 +8,7 @@ import { OrderRankRow } from '@/components/order/OrderRankRow'
 import { OrderInfoGrid, type OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { WinsRemainingBadge } from '@/components/order/OrderRankSummary'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
-import { Shuffle, Users, Hash, Clock, UserCheck } from 'lucide-react'
+import { Shuffle, Users, Hash, Clock, UserCheck, Route } from 'lucide-react'
 
 export function StepReview() {
   const {
@@ -18,6 +18,7 @@ export function StepReview() {
     estimatedHours, customerNotes, winsPurchased,
     setNotes, selectedCoachPackage, sessionsPurchased,
     clashTier, clashDay, preferredBoosterName,
+    customerLanes,
   } = useOrderBuilderStore()
 
   const currentIsMasterPlus = currentRank ? isMasterPlusCurrentTier(currentRank.tier) : false
@@ -50,6 +51,13 @@ export function StepReview() {
     ...((isBoostFlow || isClash) ? [{ icon: Shuffle, label: 'Modo', value: modoLabel }] : []),
     ...(isBoostFlow ? [{ icon: Users, label: 'Fila', value: queueType === 'solo_duo' ? 'Solo/Duo' : 'Flex' }] : []),
     ...((isBoostFlow || isClash) && riotId.trim() ? [{ icon: Hash, label: 'Riot ID', value: riotId.trim() }] : []),
+    ...((isBoostFlow || isClash) && customerLanes.length > 0
+      ? [{
+          icon: Route,
+          label: boostMode === 'duo' ? 'Suas rotas' : 'Rotas para o booster',
+          value: <ServiceTagPills lanes={customerLanes} compact />,
+        }]
+      : []),
     ...(isClash
       ? (clashClosingLabel ? [{ icon: Clock, label: 'Entrega Estimada', value: clashClosingLabel }] : [])
       : (estimatedHours ? [{ icon: Clock, label: 'Entrega Estimada', value: formatEstimatedDelivery(estimatedHours) }] : [])),

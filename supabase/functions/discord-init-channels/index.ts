@@ -34,27 +34,17 @@ async function initSobreNos(channelId: string) {
   await send(channelId, {
     embeds: [{
       title: 'Sobre a EloPeak',
-      description:
-        'Somos uma plataforma especializada em serviços para **League of Legends**, conectando jogadores a boosters aprovados de forma prática, transparente e segura.\n\n' +
-        '*Nosso objetivo é oferecer uma experiência profissional, rápida e segura para todos os clientes.*',
+      description: 'Plataforma de serviços para **League of Legends**: conectamos jogadores a boosters aprovados, de forma prática, transparente e segura.',
       color: 0x22C55E,
       fields: [
         {
-          name: 'Nossos Serviços',
-          value:
-            '• **Elo Boost** — um profissional joga na sua conta para alcançar o elo desejado.\n' +
-            '• **Duo Boost** — jogue ao lado de um booster experiente durante a subida.\n' +
-            '• **Partidas Ranqueadas (MD5)** — realizamos suas partidas de colocação.\n' +
-            '• **Pacotes de Vitórias** — contrate uma quantidade específica de wins.\n' +
-            '• **Coach** — acompanhamento personalizado para melhorar sua gameplay, tomada de decisões e mecânicas.',
+          name: 'Serviços',
+          value: '**Elo Boost** • **Duo Boost** • **MD5** (colocação) • **Pacotes de Vitórias** • **Coach**',
           inline: false,
         },
         {
-          name: 'Segurança e Tecnologia',
-          value:
-            '• Credenciais protegidas por criptografia e acesso restrito ao pedido.\n' +
-            '• O booster designado acessa apenas as informações necessárias para executar o serviço.\n' +
-            '• Acompanhamento em tempo real e suporte 24 horas.',
+          name: 'Segurança',
+          value: 'Credenciais criptografadas, acesso restrito ao pedido, acompanhamento em tempo real e suporte 24h.',
           inline: false,
         },
       ],
@@ -67,55 +57,27 @@ async function initRegras(channelId: string) {
   await send(channelId, {
     embeds: [{
       title: 'Regras da Comunidade',
-      description:
-        'Ao participar deste servidor, você concorda em respeitar todas as diretrizes abaixo.\n' +
-        'O não cumprimento poderá resultar em advertência, silenciamento temporário ou **remoção permanente** da comunidade.',
+      description: 'Ao participar deste servidor você concorda em seguir as regras abaixo. O descumprimento pode resultar em silenciamento ou **remoção permanente**.',
       color: 0xE74C3C,
       fields: [
         {
-          name: 'Respeito e Convivência',
-          value:
-            '• Mantenha um comportamento respeitoso com todos os membros.\n' +
-            '• Comentários ofensivos, preconceituosos, discriminatórios ou qualquer forma de assédio não serão tolerados.\n' +
-            '• Sem discussões, ataques pessoais ou provocações excessivas.',
-          inline: false,
-        },
-        {
-          name: 'Mensagens e Divulgação',
-          value:
-            '• É proibido enviar mensagens repetidas, flood ou qualquer forma de spam.\n' +
-            '• Não promova plataformas, serviços ou comunidades concorrentes.\n' +
-            '• Sem divulgação de links, redes sociais ou projetos pessoais não permitidos.',
+          name: 'Respeito',
+          value: 'Sem ofensas, discriminação, assédio ou ataques pessoais. Sem spam, flood ou divulgação de terceiros.',
           inline: false,
         },
         {
           name: 'Segurança',
-          value:
-            '• Nunca publique informações sensíveis, como senhas, logins ou dados pessoais.\n' +
-            '• O compartilhamento de credenciais relacionadas aos pedidos deve ocorrer apenas pelos sistemas oficiais da plataforma.\n' +
-            '• Nenhum membro da equipe solicitará dados confidenciais por mensagem privada. Em caso de suspeita, entre em contato com os donos.',
+          value: 'Nunca compartilhe senhas ou dados pessoais. Credenciais de pedidos só pelos sistemas oficiais da plataforma — a equipe nunca pede isso por DM.',
           inline: false,
         },
         {
-          name: 'Pedidos e Atendimento',
-          value:
-            '• Dúvidas, problemas ou solicitações relacionadas a pedidos devem ser tratadas através do sistema de tickets.\n' +
-            '• Negociações diretas entre membros não são recomendadas nem possuem suporte da plataforma.\n' +
-            '• A EloPeak não se responsabiliza por transações realizadas fora dos canais oficiais.',
+          name: 'Pedidos',
+          value: 'Dúvidas e problemas de pedido: sistema de tickets. Negociações fora da plataforma não têm suporte nem garantia.',
           inline: false,
         },
         {
-          name: 'Conteúdo Proibido',
-          value:
-            '• É proibido compartilhar conteúdo ilegal, impróprio ou que infrinja os Termos de Serviço do Discord.\n' +
-            '• Acusações falsas, difamação ou tentativas de prejudicar membros, clientes ou a empresa poderão resultar em banimento permanente.',
-          inline: false,
-        },
-        {
-          name: 'Disposições Gerais',
-          value:
-            '• A equipe de moderação reserva-se o direito de agir em situações não previstas nestas regras para preservar a organização e a segurança da comunidade.\n' +
-            '• O desconhecimento das regras não isenta nenhum usuário de suas responsabilidades.',
+          name: 'Conteúdo proibido',
+          value: 'Conteúdo ilegal, difamação ou violação dos Termos do Discord resultam em banimento.',
           inline: false,
         },
       ],
@@ -128,33 +90,9 @@ async function initAnuncios(channelId: string) {
   await send(channelId, {
     embeds: [{
       title: 'Canal de Anúncios',
-      description:
-        'Bem-vindo ao canal oficial de anúncios da **EloPeak**.\n\n' +
-        'Este espaço é reservado exclusivamente para comunicações da equipe e da plataforma. Aqui você encontrará todas as informações importantes relacionadas aos nossos serviços e à comunidade.',
+      description: 'Canal oficial da equipe: atualizações da plataforma, promoções, novos serviços e avisos de manutenção. Só leitura — dúvidas vão pro canal de suporte.',
       color: 0x3498DB,
-      fields: [
-        {
-          name: 'O que será publicado aqui?',
-          value:
-            '• Atualizações da plataforma e novos recursos\n' +
-            '• Promoções, cupons e ofertas especiais\n' +
-            '• Lançamento de serviços e funcionalidades\n' +
-            '• Eventos e campanhas da comunidade\n' +
-            '• Informações sobre manutenção e instabilidades\n' +
-            '• Alterações em regras, sistemas ou processos\n' +
-            '• Comunicados oficiais dos donos',
-          inline: false,
-        },
-        {
-          name: 'Importante',
-          value:
-            '• Este canal possui apenas foco informativo.\n' +
-            '• Recomendamos manter as notificações ativadas para acompanhar todas as novidades em primeira mão.\n' +
-            '• Em caso de dúvidas, utilize os canais de suporte ou abra um ticket.',
-          inline: false,
-        },
-      ],
-      footer: { text: 'Fique atento às publicações para não perder nenhuma atualização.' },
+      footer: { text: 'Mantenha as notificações ativadas pra não perder nada.' },
     }],
   })
 }
@@ -163,34 +101,27 @@ async function initComoComprar(channelId: string) {
   await send(channelId, {
     embeds: [{
       title: 'Como Comprar na EloPeak',
-      description: 'Comprar é simples, seguro e transparente. Siga o passo a passo:',
+      description: 'Simples, seguro e transparente:',
       color: 0x9B59B6,
       fields: [
         {
-          name: 'Passo a Passo',
+          name: 'Passo a passo',
           value:
-            '**1. Crie sua conta** — Acesse nossa plataforma e cadastre-se gratuitamente com Discord.\n' +
-            '**2. Escolha o serviço** — Selecione entre Solo/Duo Boost, MD5, Pacotes de Vitórias ou Coach.\n' +
-            '**3. Configure seu pedido** — Informe seu rank atual, rank desejado, média de pontos e os adicionais que desejar.\n' +
-            '**4. Realize o pagamento** — Pague com segurança via Pix.\n' +
-            '**5. Acompanhe em tempo real** — Um booster aprovado será atribuído ao seu pedido. Acompanhe tudo pelo painel.\n' +
-            '**6. Receba o resultado** — Após a conclusão, avalie o serviço e aproveite!',
+            '**1.** Crie sua conta com Discord.\n' +
+            '**2.** Escolha o serviço (Boost, MD5, Vitórias ou Coach).\n' +
+            '**3.** Configure rank atual, alvo e adicionais.\n' +
+            '**4.** Pague com Pix.\n' +
+            '**5.** Acompanhe pelo painel — um booster aprovado assume o pedido.\n' +
+            '**6.** Avalie o serviço ao final.',
           inline: false,
         },
         {
-          name: 'Sua segurança em primeiro lugar',
-          value:
-            'Quando um serviço exigir acesso à conta, envie as credenciais somente pela plataforma oficial.\n' +
-            'As credenciais são criptografadas e liberadas apenas para o booster designado durante a execução do pedido.',
-          inline: false,
-        },
-        {
-          name: 'Ainda tem dúvidas?',
-          value: 'Abra um ticket no canal de suporte ou entre em contato com nossa equipe. Estamos disponíveis 24 horas.',
+          name: 'Segurança',
+          value: 'Credenciais só pela plataforma oficial, criptografadas e liberadas apenas pro booster designado.',
           inline: false,
         },
       ],
-      footer: { text: 'EloPeak — do pedido ao resultado, com segurança.' },
+      footer: { text: 'Dúvidas? Abra um ticket no canal de suporte.' },
     }],
   })
 }
@@ -199,25 +130,12 @@ async function initReviews(channelId: string) {
   await send(channelId, {
     embeds: [{
       title: 'Canal de Reviews',
-      description:
-        'Este canal é dedicado às avaliações dos **compradores** que utilizaram nossos serviços.\n\n' +
-        'Se você comprou um serviço na **EloPeak**, compartilhe aqui como foi sua experiência. ' +
-        'Sua opinião ajuda outros jogadores a tomarem a melhor decisão e nos motiva a continuar melhorando.',
+      description: 'Avaliações automáticas dos pedidos concluídos aparecem aqui. Comprou um serviço? Conte como foi sua experiência.',
       color: 0xF1C40F,
       fields: [
         {
-          name: 'O que você pode compartilhar',
-          value:
-            '• Como foi a experiência com o booster\n' +
-            '• Qualidade e velocidade do serviço\n' +
-            '• Sugestões para melhorarmos',
-          inline: false,
-        },
-        {
           name: 'Regra do canal',
-          value:
-            'Este canal é **exclusivo para compradores**. Apenas quem realizou um pedido pode deixar review aqui.\n' +
-            'Avaliações falsas ou de membros que não utilizaram os serviços serão removidas.',
+          value: 'Exclusivo pra quem comprou um serviço. Avaliações falsas ou de quem não usou os serviços são removidas.',
           inline: false,
         },
       ],

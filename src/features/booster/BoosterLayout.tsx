@@ -13,6 +13,7 @@ import { AppSidebar, type SidebarNavSection } from '@/components/layout/AppSideb
 import { useBoosterStatus, useBoosterHeartbeat } from '@/api/boosters'
 import { PendingScreen, RejectedScreen, SuspendedScreen, RemovedScreen, NoApplicationScreen, BoosterStatusErrorScreen } from '@/features/booster/components/BoosterStatusScreens'
 import { useNewOrderSound } from '@/features/booster/hooks/useNewOrderSound'
+import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 
 function ApprovedBoosterPanel() {
   const { pathname } = useLocation()
@@ -20,6 +21,7 @@ function ApprovedBoosterPanel() {
   const { t } = useTranslation()
   const [panelOpen, setPanelOpen] = useState(false)
   useNewOrderSound()
+  useChatMentionSound()
   useBoosterHeartbeat(true)
 
   const navItems = [

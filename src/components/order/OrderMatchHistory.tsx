@@ -45,24 +45,36 @@ function SummaryStat({ icon: Icon, label, value, valueClassName }: { icon: Lucid
   )
 }
 
-// Resumo (V/D, winrate, KDA médio) + lista de partidas -- extraído porque
-// pedidos duo agora mostram isso 2x lado a lado (conta do cliente + conta
-// duo do booster), não mais só 1x.
-function MatchListPanel({
-  label, matches, isLoading, ddragonVersion, pdlEstimate,
-}: {
-  label?: string
-  matches: OrderMatch[] | undefined
-  isLoading: boolean
-  ddragonVersion: string | null
-  pdlEstimate?: PdlEstimate | null
-}) {
+// Resultado/winrate vêm da MESMA partida pros dois lados de um duo (cliente
+// e booster jogaram juntos) -- só o KDA é de fato individual (kills/deaths/
+// assists são por jogador, não por time). Extraído pra computar isso uma vez
+// só no cabeçalho compartilhado (ver OrderMatchHistory) em vez de duplicar
+// V/D e winrate nos dois painéis lado a lado.
+function computeMatchSummary(matches: OrderMatch[] | undefined) {
   const wins = matches?.filter((m) => m.result === 'win').length ?? 0
   const losses = (matches?.length ?? 0) - wins
   const winRate = matches?.length ? Math.round((wins / matches.length) * 100) : null
   const avgKda = matches?.length
     ? matches.reduce((sum, m) => sum + (m.deaths > 0 ? (m.kills + m.assists) / m.deaths : m.kills + m.assists), 0) / matches.length
     : null
+  return { wins, losses, winRate, avgKda }
+}
+
+// Lista de partidas -- extraído porque pedidos duo agora mostram isso 2x
+// lado a lado (conta do cliente + conta duo do booster), não mais só 1x.
+// showSummary=false omite o bloco de estatísticas (já mostrado 1x só no
+// cabeçalho de OrderMatchHistory pra duo, pra não duplicar em cada painel).
+function MatchListPanel({
+  label, matches, isLoading, ddragonVersion, pdlEstimate, showSummary = true,
+}: {
+  label?: string
+  matches: OrderMatch[] | undefined
+  isLoading: boolean
+  ddragonVersion: string | null
+  pdlEstimate?: PdlEstimate | null
+  showSummary?: boolean
+}) {
+  const { wins, losses, winRate, avgKda } = computeMatchSummary(matches)
 
   return (
     <div>
@@ -78,21 +90,23 @@ function MatchListPanel({
         </p>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-3 gap-2 border-b border-border-subtle pb-4">
-            <SummaryStat icon={Trophy} label="Resultado" value={`${wins}V / ${losses}D`} />
-            <SummaryStat
-              icon={TrendingUp}
-              label="Winrate médio"
-              value={winRate != null ? `${winRate}%` : '—'}
-              valueClassName={winRate == null ? undefined : winRate >= 55 ? 'text-success' : winRate >= 45 ? 'text-warning' : 'text-danger'}
-            />
-            <SummaryStat
-              icon={Swords}
-              label="KDA médio"
-              value={avgKda != null ? avgKda.toFixed(1) : '—'}
-              valueClassName={avgKda == null ? undefined : avgKda >= 4 ? 'text-success' : avgKda >= 2.5 ? 'text-warning' : 'text-danger'}
-            />
-          </div>
+          {showSummary && (
+            <div className="mb-4 grid grid-cols-3 gap-2 border-b border-border-subtle pb-4">
+              <SummaryStat icon={Trophy} label="Resultado" value={`${wins}V / ${losses}D`} />
+              <SummaryStat
+                icon={TrendingUp}
+                label="Winrate médio"
+                value={winRate != null ? `${winRate}%` : '—'}
+                valueClassName={winRate == null ? undefined : winRate >= 55 ? 'text-success' : winRate >= 45 ? 'text-warning' : 'text-danger'}
+              />
+              <SummaryStat
+                icon={Swords}
+                label="KDA médio"
+                value={avgKda != null ? avgKda.toFixed(1) : '—'}
+                valueClassName={avgKda == null ? undefined : avgKda >= 4 ? 'text-success' : avgKda >= 2.5 ? 'text-warning' : 'text-danger'}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             {matches.map((match) => {
@@ -190,6 +204,7 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate, locked, boostMod
   const { data: matches, isLoading } = useOrderMatches(locked ? undefined : orderId)
   const { data: duoMatches, isLoading: duoLoading } = useOrderBoosterDuoMatches(locked ? undefined : orderId, isDuo)
   const ddragonVersion = useDdragonVersion()
+  const matchSummary = computeMatchSummary(matches)
 
   return (
     <Card padding="md" className="h-full overflow-y-auto">
@@ -221,10 +236,40 @@ export function OrderMatchHistory({ orderId, sync, pdlEstimate, locked, boostMod
       {sync?.resultMessage && <p className="text-xs text-ink-muted mb-3">{sync.resultMessage}</p>}
 
       {isDuo ? (
-        <div className="grid grid-cols-2 gap-4">
-          <MatchListPanel label="Cliente" matches={matches} isLoading={isLoading} ddragonVersion={ddragonVersion} pdlEstimate={pdlEstimate} />
-          <div className="border-l border-border-subtle pl-4">
-            <MatchListPanel label="Booster" matches={duoMatches} isLoading={duoLoading} ddragonVersion={ddragonVersion} pdlEstimate={pdlEstimate} />
+        <div>
+          {/* Uma seção geral só (Resultado, Winrate, KDA médio) -- cliente e
+              booster jogaram as mesmas partidas juntos, então repetir tudo
+              nos 2 painéis abaixo seria redundante. Os painéis ficam só com
+              a lista de partidas de cada conta. */}
+          {isLoading ? (
+            <div className="mb-4 grid grid-cols-3 gap-2 border-b border-border-subtle pb-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : matches?.length ? (
+            <div className="mb-4 grid grid-cols-3 gap-2 border-b border-border-subtle pb-4">
+              <SummaryStat icon={Trophy} label="Resultado" value={`${matchSummary.wins}V / ${matchSummary.losses}D`} />
+              <SummaryStat
+                icon={TrendingUp}
+                label="Winrate médio"
+                value={matchSummary.winRate != null ? `${matchSummary.winRate}%` : '—'}
+                valueClassName={matchSummary.winRate == null ? undefined : matchSummary.winRate >= 55 ? 'text-success' : matchSummary.winRate >= 45 ? 'text-warning' : 'text-danger'}
+              />
+              <SummaryStat
+                icon={Swords}
+                label="KDA médio"
+                value={matchSummary.avgKda != null ? matchSummary.avgKda.toFixed(1) : '—'}
+                valueClassName={matchSummary.avgKda == null ? undefined : matchSummary.avgKda >= 4 ? 'text-success' : matchSummary.avgKda >= 2.5 ? 'text-warning' : 'text-danger'}
+              />
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-4">
+            <MatchListPanel label="Cliente" matches={matches} isLoading={isLoading} ddragonVersion={ddragonVersion} pdlEstimate={pdlEstimate} showSummary={false} />
+            <div className="border-l border-border-subtle pl-4">
+              <MatchListPanel label="Booster" matches={duoMatches} isLoading={duoLoading} ddragonVersion={ddragonVersion} pdlEstimate={pdlEstimate} showSummary={false} />
+            </div>
           </div>
         </div>
       ) : (

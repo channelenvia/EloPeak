@@ -28,6 +28,53 @@ export const LANE_ICON_URL: Record<string, string> = {
   support: `${LOL_POSITION_ASSET_BASE}/position-utility.svg`,
 }
 
+// Complemento das 5 lanes contra as escolhidas pelo cliente em pedidos Duo
+// (orders.customer_lanes) -- é o que fica "disponível" pro booster jogar,
+// nunca armazenado, sempre recalculado aqui pra ter uma única fonte de
+// verdade entre StepReview, AvailableJobs/OrderCardDetails e as 3 telas de
+// detalhe do pedido. Sem seleção do cliente, as 5 ficam disponíveis.
+export function getAvailableLanes(customerLanes: string[] | null | undefined): string[] {
+  if (!customerLanes?.length) return LANES.map(l => l.key)
+  return LANES.map(l => l.key).filter(key => !customerLanes.includes(key))
+}
+
+export interface LaneDisplayItem {
+  label: string
+  lanes: string[]
+}
+
+// Política única de "quais rotas mostrar pra qual papel, com qual rótulo" --
+// antes reimplementada em paralelo em OrderCardDetails.tsx, JobDetail.tsx,
+// customer/pages/OrderDetail.tsx e admin/pages/OrderDetail.tsx. Retorna []
+// quando não há nada pra mostrar (pedido sem rotas escolhidas, ou
+// service_type que não usa isso -- customer_lanes já vem null nesse caso).
+export function getLaneDisplayItems(
+  order: { customer_lanes: string[] | null; boost_mode: string },
+  viewerRole: 'customer' | 'booster' | 'admin',
+): LaneDisplayItem[] {
+  if (!order.customer_lanes?.length) return []
+  const isDuo = order.boost_mode === 'duo'
+
+  if (viewerRole === 'customer') {
+    return [{ label: isDuo ? 'Suas rotas' : 'Rotas pedidas ao booster', lanes: order.customer_lanes }]
+  }
+  if (viewerRole === 'booster') {
+    return [{
+      label: isDuo ? 'Rotas disponíveis' : 'Rotas pedidas pelo cliente',
+      lanes: isDuo ? getAvailableLanes(order.customer_lanes) : order.customer_lanes,
+    }]
+  }
+  // admin -- vê os dois lados em duo (cliente e o que sobra pro booster);
+  // em solo é a mesma linha única que o cliente vê (é a mesma informação).
+  if (isDuo) {
+    return [
+      { label: 'Rotas do cliente', lanes: order.customer_lanes },
+      { label: 'Rotas disponíveis pro booster', lanes: getAvailableLanes(order.customer_lanes) },
+    ]
+  }
+  return [{ label: 'Rotas pedidas ao booster', lanes: order.customer_lanes }]
+}
+
 export const COACH_SPECIALTIES = [
   { key: 'macro',         label: 'Macro'             },
   { key: 'micro',         label: 'Micro'             },

@@ -256,6 +256,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         current_lp: store.currentLp,
         addon_codes: addonCodes,
         riot_id: store.riotId,
+        customer_lanes: store.customerLanes,
       }
     }
 
@@ -273,6 +274,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
             boost_mode: 'solo',
             addon_codes: addonCodes,
             riot_id: store.riotId,
+            customer_lanes: store.customerLanes,
           }
         : {
             ...baseWithRank,
@@ -281,6 +283,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
             addon_codes: addonCodes,
             win_package: store.winPackage,
             riot_id: store.riotId,
+            customer_lanes: store.customerLanes,
           }
     }
 
@@ -291,6 +294,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         wins_purchased: store.winsPurchased,
         addon_codes: addonCodes,
         riot_id: store.riotId,
+        customer_lanes: store.customerLanes,
       }
     }
 
@@ -304,6 +308,10 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       win_package: store.winPackage,
       booster_service_id: store.selectedCoachPackage?.id ?? null,
       riot_id: store.serviceType === 'win_boost' ? store.riotId : null,
+      // Coaching não tem esse conceito de rota -- o schema strict rejeita
+      // chave desconhecida, então só manda quando é win_boost mesmo (mesma
+      // regra condicional do riot_id acima).
+      ...(store.serviceType === 'win_boost' ? { customer_lanes: store.customerLanes } : {}),
     }
   }
 

@@ -14,6 +14,7 @@ import { OrderSoundSettings } from '@/features/booster/components/OrderSoundSett
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
+import { CaptchaChallenge } from '@/components/captcha/CaptchaChallenge'
 
 
 interface SlotInfo {
@@ -129,6 +130,10 @@ export function AvailableJobsPage() {
       { onSuccess: () => navigate(`/booster/orders/${orderId}`) },
     ),
   }
+
+  // "Aceitar" não dispara a mutation direto -- abre o captcha primeiro, e só
+  // ao completar com sucesso é que o pedido de fato é aceito.
+  const [captchaJobId, setCaptchaJobId] = useState<string | null>(null)
 
   const canAcceptJob = (job: Order): boolean => {
     if (!slotInfo) return false
@@ -281,17 +286,17 @@ export function AvailableJobsPage() {
                   </div>
                 )}
 
-                <OrderCardDetails order={job} />
+                <OrderCardDetails order={job} viewerRole="booster" />
 
                 <div className="flex items-center justify-between pt-3 border-t border-border-subtle mt-auto">
                   <div>
-                    <p className="text-sm font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3))}</p>
-                    <p className="text-[10px] text-ink-muted">{t('booster.jobs.yourCut', { pct: Math.round(boosterEarningsShare(slotInfo?.is_top3) * 100) })}</p>
+                    <p className="text-sm font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3, job.service_type))}</p>
+                    <p className="text-[10px] text-ink-muted">{t('booster.jobs.yourCut', { pct: Math.round(boosterEarningsShare(slotInfo?.is_top3, job.service_type) * 100) })}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Button
                       size="sm"
-                      onClick={() => acceptJob.mutate(job.id)}
+                      onClick={() => setCaptchaJobId(job.id)}
                       loading={acceptJob.isPending}
                       disabled={!!blocked}
                       title={blocked ? 'Slots cheios' : undefined}
@@ -314,6 +319,15 @@ export function AvailableJobsPage() {
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
         </>
       )}
+
+      <CaptchaChallenge
+        open={captchaJobId !== null}
+        onOpenChange={(next) => { if (!next) setCaptchaJobId(null) }}
+        onSuccess={() => {
+          if (captchaJobId) acceptJob.mutate(captchaJobId)
+          setCaptchaJobId(null)
+        }}
+      />
     </div>
   )
 }

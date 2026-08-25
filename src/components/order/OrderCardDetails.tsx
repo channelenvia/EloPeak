@@ -1,19 +1,23 @@
-import { ArrowRight, CalendarDays, Hash } from 'lucide-react'
+import { ArrowRight, CalendarDays, Hash, Route } from 'lucide-react'
 import { RankBadge } from '@/components/ui'
 import { RankProgressionRail } from '@/components/rank/RankProgressionRail'
+import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { sortOrderExtras } from '@/lib/utils'
+import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { CLASH_DAY_LABEL, CLASH_TIER_BOUNDARY_RANKS, getClashDateParts } from '@/lib/clashDomain'
 import type { Division, Order, RankTier } from '@/types'
 
 interface OrderCardDetailsProps {
   order: Order
+  viewerRole: 'customer' | 'booster' | 'admin'
 }
 
 // Bloco de detalhes reaproveitado por todo card-resumo de pedido (cliente,
 // booster, jobs disponíveis): rank atual → objetivo (com histórico de drop se
 // houver), vitórias restantes, dia/tier do Clash, Riot ID e extras. Fonte
 // única pra esses campos ficarem sempre em sincronia visual entre os papéis.
-export function OrderCardDetails({ order }: OrderCardDetailsProps) {
+export function OrderCardDetails({ order, viewerRole }: OrderCardDetailsProps) {
+  const laneItems = getLaneDisplayItems(order, viewerRole)
   const currentRank = order.current_rank as { tier: RankTier; division: Division | null } | null
   const targetRank = order.target_rank as { tier: RankTier; division: Division | null } | null
   const hasWinProgress = order.wins_purchased != null
@@ -89,6 +93,14 @@ export function OrderCardDetails({ order }: OrderCardDetailsProps) {
           <span>Riot ID: <span className="font-medium text-ink">{order.riot_id}</span></span>
         </div>
       )}
+
+      {laneItems.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5 mb-3 text-xs text-ink-secondary">
+          <Route className="h-3 w-3 shrink-0 text-ink-muted" />
+          <span>{item.label}:</span>
+          <ServiceTagPills lanes={item.lanes} compact />
+        </div>
+      ))}
 
       {order.extras?.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">

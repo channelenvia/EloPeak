@@ -101,33 +101,6 @@ export function RankIcon({ tier, imgClass, iconClass }: { tier: RankTier; imgCla
   )
 }
 
-// RankLabel — tipografia pura (tier + divisão), sem ícone. Pra linhas de
-// tabela/lista muito densas onde nem o emblema pequeno cabe.
-export function RankLabel({ tier, division, showDivision = true, className }: {
-  tier: RankTier; division?: Division | null; showDivision?: boolean; className?: string
-}) {
-  const isMasterPlus = MASTER_PLUS.includes(tier)
-  const divLabel = showDivision && !isMasterPlus && division ? ` ${division}` : ''
-  return (
-    <span className={cn('font-semibold', RANK_TIER_COLOR[tier], className)}>
-      {RANK_TIER_LABEL[tier]}{divLabel}
-    </span>
-  )
-}
-
-// RankCompact — ícone pequeno + rótulo em linha, pra células de tabela e
-// listas densas (admin) onde o RankBadge "em caixa" ocupa espaço demais.
-export function RankCompact({ tier, division, showDivision = true, className }: {
-  tier: RankTier; division?: Division | null; showDivision?: boolean; className?: string
-}) {
-  return (
-    <span className={cn('inline-flex items-center gap-1.5', className)}>
-      <RankIcon tier={tier} imgClass="h-4 w-4" iconClass="h-4 w-4" />
-      <RankLabel tier={tier} division={division} showDivision={showDivision} className="text-xs" />
-    </span>
-  )
-}
-
 export function RankBadge({
   tier, division, size = 'md', className, showDivision = true, showLabel = true,
 }: RankBadgeProps) {

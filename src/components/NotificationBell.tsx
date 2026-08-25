@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle, ShieldAlert, Clock, UserX, BadgeCheck } from 'lucide-react'
+import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 import { Popover } from '@/components/ui'
@@ -29,11 +29,6 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   order_reassigned: RefreshCw,
   order_dropped_by_admin: AlertTriangle,
   customer_requested_drop: AlertTriangle,
-  drop_fee_applied: AlertTriangle,
-  drop_warning_issued: ShieldAlert,
-  booster_temporarily_blocked: Clock,
-  booster_auto_suspended: UserX,
-  drop_penalty_waived: BadgeCheck,
 }
 
 function timeAgo(iso: string): string {

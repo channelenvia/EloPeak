@@ -7,4 +7,4 @@ Disallow: /orders
 Disallow: /booster
 Disallow: /admin
 
-Sitemap: https://SEU-DOMINIO-AQUI.com/sitemap.xml
+Sitemap: https://elo-peak.vercel.app/sitemap.xml

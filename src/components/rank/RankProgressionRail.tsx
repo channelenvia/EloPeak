@@ -44,7 +44,7 @@ export interface RankProgressionRailProps {
 // preenchimento é sempre derivada do rank real (rankStep), nunca estética.
 //
 // No vocabulário da família de componentes de rank (RankIcon < RankLabel <
-// RankCompact < RankBadge, em ui/RankBadge.tsx), este componente já É o que
+// RankBadge, em ui/RankBadge.tsx), este componente já É o que
 // seria chamado de RankProgress/RankJourney -- badges atual/alvo + trilha +
 // corte ao vivo. Não foi renomeado/duplicado: já tem um único consumidor
 // (OrderProgress.tsx), nome descritivo e comportamento correto -- criar um

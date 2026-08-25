@@ -410,6 +410,11 @@ export function useSyncOrderMatches(orderId: string) {
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders.matches(orderId) })
+      // Pedidos duo também gravam booster_duo_matches no mesmo sync -- sem
+      // isso, o painel "Booster" do histórico ficava desatualizado até um
+      // remount, enquanto o painel "Cliente" (acima) já refletia a partida
+      // nova, quebrando a expectativa de carregamento simultâneo dos dois.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.boosterDuoMatches(orderId) })
       // Partidas sincronizadas podem ter mudado o resultado (wins_played,
       // vitórias/derrotas) -- o card de Progresso lê a mesma order.detail já
       // invalidada acima, mas a barra de rank (elo_boost) lê separadamente a

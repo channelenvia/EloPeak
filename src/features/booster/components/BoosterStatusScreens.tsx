@@ -1,6 +1,16 @@
 import { Link } from 'react-router-dom'
 import { Ban, Clock, X, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
+
+function DiscordSupportLink({ children }: { children: React.ReactNode }) {
+  if (!DISCORD_SUPPORT_URL) return <span className="text-brand">{children}</span>
+  return (
+    <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+      {children}
+    </a>
+  )
+}
 
 export function PendingScreen() {
   return (
@@ -16,10 +26,7 @@ export function PendingScreen() {
         </p>
       </div>
       <p className="text-xs text-ink-muted">
-        Dúvidas? Fale conosco no Discord:{' '}
-        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/v3yDtTDA8t
-        </a>
+        Dúvidas? Fale conosco no <DiscordSupportLink>Discord de suporte</DiscordSupportLink>.
       </p>
     </div>
   )
@@ -38,14 +45,9 @@ export function RejectedScreen() {
           com o suporte para mais informações ou para recorrer da decisão.
         </p>
       </div>
-      <a
-        href="https://discord.gg/v3yDtTDA8t"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm text-brand font-semibold hover:underline"
-      >
-        Contatar suporte
-      </a>
+      <DiscordSupportLink>
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold">Contatar suporte</span>
+      </DiscordSupportLink>
     </div>
   )
 }
@@ -70,10 +72,7 @@ export function SuspendedScreen({ suspendedUntil }: { suspendedUntil: string | n
         </p>
       </div>
       <p className="text-xs text-ink-muted">
-        Abra um ticket no nosso Discord pra entender o motivo ou contestar a suspensão:{' '}
-        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/v3yDtTDA8t
-        </a>
+        Abra um ticket no nosso <DiscordSupportLink>Discord de suporte</DiscordSupportLink> pra entender o motivo ou contestar a suspensão.
       </p>
     </div>
   )
@@ -92,10 +91,7 @@ export function RemovedScreen() {
         </p>
       </div>
       <p className="text-xs text-ink-muted">
-        Dúvidas? Fale com o suporte no Discord:{' '}
-        <a href="https://discord.gg/v3yDtTDA8t" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
-          discord.gg/v3yDtTDA8t
-        </a>
+        Dúvidas? Fale com o suporte no <DiscordSupportLink>Discord de suporte</DiscordSupportLink>.
       </p>
     </div>
   )

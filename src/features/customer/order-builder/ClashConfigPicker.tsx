@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { RankBadge, ErrorAlert } from '@/components/ui'
 import { FormField } from '@/components/ui/FormField'
+import { LaneSelectField } from '@/components/order/LaneSelectField'
 import { getClashBasePrice, CLASH_ESTIMATED_HOURS } from '@/lib/pricing'
 import {
   CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL, CLASH_TIER_BOUNDARY_RANKS, CLASH_DAY_LABEL, rankTierToClashTier,
@@ -32,6 +33,7 @@ export function ClashConfigPicker() {
     setBasePrice, setEstimatedHours, setPdlModifierPct, stepAttempted,
     riotId, setRiotId, riotVerified, setRiotVerified, riotAutoFilled, setRiotAutoFilled,
     riotLookupLoading, setRiotLookupLoading, clearRiotLookup, setClashCurrentRank,
+    customerLanes, setCustomerLanes,
   } = useOrderBuilderStore()
   const currency = useCurrency()
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
@@ -211,6 +213,17 @@ export function ClashConfigPicker() {
             <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />
           </div>
         </div>
+      )}
+
+      {/* Rotas — logo após a seção que aparece depois de consultar o Riot ID
+          (Tier acima). Rótulo/sentido mudam com boostMode do próprio Clash. */}
+      {riotVerified && riotAutoFilled && clashTier && detectedTierRanks && (
+        <LaneSelectField
+          lanes={customerLanes}
+          onChange={setCustomerLanes}
+          boostMode={boostMode}
+          error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
+        />
       )}
     </div>
   )

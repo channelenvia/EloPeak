@@ -41,7 +41,6 @@ export function AccessTokenSection({ order }: { order: Order }) {
 
   return (
     <div>
-      <h3 className="text-base font-semibold text-ink mb-1">Token de acesso</h3>
       <p className="text-xs text-ink-secondary mb-3">
         Uso único, válido por 5 minutos. Login e senha não são exibidos.
       </p>

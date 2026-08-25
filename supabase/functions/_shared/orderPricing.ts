@@ -93,6 +93,20 @@ const routingSchema = z.object({
 // tagLine é 2-5 alfanuméricos.
 const riotIdSchema = z.string().regex(/^.{3,16}#[A-Za-z0-9]{2,5}$/, 'Riot ID inválido (formato: nome#tag)')
 
+// Rotas escolhidas pelo cliente no configurador -- mesma regra de
+// booster_services.lanes (migration 160): no máximo 2, subconjunto fixo das
+// 5 lanes. Semântica (pro booster jogar vs. o próprio cliente jogar)
+// depende de boost_mode, resolvida só no frontend/exibição -- aqui é só
+// validação de forma.
+const customerLanesSchema = z.array(z.enum(['top', 'jungle', 'mid', 'bot', 'support'])).max(2)
+  // Sem isso, ['top','top'] passava (<=2 elementos, subconjunto válido) mas
+  // getAvailableLanes só remove 'top' uma vez -- reservaria só 1 lane de
+  // fato mesmo o cliente "gastando" as 2 vagas, liberando 4 pro booster em
+  // vez de 3. A UI nunca manda duplicata (LaneSelectField.toggle já
+  // previne), isso é defesa contra uma chamada direta à API.
+  .refine((lanes) => new Set(lanes).size === lanes.length, 'Rotas duplicadas não são permitidas')
+  .default([])
+
 // Cupom de desconto — só o CÓDIGO vem do cliente, nunca um percentual/valor.
 // O percentual é sempre resolvido server-side contra a whitelist fixa em
 // applyCoupon() (shared/pricing.ts); um código inválido/inelegível aqui
@@ -118,6 +132,7 @@ const standardEloIntentSchema = z.object({
   customer_notes: z.string().max(500).nullable().default(null),
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
+  customer_lanes: customerLanesSchema,
 }).strict()
 
 // Boost Master+ — rank atual Master ou Grão-Mestre. Sem PDL alvo: o preço
@@ -140,6 +155,7 @@ const masterPlusIntentSchema = z.object({
   customer_notes: z.string().max(500).nullable().default(null),
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
+  customer_lanes: customerLanesSchema,
 }).strict()
 
 // Win Boost / Placement Matches / Coaching — fora do escopo desta reforma
@@ -173,6 +189,7 @@ const otherServiceIntentSchema = z.object({
   // (reforçado pelas checagens de negócio abaixo).
   riot_id: riotIdSchema.nullable().default(null),
   coupon_code: couponCodeSchema,
+  customer_lanes: customerLanesSchema,
 }).strict()
 
 // MD5 — "Rank da última temporada": Iron–Challenger valid, no LP/PDL/target
@@ -192,6 +209,7 @@ const md5IntentSchema = z.object({
   customer_notes: z.string().max(500).nullable().default(null),
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
+  customer_lanes: customerLanesSchema,
 }).strict()
 
 // Solo Clash / Duo Clash — preço e elegibilidade dependem só do tier (faixa),
@@ -218,6 +236,7 @@ const clashIntentSchema = z.object({
   customer_notes: z.string().max(500).nullable().default(null),
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
+  customer_lanes: customerLanesSchema,
 }).strict()
 
 // Forma normalizada usada pelo resto do handler, independente de qual dos 3
@@ -249,6 +268,7 @@ export interface NormalizedIntent {
   // Clash — null para qualquer outro serviceType.
   clashTier: ClashTier | null
   clashDay: ClashDay | null
+  customerLanes: string[]
 }
 
 export interface QuoteResult {
@@ -389,6 +409,7 @@ export async function validateAndPriceIntent(
     if (rankStep(mp.target_rank.tier, null) <= rankStep(mp.current_rank.tier, null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
+    if (!mp.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     // pdlBracket é só informativo (gravado em orders.pdl_bracket) — não entra
     // mais na chave de preço, que agora é um valor fixo por tier alvo.
     pdlBracket = getPdlBracket(mp.current_pdl)
@@ -447,12 +468,14 @@ export async function validateAndPriceIntent(
       couponCode: mp.coupon_code,
       clashTier: null,
       clashDay: null,
+      customerLanes: mp.customer_lanes,
     }
   } else if (flow) {
     const std = parsedIntent.data as z.infer<typeof standardEloIntentSchema>
     if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
+    if (!std.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'elo_boost',
       serviceId: std.service_id,
@@ -478,6 +501,7 @@ export async function validateAndPriceIntent(
       couponCode: std.coupon_code,
       clashTier: null,
       clashDay: null,
+      customerLanes: std.customer_lanes,
     }
 
     // Diamond- mirando Grão-Mestre/Challenger direto: o trecho Mestre->alvo
@@ -505,6 +529,7 @@ export async function validateAndPriceIntent(
     if (md5.boost_mode === 'duo' && isMasterPlusCurrentTier(md5.current_rank.tier)) {
       return { ok: false, response: badRequest(req, 'Duo não é aceito para Mestre ou superior') }
     }
+    if (!md5.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'md5',
       serviceId: md5.service_id,
@@ -530,9 +555,11 @@ export async function validateAndPriceIntent(
       couponCode: md5.coupon_code,
       clashTier: null,
       clashDay: null,
+      customerLanes: md5.customer_lanes,
     }
   } else if (routed.data.service_type === 'clash') {
     const clash = parsedIntent.data as z.infer<typeof clashIntentSchema>
+    if (!clash.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'clash',
       serviceId: clash.service_id,
@@ -561,6 +588,7 @@ export async function validateAndPriceIntent(
       couponCode: clash.coupon_code,
       clashTier: clash.clash_tier,
       clashDay: clash.clash_day,
+      customerLanes: clash.customer_lanes,
     }
   } else {
     const other = parsedIntent.data as z.infer<typeof otherServiceIntentSchema>
@@ -570,12 +598,14 @@ export async function validateAndPriceIntent(
       if (other.win_package) return { ok: false, response: badRequest(req, 'Pacote de vitórias extras não é aceito em Vitórias') }
       if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em Vitórias') }
       if (!other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID é obrigatório para Vitórias') }
+      if (!other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     }
     if (other.service_type === 'placement_matches') {
       if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank final da última temporada é obrigatório para MD5 Completo') }
       if (other.wins_purchased || other.win_package) return { ok: false, response: badRequest(req, 'Vitórias não são aceitas em MD5 Completo') }
       if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em MD5 Completo') }
       if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em MD5 Completo') }
+      if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em MD5 Completo') }
     }
     if (other.service_type === 'coaching') {
       if (!other.booster_service_id) return { ok: false, response: badRequest(req, 'Selecione um pacote de coach') }
@@ -583,6 +613,7 @@ export async function validateAndPriceIntent(
         return { ok: false, response: badRequest(req, 'Ranks e vitórias não são aceitos em Coaching') }
       }
       if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em Coaching') }
+      if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em Coaching') }
     }
     normalized = {
       serviceType: other.service_type,
@@ -609,6 +640,7 @@ export async function validateAndPriceIntent(
       couponCode: other.coupon_code,
       clashTier: null,
       clashDay: null,
+      customerLanes: other.customer_lanes,
     }
   }
 
@@ -681,8 +713,8 @@ export async function validateAndPriceIntent(
     normalized.currentPdl = verifiedMasterPlus ? leaguePoints : null
     normalized.avgLpGain = verifiedMasterPlus ? 30 : averages.gain
     normalized.avgLpLoss = verifiedMasterPlus ? 30 : averages.loss
-    normalized.avgPdlGain = verifiedMasterPlus ? 30 : null
-    normalized.avgPdlLoss = verifiedMasterPlus ? 30 : null
+    normalized.avgPdlGain = verifiedMasterPlus ? averages.gain : null
+    normalized.avgPdlLoss = verifiedMasterPlus ? averages.loss : null
 
     if (normalized.serviceType === 'elo_boost') {
       if (!normalized.targetRank
@@ -881,6 +913,7 @@ export async function validateAndPriceIntent(
     avgLpGain: normalized.avgLpGain,
     avgLpLoss: normalized.avgLpLoss,
     currentPdl: normalized.currentPdl,
+    avgPdlGain: normalized.avgPdlGain,
     masterPlusPrice,
     masterPlusCutoffs,
     winsPurchased: normalized.winsPurchased,

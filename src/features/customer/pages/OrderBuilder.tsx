@@ -69,6 +69,7 @@ function isStepComplete(
     md5MatchesRemaining: number | null
     clashTier: string | null
     clashDay: string | null
+    customerLanes: string[]
   },
 ): boolean {
   if (state.riotLookupLoading) return false
@@ -76,15 +77,17 @@ function isStepComplete(
   if (step === 'configure') {
     // Eloboost e Vitórias/MD5 só avançam depois de uma verificação de conta
     // bem-sucedida na fila atual (mesma trava que esconde os campos).
+    // Rota é obrigatória nos 3 modos que usam LaneSelectField (elo_boost,
+    // win_boost/md5, clash) -- coaching não tem esse conceito.
     if (state.serviceType === 'elo_boost') {
-      return state.riotVerified && !!state.currentRank && !!state.targetRank && isValidRiotId(state.riotId)
+      return state.riotVerified && !!state.currentRank && !!state.targetRank && isValidRiotId(state.riotId) && state.customerLanes.length > 0
     }
     if (state.serviceType === 'win_boost' || state.serviceType === 'md5') {
       const winsOk = !!state.winsPurchased
         && state.winsPurchased >= 1
         && state.winsPurchased <= 5
         && (!state.isMd5 || state.md5MatchesRemaining == null || state.winsPurchased <= state.md5MatchesRemaining)
-      return state.riotVerified && !!state.currentRank && winsOk && isValidRiotId(state.riotId)
+      return state.riotVerified && !!state.currentRank && winsOk && isValidRiotId(state.riotId) && state.customerLanes.length > 0
     }
     if (state.serviceType === 'coaching') return !!state.selectedCoachPackage
     // Riot ID obrigatório nos dois modos de Clash (Solo: referência do
@@ -92,7 +95,7 @@ function isStepComplete(
     // convidar o cliente pro time). O tier é sempre derivado da verificação
     // Riot e não pode ser escolhido manualmente.
     if (state.serviceType === 'clash') {
-      return state.riotVerified && !!state.clashTier && !!state.clashDay && isValidRiotId(state.riotId)
+      return state.riotVerified && !!state.clashTier && !!state.clashDay && isValidRiotId(state.riotId) && state.customerLanes.length > 0
     }
   }
   return true
@@ -107,7 +110,7 @@ export function OrderBuilderPage() {
     setSelectedCoachPackage, setBasePrice, couponCode,
     winsPurchased, riotId, isMd5, md5MatchesRemaining, riotLookupLoading, riotVerified,
     selectedCoachPackage, setStepAttempted, winPackage, queueType,
-    clashTier, clashDay, dismissedOrderId, setDismissedOrderId,
+    clashTier, clashDay, dismissedOrderId, setDismissedOrderId, customerLanes,
   } = useOrderBuilderStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
@@ -395,7 +398,7 @@ export function OrderBuilderPage() {
   const stepComplete = isStepComplete(step, {
     serviceType, selectedCoachPackage, currentRank, targetRank,
     winsPurchased, riotId, isMd5, riotVerified, riotLookupLoading, md5MatchesRemaining,
-    clashTier, clashDay,
+    clashTier, clashDay, customerLanes,
   })
 
   return (

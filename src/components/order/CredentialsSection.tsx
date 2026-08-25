@@ -27,7 +27,6 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
 
   return (
     <div>
-      <h3 className="text-base font-semibold text-ink mb-1">Token de login</h3>
       <p className="text-xs text-ink-secondary mb-4">Evite entrar na conta até o pedido terminar.</p>
       {canSet && (
         <div className="space-y-3">

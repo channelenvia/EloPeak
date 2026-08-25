@@ -16,6 +16,7 @@ function baseInput(overrides: Partial<OrderPriceInput> = {}): OrderPriceInput {
     avgLpGain: 20,
     avgLpLoss: 20, // ganho == perda => efficiencyMod neutro (1.0), preço previsível para os testes
     currentPdl: null,
+    avgPdlGain: null,
     masterPlusPrice: null,
     winsPurchased: null,
     sessionsPurchased: null,

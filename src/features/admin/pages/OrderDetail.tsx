@@ -8,9 +8,11 @@ import { OrderDetailShell } from '@/components/order/OrderDetailShell'
 import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
+import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
+import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { supabase } from '@/lib/supabase'
 import { cn, formatDateTime, formatEstimatedDelivery, getOrderServiceName, orderRequiresAccountAccess, timeAgo } from '@/lib/utils'
 import type { Order, OrderStatus } from '@/types'
@@ -24,6 +26,7 @@ import {
     History, Lock,
     PauseCircle,
     Undo2,
+    Route,
     Shuffle,
     User,
     Users,
@@ -222,6 +225,7 @@ export function AdminOrderDetailPage() {
         </span>
       ) : 'Não informado',
     }] : []),
+    ...getLaneDisplayItems(order, 'admin').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
     {
       icon: User, label: 'Booster associado', value: (() => {
         const boosterId = order.assigned_booster_id ?? order.preferred_booster_id

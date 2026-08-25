@@ -457,7 +457,6 @@ export type Database = {
         Row: {
           available_days: string[] | null
           bio: string | null
-          blocked_until: string | null
           cpf: string | null
           created_at: string
           current_rank: Json | null
@@ -491,7 +490,6 @@ export type Database = {
         Insert: {
           available_days?: string[] | null
           bio?: string | null
-          blocked_until?: string | null
           cpf?: string | null
           created_at?: string
           current_rank?: Json | null
@@ -525,7 +523,6 @@ export type Database = {
         Update: {
           available_days?: string[] | null
           bio?: string | null
-          blocked_until?: string | null
           cpf?: string | null
           created_at?: string
           current_rank?: Json | null
@@ -1082,18 +1079,12 @@ export type Database = {
           losses_at_request: number
           order_id: string
           penalty_amount: number
-          penalty_bucket: string | null
-          penalty_fee_amount: number | null
-          penalty_fee_pct: number | null
           penalty_pct: number
           reason: string
           requested_by_role: Database["public"]["Enums"]["drop_requester_role"]
           resolved_at: string | null
           status: string
           status_at_request: Database["public"]["Enums"]["order_status"] | null
-          waived_at: string | null
-          waived_by: string | null
-          warning_issued: boolean
           wins_at_request: number
         }
         Insert: {
@@ -1105,18 +1096,12 @@ export type Database = {
           losses_at_request?: number
           order_id: string
           penalty_amount?: number
-          penalty_bucket?: string | null
-          penalty_fee_amount?: number | null
-          penalty_fee_pct?: number | null
           penalty_pct?: number
           reason: string
           requested_by_role?: Database["public"]["Enums"]["drop_requester_role"]
           resolved_at?: string | null
           status?: string
           status_at_request?: Database["public"]["Enums"]["order_status"] | null
-          waived_at?: string | null
-          waived_by?: string | null
-          warning_issued?: boolean
           wins_at_request?: number
         }
         Update: {
@@ -1128,18 +1113,12 @@ export type Database = {
           losses_at_request?: number
           order_id?: string
           penalty_amount?: number
-          penalty_bucket?: string | null
-          penalty_fee_amount?: number | null
-          penalty_fee_pct?: number | null
           penalty_pct?: number
           reason?: string
           requested_by_role?: Database["public"]["Enums"]["drop_requester_role"]
           resolved_at?: string | null
           status?: string
           status_at_request?: Database["public"]["Enums"]["order_status"] | null
-          waived_at?: string | null
-          waived_by?: string | null
-          warning_issued?: boolean
           wins_at_request?: number
         }
         Relationships: [
@@ -1169,13 +1148,6 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "order_drop_requests_waived_by_fkey"
-            columns: ["waived_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1552,6 +1524,7 @@ export type Database = {
           current_pdl: number | null
           current_rank: Json | null
           customer_id: string
+          customer_lanes: string[] | null
           customer_notes: string | null
           discord_text_channel_id: string | null
           discord_voice_channel_id: string | null
@@ -1616,6 +1589,7 @@ export type Database = {
           current_pdl?: number | null
           current_rank?: Json | null
           customer_id: string
+          customer_lanes?: string[] | null
           customer_notes?: string | null
           discord_text_channel_id?: string | null
           discord_voice_channel_id?: string | null
@@ -1680,6 +1654,7 @@ export type Database = {
           current_pdl?: number | null
           current_rank?: Json | null
           customer_id?: string
+          customer_lanes?: string[] | null
           customer_notes?: string | null
           discord_text_channel_id?: string | null
           discord_voice_channel_id?: string | null
@@ -2273,6 +2248,7 @@ export type Database = {
           created_at: string | null
           current_pdl: number | null
           current_rank: Json | null
+          customer_lanes: string[] | null
           drop_count: number | null
           estimated_hours: number | null
           exclusive_until: string | null
@@ -2307,6 +2283,7 @@ export type Database = {
           created_at?: string | null
           current_pdl?: number | null
           current_rank?: Json | null
+          customer_lanes?: string[] | null
           drop_count?: number | null
           estimated_hours?: number | null
           exclusive_until?: string | null
@@ -2341,6 +2318,7 @@ export type Database = {
           created_at?: string | null
           current_pdl?: number | null
           current_rank?: Json | null
+          customer_lanes?: string[] | null
           drop_count?: number | null
           estimated_hours?: number | null
           exclusive_until?: string | null
@@ -2819,10 +2797,6 @@ export type Database = {
       }
       update_order_status: {
         Args: { p_new_status: string; p_order_id: string; p_reason?: string }
-        Returns: Json
-      }
-      waive_drop_penalty: {
-        Args: { p_admin_note?: string; p_request_id: string }
         Returns: Json
       }
     }

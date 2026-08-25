@@ -57,11 +57,6 @@ export type NotificationType =
   | 'order_reassigned'
   | 'order_dropped_by_admin'
   | 'customer_requested_drop'
-  | 'drop_fee_applied'
-  | 'drop_warning_issued'
-  | 'booster_temporarily_blocked'
-  | 'booster_auto_suspended'
-  | 'drop_penalty_waived'
 
 // ─── Rank / Tier system ───────────────────────────────────────────────────────
 
@@ -129,7 +124,6 @@ export interface BoosterProfile {
   available_days: string[] | null
   verified_at: string | null
   last_active_at: string | null
-  blocked_until: string | null
   suspended_until: string | null
   created_at: string
   updated_at: string
@@ -272,6 +266,12 @@ export interface Order {
   drop_count: number
   rank_before_last_drop: Rank | null
   last_dropped_at: string | null
+  // Rotas escolhidas pelo cliente no configurador (elo_boost/win_boost/md5/
+  // clash) -- máx. 2, subconjunto de LANES (lolTaxonomy.ts). Semântica muda
+  // com boost_mode: solo = rota(s) pedida(s) pro booster jogar; duo = rota(s)
+  // que o próprio cliente vai jogar (o resto fica liberado pro booster,
+  // computado via getAvailableLanes, nunca armazenado).
+  customer_lanes: string[] | null
 }
 
 export interface OrderStatusHistory {
@@ -315,12 +315,6 @@ export interface OrderDropRequest {
   resolved_at: string | null
   requested_by_role: 'booster' | 'admin' | 'customer'
   status_at_request: OrderStatus | null
-  penalty_bucket: 'heavy_loss' | 'light_loss' | 'tied_or_winning' | null
-  penalty_fee_pct: number | null
-  penalty_fee_amount: number | null
-  warning_issued: boolean
-  waived_by: string | null
-  waived_at: string | null
 }
 
 export interface OrderMatch {

@@ -1,26 +1,18 @@
 // src/features/admin/pages/Drops.tsx
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, XCircle, ShieldOff } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { Button, EmptyState, Skeleton, Modal } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
-import { useAdminDropRequests, useResolveDropRequest, useWaiveDropPenalty } from '@/api/admin'
+import { useAdminDropRequests, useResolveDropRequest } from '@/api/admin'
 import { useBoosterNames } from '@/api/boosters'
-
-const BUCKET_LABEL: Record<string, string> = {
-  heavy_loss: 'Derrota pesada',
-  light_loss: 'Derrota leve',
-  tied_or_winning: 'Empate/vitória',
-}
 
 export function AdminDropsPage() {
   const currency = useCurrency()
   const [resolving, setResolving] = useState<{ id: string; approve: boolean } | null>(null)
   const [adminNote, setAdminNote] = useState('')
-  const [waiving, setWaiving] = useState<string | null>(null)
-  const [waiveNote, setWaiveNote] = useState('')
 
   const { data: requests, isLoading } = useAdminDropRequests()
 
@@ -37,8 +29,6 @@ export function AdminDropsPage() {
         { onSuccess: () => { setResolving(null); setAdminNote('') } },
       ),
   }
-
-  const waiveMutation = useWaiveDropPenalty()
 
   const pendingRequests = requests?.filter(r => r.status === 'pending') ?? []
   const pastRequests = requests?.filter(r => r.status !== 'pending') ?? []
@@ -150,10 +140,8 @@ export function AdminDropsPage() {
                   <TableHead>Origem</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Conclusão / Pagamento</TableHead>
-                  <TableHead>Penalidade</TableHead>
                   <TableHead>Resolvido</TableHead>
                   <TableHead>Nota admin</TableHead>
-                  <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,35 +163,8 @@ export function AdminDropsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-xs">{r.penalty_pct}% ({currency(r.penalty_amount)})</TableCell>
-                    <TableCell className="text-xs">
-                      {r.status !== 'approved' ? '—' : r.waived_at ? (
-                        <span className="text-ink-muted line-through">
-                          {BUCKET_LABEL[r.penalty_bucket ?? ''] ?? '—'}
-                          {(r.penalty_fee_amount ?? 0) > 0 && ` · ${currency(r.penalty_fee_amount!)}`}
-                          {r.warning_issued && ' · advertência'}
-                        </span>
-                      ) : (
-                        <span className={(r.penalty_fee_amount ?? 0) > 0 || r.warning_issued ? 'text-danger font-semibold' : 'text-ink-muted'}>
-                          {BUCKET_LABEL[r.penalty_bucket ?? ''] ?? '—'}
-                          {(r.penalty_fee_amount ?? 0) > 0 && ` · ${currency(r.penalty_fee_amount!)}`}
-                          {r.warning_issued && ' · advertência'}
-                        </span>
-                      )}
-                    </TableCell>
                     <TableCell className="text-xs">{r.resolved_at ? timeAgo(r.resolved_at) : '—'}</TableCell>
                     <TableCell><p className="text-xs text-ink-secondary max-w-xs truncate">{r.admin_note ?? '—'}</p></TableCell>
-                    <TableCell>
-                      {r.status === 'approved' && !r.waived_at && ((r.penalty_fee_amount ?? 0) > 0 || r.warning_issued) && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          leftIcon={<ShieldOff className="h-3 w-3" />}
-                          onClick={() => setWaiving(r.id)}
-                        >
-                          Isentar
-                        </Button>
-                      )}
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -242,41 +203,6 @@ export function AdminDropsPage() {
             onClick={() => resolving && resolve.mutate({ id: resolving.id, approve: resolving.approve, note: adminNote })}
           >
             Confirmar
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Waive penalty modal */}
-      <Modal
-        open={!!waiving}
-        onOpenChange={(open) => { if (!open) { setWaiving(null); setWaiveNote('') } }}
-        title="Isentar taxa/advertência de drop"
-        description="Estorna a taxa (se houver) e remove esta advertência do booster. Uso excepcional."
-      >
-        <div>
-          <label className="text-xs font-semibold text-ink-secondary block mb-1.5">
-            Motivo da isenção (opcional)
-          </label>
-          <textarea
-            value={waiveNote}
-            onChange={(e) => setWaiveNote(e.target.value)}
-            placeholder="Ex: bug do jogo, servidor caiu..."
-            className="input-base w-full min-h-[80px] resize-none text-sm"
-          />
-        </div>
-        <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={() => { setWaiving(null); setWaiveNote('') }}>
-            Cancelar
-          </Button>
-          <Button
-            variant="danger"
-            loading={waiveMutation.isPending}
-            onClick={() => waiving && waiveMutation.mutate(
-              { requestId: waiving, adminNote: waiveNote || undefined },
-              { onSuccess: () => { setWaiving(null); setWaiveNote('') } },
-            )}
-          >
-            Confirmar isenção
           </Button>
         </div>
       </Modal>

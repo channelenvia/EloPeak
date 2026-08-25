@@ -10,6 +10,8 @@ interface CustomerOrderCardProps {
   currency: (amount: number) => string
   /** Prefixo de rota pro link do card -- cliente usa /orders (padrão), admin reaproveita com /admin/orders. */
   basePath?: string
+  /** Admin reaproveita este card pra sua própria lista (ver features/admin/pages/Orders.tsx) -- muda só o enquadramento de rotas exibido (OrderCardDetails), o resto do card é idêntico. */
+  viewerRole?: 'customer' | 'admin'
 }
 
 // Padrão visual de referência pro card-resumo de pedido, reaproveitado por
@@ -17,7 +19,7 @@ interface CustomerOrderCardProps {
 // CompletedOrderCard (booster) e a lista de pedidos do admin (via basePath).
 // min-h fixo: mantém a altura igual entre cards com e sem addons/extras, em
 // vez de cada linha do grid ficar com altura diferente conforme o conteúdo.
-export function CustomerOrderCard({ order, currency, basePath = '/orders' }: CustomerOrderCardProps) {
+export function CustomerOrderCard({ order, currency, basePath = '/orders', viewerRole = 'customer' }: CustomerOrderCardProps) {
   return (
     <Link to={`${basePath}/${order.id}`}>
       <Card variant="interactive" className="h-full min-h-[300px] flex flex-col">
@@ -35,7 +37,7 @@ export function CustomerOrderCard({ order, currency, basePath = '/orders' }: Cus
         </div>
 
         <div className="flex-1">
-          <OrderCardDetails order={order} />
+          <OrderCardDetails order={order} viewerRole={viewerRole} />
         </div>
 
         <OrderCardFooter order={order} value={order.total_price} valueLabel="Total pago" currency={currency} />

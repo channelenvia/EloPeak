@@ -127,29 +127,6 @@ export async function getAdminBoosterDetail(boosterId: string): Promise<BoosterP
   return data as unknown as BoosterProfile
 }
 
-export async function getBoosterBlockedUntil(userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('booster_profiles')
-    .select('blocked_until')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (error) throw normalizeApiError(error)
-  return data?.blocked_until ?? null
-}
-
-export async function getBoosterActiveDropWarnings(boosterUserId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('order_drop_requests')
-    .select('id', { count: 'exact', head: true })
-    .eq('booster_id', boosterUserId)
-    .eq('status', 'approved')
-    .eq('warning_issued', true)
-    .is('waived_at', null)
-    .gt('resolved_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-  if (error) throw normalizeApiError(error)
-  return count ?? 0
-}
-
 export async function listBoosterAdminNotes(): Promise<Map<string, BoosterAdminNote>> {
   const { data, error } = await supabase.from('booster_admin_notes').select('*')
   if (error) throw normalizeApiError(error)

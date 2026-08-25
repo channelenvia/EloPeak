@@ -12,9 +12,18 @@ export const NO_DIVISION_TIERS: RankTier[] = ['master', 'grandmaster', 'challeng
 // League-V4 informa LP atual e totais de vitórias/derrotas, mas não expõe o
 // LP ganho/perdido por partida. Esta estimativa única é usada pela prévia e
 // pela cobrança, sempre no servidor e sem confiar em médias do navegador.
+// Master+/GM/Challenger usa a mesma técnica de faixas de win rate, só que
+// centrada nos 30 PDL/partida (MASTER_PLUS_LP_PER_GAME) em vez dos 22 LP do
+// fluxo padrão -- mesmo desvio relativo das faixas abaixo (±13,6%/±18,2%).
 export function estimateLpAverages(tier: RankTier, wins: number, losses: number): { gain: number; loss: number } {
-  if (NO_DIVISION_TIERS.includes(tier)) return { gain: 30, loss: 30 }
   const total = wins + losses
+  if (NO_DIVISION_TIERS.includes(tier)) {
+    if (total <= 0) return { gain: 30, loss: 30 }
+    const winRate = wins / total
+    if (winRate < 0.48) return { gain: 26, loss: 34 }
+    if (winRate > 0.55) return { gain: 35, loss: 25 }
+    return { gain: 30, loss: 30 }
+  }
   if (total <= 0) return { gain: 22, loss: 22 }
   const winRate = wins / total
   if (winRate < 0.48) return { gain: 19, loss: 25 }
@@ -360,15 +369,4 @@ export async function fetchMatchBody(
 
   const body = await resp.json() as RiotMatchV5Body
   return { ok: true, body }
-}
-
-export async function fetchMatchDetail(
-  matchId: string,
-  puuid: string,
-  apiKey: string,
-  regionalRoute: string,
-): Promise<MatchDetailResult> {
-  const bodyResult = await fetchMatchBody(matchId, apiKey, regionalRoute)
-  if (!bodyResult.ok) return bodyResult
-  return parseMatchDetail(bodyResult.body, puuid, matchId)
 }

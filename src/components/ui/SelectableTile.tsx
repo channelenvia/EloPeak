@@ -42,7 +42,12 @@ export interface SelectableTileProps
 
 export const SelectableTile = forwardRef<HTMLButtonElement, SelectableTileProps>(
   ({ className, selected, locked, tinted, size, children, disabled, ...props }, ref) => {
-    const state = locked ? 'locked' : selected ? (tinted ? 'selected-tinted' : 'selected') : 'default'
+    // `selected` tem prioridade sobre `locked` -- uma tile travada (ex.: a
+    // grade de "Rank Atual" inteira fica `disabled` após o auto-preenchimento
+    // pela Riot) que também é a opção selecionada precisa continuar
+    // aparecendo com o destaque de seleção, não com o visual apagado de
+    // "bloqueada". `disabled` no <button> abaixo já cuida de impedir clique.
+    const state = selected ? (tinted ? 'selected-tinted' : 'selected') : locked ? 'locked' : 'default'
     return (
       <button
         ref={ref}

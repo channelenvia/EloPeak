@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useBoosterSoundStore } from '@/stores/boosterSoundStore'
+import { useUnlockedAudioContext } from '@/hooks/useUnlockedAudioContext'
 import { playOrderSound } from './orderSoundLibrary'
 
 const FALLBACK_POLL_INTERVAL_MS = 15_000
@@ -14,7 +15,7 @@ const FALLBACK_POLL_INTERVAL_MS = 15_000
  */
 export function useNewOrderSound() {
   const queryClient = useQueryClient()
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const getAudioContext = useUnlockedAudioContext()
   const knownOrderIdsRef = useRef<Set<string>>(new Set())
   const initializedRef = useRef(false)
   const syncingRef = useRef(false)
@@ -31,7 +32,7 @@ export function useNewOrderSound() {
   }, [soundId, volume, muted])
 
   const playNotification = useCallback(() => {
-    const context = audioContextRef.current
+    const context = getAudioContext()
     if (!context) return
     const { soundId: id, volume: vol, muted: isMuted } = settingsRef.current
     if (isMuted) return
@@ -47,7 +48,7 @@ export function useNewOrderSound() {
       return
     }
     playOrderSound(context, id, vol)
-  }, [])
+  }, [getAudioContext])
 
   const syncVisibleOrders = useCallback(async () => {
     if (syncingRef.current) return
@@ -82,28 +83,6 @@ export function useNewOrderSound() {
       syncingRef.current = false
     }
   }, [playNotification, queryClient])
-
-  useEffect(() => {
-    // Browsers only permit sound after a user gesture. Any first click/key in
-    // the booster panel silently unlocks the audio context for later alerts.
-    const unlockAudio = () => {
-      if (!audioContextRef.current) audioContextRef.current = new AudioContext()
-      if (audioContextRef.current.state === 'suspended') {
-        void audioContextRef.current.resume()
-      }
-    }
-
-    window.addEventListener('pointerdown', unlockAudio)
-    window.addEventListener('keydown', unlockAudio)
-
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio)
-      window.removeEventListener('keydown', unlockAudio)
-      const context = audioContextRef.current
-      audioContextRef.current = null
-      if (context && context.state !== 'closed') void context.close()
-    }
-  }, [])
 
   useEffect(() => {
     void syncVisibleOrders()

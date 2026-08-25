@@ -1,9 +1,9 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Trophy, Swords, Users, ExternalLink, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Trophy, Swords, Users, ExternalLink } from 'lucide-react'
 import { Button, Card, BoosterStatusBadge, Avatar, Skeleton } from '@/components/ui'
-import { formatDate, formatDateTime, formatRank, formatLastSeen, safeOpggUrl } from '@/lib/utils'
+import { formatDate, formatRank, formatLastSeen, safeOpggUrl } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
-import { useAdminBoosterDetail, useBoosterActiveDropWarnings, useBoosterPerformanceByRank } from '@/api/boosters'
+import { useAdminBoosterDetail, useBoosterPerformanceByRank } from '@/api/boosters'
 import { useBoosterSlotInfo } from '@/api/orders'
 
 type RankBucket = 'gold_minus' | 'plat_diamond' | 'master_plus'
@@ -26,7 +26,6 @@ export function AdminBoosterDetailPage() {
   // partidas reais sincronizadas (order_matches) e reviews, nunca digitado
   // à mão (ver refresh_booster_performance_segments, migration 054).
   const { data: performanceSegments } = useBoosterPerformanceByRank(booster?.user_id)
-  const { data: activeWarnings } = useBoosterActiveDropWarnings(booster?.user_id)
 
   if (isLoading) return <Skeleton className="h-48 w-full" />
   if (!booster) return <p className="text-ink-muted">Booster não encontrado.</p>
@@ -136,28 +135,6 @@ export function AdminBoosterDetailPage() {
           ))}
         </div>
       </Card>
-
-      {/* Advertências de drop -- contador ativo (últimos 30 dias) + bloqueio
-          temporário, se houver. Isenção específica de um drop fica na tela
-          de Solicitações de Drop (/admin/drops), pra não duplicar a ação. */}
-      {(!!activeWarnings || (booster.blocked_until && new Date(booster.blocked_until) > new Date())) && (
-        <Card padding="md" className="ring-1 ring-warning/30">
-          <h3 className="text-base font-semibold text-ink mb-3 flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-warning" /> Advertências de Drop
-          </h3>
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span>
-              <span className="font-bold text-ink">{activeWarnings ?? 0}/5</span>{' '}
-              <span className="text-ink-muted">advertências ativas (últimos 30 dias)</span>
-            </span>
-            {booster.blocked_until && new Date(booster.blocked_until) > new Date() && (
-              <span className="badge text-xs font-bold text-danger bg-danger/10">
-                Bloqueado até {formatDateTime(booster.blocked_until)}
-              </span>
-            )}
-          </div>
-        </Card>
-      )}
 
       {/* Estatísticas por faixa de elo -- somente leitura, calculadas
           automaticamente a partir de partidas reais sincronizadas. */}

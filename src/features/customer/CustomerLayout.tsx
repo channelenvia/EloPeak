@@ -9,12 +9,14 @@ import { UserProfilePanel } from '@/components/UserProfilePanel'
 import { NotificationBell } from '@/components/NotificationBell'
 import { AppSidebar, type SidebarNavSection } from '@/components/layout/AppSidebar'
 import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'
+import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 
 export function CustomerLayout() {
   const { pathname } = useLocation()
   const { profile } = useAuthStore()
   const { t } = useTranslation()
   const [panelOpen, setPanelOpen] = useState(false)
+  useChatMentionSound()
 
   const NAV_ITEMS = [
     { href: '/dashboard',  icon: LayoutDashboard, label: t('customer.nav.dashboard') },

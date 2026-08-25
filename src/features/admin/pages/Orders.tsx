@@ -113,7 +113,7 @@ export function AdminOrdersPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {pageOrders.map((order) => (
-              <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" />
+              <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" viewerRole="admin" />
             ))}
           </div>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />

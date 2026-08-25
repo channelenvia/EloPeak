@@ -213,12 +213,18 @@ serve(async (req) => {
     const idsMostRecentFirst = idsResult.matchIds
 
     // Não reprocessa partidas já registradas — evita gastar chamadas da Riot
-    // com detalhe de partidas que já sabemos ter contabilizado.
-    const { data: existingMatches } = await serviceClient
-      .from('order_matches')
-      .select('external_match_id')
-      .eq('order_id', orderId)
-    const alreadyRecorded = new Set((existingMatches ?? []).map((m) => m.external_match_id as string))
+    // com detalhe de partidas que já sabemos ter contabilizado. Inclui
+    // order_ignored_matches (partidas duo já verificadas e descartadas,
+    // ex.: cliente jogou sozinho) -- sem isso, essas partidas nunca ficam
+    // "resolvidas" e voltariam em newMatchIds pra sempre, a cada sync.
+    const [{ data: existingMatches }, { data: ignoredMatches }] = await Promise.all([
+      serviceClient.from('order_matches').select('external_match_id').eq('order_id', orderId),
+      serviceClient.from('order_ignored_matches').select('external_match_id').eq('order_id', orderId),
+    ])
+    const alreadyRecorded = new Set([
+      ...(existingMatches ?? []).map((m) => m.external_match_id as string),
+      ...(ignoredMatches ?? []).map((m) => m.external_match_id as string),
+    ])
     const newMatchIds = idsMostRecentFirst.filter((id) => !alreadyRecorded.has(id))
     newMatchIds.reverse()
 
@@ -226,13 +232,16 @@ serve(async (req) => {
     const duoCheckedIds = new Set<string>()
     let duoRecordedCount = 0
 
-    async function attributeDuoMatch(body: RiotMatchV5Body, matchId: string): Promise<void> {
+    // Retorna se a conta duo participou DESSA partida específica -- usado
+    // pelo loop principal pra decidir se a partida conta como progresso do
+    // pedido (ver countsTowardOrder abaixo), além de gravar booster_duo_matches.
+    async function attributeDuoMatch(body: RiotMatchV5Body, matchId: string): Promise<boolean> {
       duoCheckedIds.add(matchId)
-      if (!duoPuuid) return
+      if (!duoPuuid) return false
       const duoDetail = parseMatchDetail(body, duoPuuid, matchId)
       // ok: false aqui só significa que a conta duo não estava NESSA partida
       // específica (ex.: o cliente jogou uma sozinho) -- não é um erro.
-      if (!duoDetail.ok) return
+      if (!duoDetail.ok) return false
       const d = duoDetail.detail
       // .select() faz a diferença aqui: com ignoreDuplicates, um conflito
       // vira um no-op que a Supabase reporta como sucesso (error: null) --
@@ -262,6 +271,7 @@ serve(async (req) => {
         .select('id')
       if (error) console.error('booster_duo_matches upsert failed', matchId, error.message)
       else if (upserted && upserted.length > 0) duoRecordedCount += 1
+      return true
     }
 
     for (const matchId of newMatchIds) {
@@ -271,6 +281,11 @@ serve(async (req) => {
         console.error('Riot match-v5 detail error', matchId, bodyResult.status)
         continue
       }
+
+      // Em Duo Boost checa a atribuição ANTES de chamar record_order_match --
+      // o próprio banco decide se conta (p_duo_participated abaixo), mas
+      // esse valor também alimenta o booster_duo_matches via attributeDuoMatch.
+      const duoParticipated = duoPuuid ? await attributeDuoMatch(bodyResult.body, matchId) : false
 
       const clientDetail = parseMatchDetail(bodyResult.body, clientPuuid, matchId)
       if (clientDetail.ok) {
@@ -289,8 +304,14 @@ serve(async (req) => {
           p_neutral_minions_killed: clientDetail.detail.neutralMinionsKilled,
           p_is_mvp: clientDetail.detail.isMvp,
           p_vision_score: clientDetail.detail.visionScore,
+          // Em Duo Boost, o cliente joga PARTIDO com o booster (conta
+          // separada) -- uma partida só conta pro progresso do pedido se a
+          // conta duo cadastrada participou dela; o banco recusa quando
+          // falso (ver migration 20260824020000). Solo Boost não tem conta
+          // duo, então o parâmetro é irrelevante (null).
+          p_duo_participated: order.boost_mode === 'duo' ? duoParticipated : null,
         })
-        const result = recordResult as { success?: boolean; inserted?: boolean; error?: string } | null
+        const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; skipped_reason?: string } | null
         if (recordErr || !result?.success) {
           console.error('record_order_match failed', result?.error ?? recordErr?.message)
           // Pedido pode ter saído de in_progress/paused durante a
@@ -303,10 +324,19 @@ serve(async (req) => {
             result: clientDetail.detail.result,
             champion: clientDetail.detail.champion,
           })
+        } else {
+          // Não inseriu mas também não é erro (ex.: duo não participou) --
+          // cacheia como ignorada pra não re-buscar essa MESMA partida na
+          // Riot em nenhum sync futuro (ver alreadyRecorded acima).
+          const { error: ignoreErr } = await serviceClient
+            .from('order_ignored_matches')
+            .upsert(
+              { order_id: orderId, external_match_id: clientDetail.detail.externalMatchId },
+              { onConflict: 'order_id,external_match_id', ignoreDuplicates: true },
+            )
+          if (ignoreErr) console.error('order_ignored_matches upsert failed', matchId, ignoreErr.message)
         }
       }
-
-      if (duoPuuid) await attributeDuoMatch(bodyResult.body, matchId)
     }
 
     // Backfill: partidas jogadas ANTES do booster cadastrar a conta duo já

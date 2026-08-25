@@ -62,6 +62,16 @@ verify_jwt = false
 [functions.discord-init-channels]
 verify_jwt = false
 
+# Mesmo caso de discord-order-channel acima: acionada só pelo trigger
+# notify_discord_chat_mention (pg_net), nunca por um usuário logado.
+[functions.discord-chat-mention]
+verify_jwt = false
+
+# Mesmo caso acima: acionada só pelo trigger notify_discord_review (pg_net,
+# migration 20260824070000), nunca por um usuário logado.
+[functions.discord-review-announcement]
+verify_jwt = false
+
 # Endpoint público e somente leitura. As demais funções chamadas pelo navegador
 # mantêm a verificação JWT padrão do gateway em produção. Para desenvolvimento
 # com uma sessão do projeto remoto, use o script functions:serve, que passa

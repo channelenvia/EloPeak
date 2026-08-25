@@ -44,6 +44,12 @@ interface OrderBuilderState {
   // rank alvo foi atingido antes de concluir o pedido.
   riotId: string
 
+  // Rotas (lanes) escolhidas no configurador -- elo_boost/win_boost/md5/
+  // clash, máx. 2. Semântica muda com boostMode (ver StepConfigure.tsx):
+  // solo = rota(s) pedida(s) pro booster jogar; duo = rota(s) que o cliente
+  // vai jogar ele mesmo.
+  customerLanes: string[]
+
   // Verdadeiro enquanto uma consulta à Riot (rank atual / elegibilidade MD5)
   // está em andamento — movido de useState local em StepConfigure.tsx para
   // o store pra que OrderBuilder.tsx possa bloquear o avanço de step
@@ -149,6 +155,7 @@ interface OrderBuilderState {
   setPreferredBooster: (id: string, name: string) => void
   clearPreferredBooster: () => void
   setRiotId: (riotId: string) => void
+  setCustomerLanes: (lanes: string[]) => void
   setRiotAutoFilled: (v: boolean) => void
   setRiotVerified: (v: boolean) => void
   setMd5Blocked: (v: boolean) => void
@@ -209,6 +216,7 @@ const initialState = {
   preferredBoosterId: null,
   preferredBoosterName: null,
   riotId: '',
+  customerLanes: [] as string[],
   riotAutoFilled: false,
   riotVerified: false,
   md5Blocked: false,
@@ -262,12 +270,16 @@ function flowFor(serviceType: ServiceType | null, rank: Rank | null, mode: Boost
   return getBoostFlow(rank.tier, mode as BoostFlowMode)
 }
 
-// Persistido em localStorage -- pra sobreviver a fechar a aba/navegador, não
-// só a um reload/troca de aba. O cliente pode configurar um pedido, sair do
-// site (fechar a aba, trocar de app, etc.) e retomar exatamente de onde
-// parou dias depois. Continua limpo nos pontos certos do ciclo de vida
-// (reset() roda ao confirmar pagamento e ao clicar em "Configurar novo
-// pedido"/"Voltar" para começar do zero), então não acumula lixo indefinido.
+// Persistido em sessionStorage -- sobrevive a reload e troca de aba dentro da
+// MESMA sessão do navegador (o cliente pode configurar um pedido, trocar de
+// aba, voltar, e o rascunho continua lá), mas nunca sobrevive a fechar a
+// aba/navegador -- diferente de localStorage, que ficaria salvo
+// indefinidamente. Também é limpo explicitamente no logout (ver
+// handleSignOut em UserProfilePanel.tsx) -- sem isso, um rascunho ficaria
+// visível pro próximo usuário que logasse na mesma aba/computador. Continua
+// limpo nos outros pontos certos do ciclo de vida (reset() roda ao confirmar
+// pagamento e ao clicar em "Configurar novo pedido"/"Voltar" para começar do
+// zero), então não acumula lixo indefinido mesmo dentro da sessão.
 export const useOrderBuilderStore = create<OrderBuilderState>()(
   persist(
     (set, get) => ({
@@ -315,6 +327,9 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
     winPackage: null,
     selectedCoachPackage: null,
     sessionsPurchased: null,
+    // Rotas são específicas do fluxo (elo_boost/win_boost/md5/clash) e da
+    // modalidade -- trocar de serviço sempre limpa, o cliente escolhe de novo.
+    customerLanes: [],
   }),
 
   setCurrentRank: (currentRank) => set((state) => {
@@ -360,6 +375,10 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
       // modalidade remove completamente os addons incompatíveis do estado,
       // não só da tela.
       selectedExtraIds: flowChanged ? new Set<string>() : state.selectedExtraIds,
+      // Rotas têm significado oposto em solo (rota pedida pro booster) e duo
+      // (rota que o próprio cliente joga) -- nunca carregar de um modo pro
+      // outro, o cliente escolhe de novo.
+      customerLanes: boostMode !== state.boostMode ? [] : state.customerLanes,
     }
   }),
 
@@ -428,6 +447,7 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
   // início da próxima busca (clearRiotLookup), pra não apagar dados enquanto
   // o usuário ainda está digitando.
   setRiotId: (riotId) => set({ riotId, riotAutoFilled: false, riotVerified: false, md5Blocked: false }),
+  setCustomerLanes: (customerLanes) => set({ customerLanes: customerLanes.slice(0, 2) }),
   setRiotAutoFilled: (riotAutoFilled) => set({ riotAutoFilled }),
   setRiotVerified: (riotVerified) => set({ riotVerified }),
   setMd5Blocked: (md5Blocked) => set({ md5Blocked }),
@@ -453,7 +473,7 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
     }),
     {
       name: 'eloboost-order-builder',
-      storage: createJSONStorage(() => localStorage, {
+      storage: createJSONStorage(() => sessionStorage, {
         // Set não é serializável em JSON puro -- codifica/decodifica
         // explicitamente (selectedExtraIds é o único Set no estado).
         replacer: (_key, value) => (value instanceof Set ? { __set: [...value] } : value),

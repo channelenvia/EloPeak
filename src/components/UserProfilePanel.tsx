@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { X, LogOut } from 'lucide-react'
 import { Avatar } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
+import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { signOut } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { AvatarIconPicker } from '@/components/profile/AvatarIconPicker'
@@ -143,6 +144,10 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
 
   async function handleSignOut() {
     await signOut()
+    // Rascunho do configurador de pedido não pode sobreviver a um logout --
+    // senão o próximo login na mesma aba/computador (outra conta) veria/
+    // continuaria o rascunho de quem saiu.
+    useOrderBuilderStore.getState().reset()
     navigate('/')
   }
 

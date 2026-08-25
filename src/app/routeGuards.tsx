@@ -1,10 +1,27 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLoader } from '@/components/ui/Spinner'
 import { hasAcceptedLegal } from '@/lib/legal'
 
+// Volta pro topo em toda navegação -- sem isso, ao trocar de página o scroll
+// ficava na mesma posição da tela anterior (comportamento padrão de qualquer
+// app real é começar do topo). SuspensePage envolve TODA rota de página (ver
+// router.tsx), então este é o único lugar que precisa disso -- não duplicado
+// por layout. Reseta os dois tipos de contêiner de scroll que o app usa:
+// window (páginas públicas, que rolam o body normalmente) e o <main
+// overflow-auto> interno dos painéis logados (cliente/booster/admin ficam
+// h-screen overflow-hidden, então o body nunca rola).
+function useScrollToTopOnNavigate() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    document.querySelector('main')?.scrollTo({ top: 0 })
+  }, [pathname])
+}
+
 export function SuspensePage({ children }: { children: React.ReactNode }) {
+  useScrollToTopOnNavigate()
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>
 }
 

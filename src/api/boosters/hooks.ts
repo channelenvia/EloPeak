@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
 import {
-  getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterActiveDropWarnings, getBoosterBlockedUntil, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
+  getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
   getOwnBoosterTop3Status, getOwnProfessionalProfile, getPublicBooster, getTopBoosters, listAdminBoosters,
   listBoosterAdminNotes, listBoostersPerformance, listBoosterNames, listPublicBoosters,
 } from './queries'
@@ -154,22 +154,6 @@ export function useAdminBoosterDetail(boosterId: string | undefined) {
     enabled: !!boosterId,
   })
   return query
-}
-
-export function useBoosterActiveDropWarnings(boosterUserId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.boosters.dropWarnings(boosterUserId ?? ''),
-    queryFn: () => getBoosterActiveDropWarnings(boosterUserId!),
-    enabled: !!boosterUserId,
-  })
-}
-
-export function useBoosterBlockedUntil(boosterUserId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.boosters.blockedUntil(boosterUserId ?? ''),
-    queryFn: () => getBoosterBlockedUntil(boosterUserId!),
-    enabled: !!boosterUserId,
-  })
 }
 
 export function useBoosterNames(boosterUserIds: string[]) {

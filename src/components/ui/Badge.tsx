@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import type { Order, BoosterStatus } from '@/types'
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, getOrderStatusGroup, ORDER_STATUS_GROUP_LABEL, ORDER_STATUS_GROUP_COLOR,
-  BOOSTER_STATUS_LABEL, BOOSTER_STATUS_COLOR,
+  BOOSTER_STATUS_LABEL, BOOSTER_STATUS_COLOR, isOrderOverdue,
 } from '@/lib/utils'
 
 // Antes só existia como wrapper interno (não exportado) — ~6 lugares no app
@@ -50,12 +50,28 @@ export function Badge({ className, variant, children, dot }: BadgeProps) {
 // canceled/refunded/disputed, que não têm grupo próprio e caem no rótulo
 // granular original (o único contexto em que ainda aparecem é a auditoria
 // do admin, onde a distinção entre os três importa).
-export function OrderStatusBadge({ order }: { order: Pick<Order, 'status' | 'assigned_booster_id'> }) {
+type OrderStatusBadgeOrder =
+  Pick<Order, 'status' | 'assigned_booster_id'> & Partial<Pick<Order, 'match_sync_started_at' | 'estimated_hours'>>
+
+export function OrderStatusBadge({ order }: { order: OrderStatusBadgeOrder }) {
   const group = getOrderStatusGroup(order)
   if (group === 'hidden') {
     return (
       <Badge className={ORDER_STATUS_COLOR[order.status]} dot>
         {ORDER_STATUS_LABEL[order.status]}
+      </Badge>
+    )
+  }
+  // Atraso sobrepõe o rótulo/cor normal do grupo "em andamento" -- o
+  // usuário precisa ver que o prazo estourou olhando só pro badge, sem
+  // depender de reparar no aviso separado do CountdownTimer.
+  if (group === 'in_progress' && isOrderOverdue({
+    match_sync_started_at: order.match_sync_started_at ?? null,
+    estimated_hours: order.estimated_hours ?? null,
+  })) {
+    return (
+      <Badge className="text-danger bg-danger/10" dot>
+        Atrasado
       </Badge>
     )
   }

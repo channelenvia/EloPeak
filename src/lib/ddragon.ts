@@ -116,6 +116,16 @@ export function resolveChampionName(champion: string, championIndex?: DdragonCha
   return findChampion(champion, championIndex)?.name ?? champion.trim()
 }
 
+// O índice tem cada campeão duplicado (uma entrada por chave id e por chave
+// nome, ver useDdragonChampionIds acima) -- dedup por id antes de sortear,
+// senão campeões com nome != id normalizado ficariam com o dobro de chance.
+export function pickRandomChampion(championIndex?: DdragonChampionIndex): DdragonChampion | undefined {
+  if (!championIndex) return undefined
+  const unique = [...new Map(Object.values(championIndex).map((c) => [c.id, c])).values()]
+  if (unique.length === 0) return undefined
+  return unique[Math.floor(Math.random() * unique.length)]
+}
+
 // Partidas da Riot já trazem o id canônico; campos livres de serviços usam o
 // índice opcional para chegar a esse mesmo id antes de montar a URL.
 export function championIconUrl(champion: string | null, version: string | null, championIndex?: DdragonChampionIndex): string | null {

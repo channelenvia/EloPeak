@@ -19,9 +19,11 @@ import { OrderDetailShell } from '@/components/order/OrderDetailShell'
 import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
+import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Skeleton } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
+import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { AUTO_SYNC_INTERVAL_MS, shouldAutoSync } from '@/lib/matchSync'
 import { canMarkOrderComplete } from '@/lib/orderCompletionGate'
 import { boosterEarningsShare, formatRank, getOrderServiceName, orderRequiresAccountAccess } from '@/lib/utils'
@@ -38,6 +40,7 @@ import {
     History,
     Lock,
     Play,
+    Route,
     Shuffle, Trophy,
     User,
     Users,
@@ -167,6 +170,7 @@ export function JobDetailPage() {
   if (!order) return null
 
   const { isBoostFlow, isClash, modeLabel, clashClosingLabel } = getOrderDetailInfo(order)
+  const laneDisplayItems = getLaneDisplayItems(order, 'booster')
   const isRankGated = order.target_rank != null
   const completionGate = canMarkOrderComplete(order, new Date())
   const objectiveReached = completionGate.allowed
@@ -251,12 +255,13 @@ export function JobDetailPage() {
         ),
       }]
       : []),
+    ...laneDisplayItems.map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
     {
       icon: Clock, label: 'Entrega estimada', value: isClash
         ? clashClosingLabel
         : (order.estimated_hours ? formatEstimatedDeliveryLabel(order.estimated_hours) : 'Não disponível'),
     },
-    { icon: Wallet, label: t('booster.job.earnings'), value: currency(order.total_price * boosterEarningsShare(isTop3)) },
+    { icon: Wallet, label: t('booster.job.earnings'), value: currency(order.total_price * boosterEarningsShare(isTop3, order.service_type)) },
   ]
 
   return (

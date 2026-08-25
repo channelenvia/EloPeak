@@ -305,7 +305,7 @@ VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
 VITE_SUPABASE_ANON_KEY=<sua-anon-key>
 
 # Discord (link do servidor de suporte)
-VITE_DISCORD_TICKET_URL=https://discord.gg/<seu-invite>
+VITE_DISCORD_TICKET_URL=https://discord.gg/xxMSSExG
 ```
 
 ### Edge Functions (`supabase/functions/.env.local`)
@@ -394,7 +394,7 @@ Configuradas como exceção em `supabase/config.toml`:
 
 ## Banco de Dados
 
-O schema é gerenciado por **migrações SQL incrementais** em `supabase/migrations/` (atualmente na migração `168`).
+O schema é gerenciado por **migrações SQL incrementais** em `supabase/migrations/`. Migrações antigas e já aplicadas são periodicamente movidas para `supabase/migrations_archive/` (local, fora do git) para não pesar os commits — o histórico completo continua disponível lá.
 
 ### Principais entidades
 
