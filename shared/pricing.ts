@@ -400,35 +400,36 @@ export function lpModifierPct(avgLpPerGame: number): number {
   return 0
 }
 
-// ── Master+ — desconto por PDL/vitória real vs. a progressão padrão ────────
-// A tabela master_plus_pricing embute a progressão padrão de 30 PDL/vitória
-// (MASTER_PLUS_LP_PER_GAME) -- winValue é o preço cheio dividido por quantas
-// vitórias essa progressão padrão levaria até o alvo. O cliente cuja conta
-// ganha PDL mais rápido que o padrão precisa de menos vitórias reais
-// (avgPdlGain vindo da Riot) para chegar lá, então desconta-se apenas 15% do
-// valor de cada vitória real estimada -- nunca deixa o preço final negativo.
-export const MASTER_PLUS_PDL_WIN_VALUE_PCT = 15
+// ── Master+ — desconto do trecho Mestre 0PDL→alvo ───────────────────────────
+// Determinístico, nunca depende de média real vinda da Riot: a progressão
+// comercial do trecho Master+ é sempre 30 PDL/vitória (MASTER_PLUS_LP_PER_GAME),
+// então o número de vitórias necessárias é o mesmo já usado pra estimar prazo
+// (gamesToPassMasterPlusCutoff). Cada vitória desconta 5% do preço da Vitória
+// Avulsa NO RANK ATUAL da conta (Diamond, Mestre, Grão-Mestre...) -- mesma
+// regra tanto pra quem já está em Mestre+ quanto pro trecho Mestre->alvo de
+// quem vem de Diamond- (current_pdl sempre 0 nesse caso) -- nunca deixa o
+// preço final negativo.
+export const MASTER_PLUS_PDL_WIN_VALUE_PCT = 5
 
 export function applyMasterPlusPdlDiscount(
   basePrice: number,
   targetTier: 'grandmaster' | 'challenger',
   currentPdl: number,
-  avgPdlGain: number | null | undefined,
+  currentTier: RankTier,
+  queue: QueueType,
   masterPlusCutoffs?: MasterPlusCutoffs,
 ): number {
   if (basePrice <= 0) return basePrice
-  if (avgPdlGain == null || !Number.isFinite(avgPdlGain) || avgPdlGain <= 0) return basePrice
   const clampedPdl = Math.max(0, currentPdl)
   const targetLp = masterPlusTargetLp(targetTier, masterPlusCutoffs)
   const distance = targetLp - clampedPdl
   if (distance <= 0) return basePrice
-  const baselineWins = gamesToPassMasterPlusCutoff(clampedPdl, targetLp)
-  if (baselineWins <= 0) return basePrice
+  const winsNeeded = gamesToPassMasterPlusCutoff(clampedPdl, targetLp)
+  if (winsNeeded <= 0) return basePrice
 
   const baseCents = moneyToCents(basePrice)
-  const winValueCents = baseCents / baselineWins
-  const realWinsNeeded = Math.ceil(distance / avgPdlGain)
-  const decrementCents = Math.round(realWinsNeeded * winValueCents * (MASTER_PLUS_PDL_WIN_VALUE_PCT / 100))
+  const winValueCents = moneyToCents(getWinBoostPrice(queue, currentTier))
+  const decrementCents = Math.round(winsNeeded * winValueCents * (MASTER_PLUS_PDL_WIN_VALUE_PCT / 100))
   const cappedDecrementCents = Math.min(Math.max(0, decrementCents), baseCents)
   return centsToMoney(baseCents - cappedDecrementCents)
 }
@@ -482,11 +483,11 @@ export interface OrderPriceInput {
   avgLpGain: number
   avgLpLoss: number
   currentPdl: number | null
-  // Média real de PDL ganho por vitória do riot_id, estimada por faixa de
-  // win rate (ver estimateLpAverages em riotLookup.ts) -- só preenchida
-  // quando o rank ATUAL já é Master+/GM/Challenger (não há partidas em PDL
-  // pra quem ainda não chegou lá). Usada só pelo desconto de
-  // applyMasterPlusPdlDiscount, nunca pelo modificador de LP do fluxo padrão.
+  // Progressão comercial fixa de 30 PDL/vitória (MASTER_PLUS_LP_PER_GAME) --
+  // só preenchida quando o rank ATUAL já é Master+/GM/Challenger. Usada
+  // apenas pra registro/estimativa de progresso do pedido (orders.avg_pdl_gain),
+  // nunca entra no cálculo de preço -- applyMasterPlusPdlDiscount é
+  // determinístico e não depende deste campo.
   avgPdlGain: number | null
   // Preço já consultado em `master_plus_pricing` para a combinação (origem,
   // destino, fila, degrau de PDL atual) — null quando a faixa ainda não tem
@@ -567,7 +568,8 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
             basePrice,
             targetRank.tier as 'grandmaster' | 'challenger',
             input.currentPdl ?? 0,
-            input.avgPdlGain,
+            currentRank.tier,
+            input.queueType,
             input.masterPlusCutoffs,
           )
           estimatedHours = estimateEloBoostHours({
@@ -597,7 +599,15 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
         // não entra aqui: já está totalmente coberto pelo calcEloPrice acima.
         if (targetRank.tier === 'grandmaster' || targetRank.tier === 'challenger') {
           if (input.masterPlusPrice == null) { basePrice = 0; break }
-          combinedCents += moneyToCents(input.masterPlusPrice)
+          const discountedMasterPlusPrice = applyMasterPlusPdlDiscount(
+            input.masterPlusPrice,
+            targetRank.tier,
+            0,
+            currentRank.tier,
+            input.queueType,
+            input.masterPlusCutoffs,
+          )
+          combinedCents += moneyToCents(discountedMasterPlusPrice)
         }
 
         basePrice = boostMode === 'duo'

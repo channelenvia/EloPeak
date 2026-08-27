@@ -46,6 +46,18 @@ export function BoosterPublicProfilePage() {
   // -- igual TestimonialsCarousel, que só busca reviews com content != null.
   const reviewsWithContent = reviews.filter((r): r is typeof r & { content: string } => !!r.content)
 
+  // A esteira (marquee) só fecha o loop sem "costura" duplicando a lista (o
+  // -50% do keyframe precisa bater com uma cópia idêntica). Isso é invisível
+  // na home (16 depoimentos fixos, sempre mais que o suficiente pra preencher
+  // a tela), mas um booster real costuma ter poucas avaliações -- duplicando
+  // 2-3 delas as duas cópias ficam visíveis ao mesmo tempo e parecem
+  // avaliações repetidas. Só habilita a esteira quando há avaliações
+  // suficientes pra uma única cópia já preencher a largura máxima do
+  // container (container-wide = 1536px - padding ≈ 1408px; cards w-80 +
+  // gap-5 ≈ 340px cada => ~5 preenchem; 6 dá margem de sobra).
+  const MIN_REVIEWS_FOR_MARQUEE = 6
+  const useMarquee = reviewsWithContent.length >= MIN_REVIEWS_FOR_MARQUEE
+
   const statCells: {
     key: string
     label: string
@@ -208,11 +220,12 @@ export function BoosterPublicProfilePage() {
         </div>
         {!reviewsWithContent.length ? (
           <EmptyState icon={MessageSquare} title="Este booster ainda não recebeu avaliações." />
-        ) : (
+        ) : useMarquee ? (
           // Mesmo card e mesmo mecanismo de esteira do TestimonialsCarousel da
           // home (src/features/public/components/TestimonialsCarousel.tsx) --
-          // duplica a lista sempre (mesmo com poucas avaliações) pra fechar o
-          // loop visual sem emenda, já que a animação desloca -50%.
+          // duplica a lista pra fechar o loop visual sem emenda, já que a
+          // animação desloca -50% (só entra aqui com avaliações suficientes,
+          // ver useMarquee acima, senão as duas cópias aparecem juntas).
           <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
             <div className="flex w-max gap-5 animate-marquee group-hover:[animation-play-state:paused]">
               {[...reviewsWithContent, ...reviewsWithContent].map((review, i) => (
@@ -228,6 +241,23 @@ export function BoosterPublicProfilePage() {
                 />
               ))}
             </div>
+          </div>
+        ) : (
+          // Poucas avaliações: lista estática, cada uma renderizada uma única
+          // vez (sem duplicar pro loop da esteira, que faria parecer repetida).
+          <div className="flex flex-wrap gap-5">
+            {reviewsWithContent.map((review) => (
+              <TestimonialCard
+                key={review.id}
+                rating={review.rating}
+                content={review.content!}
+                booster_display_name={booster.display_name}
+                customer_name={review.customer_nickname}
+                service_label={getServiceLabel(review.service_type)}
+                showBoosterBadge={false}
+                className="w-80 shrink-0"
+              />
+            ))}
           </div>
         )}
       </div>

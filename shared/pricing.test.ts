@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeOrderPrice, calcEloPrice, getEloDivPrice, getWinBoostPrice, getMd5WinPrice, applyLpModifier, lpModifierPct,
-  estimateEloBoostHours, moneyToCents, centsToMoney, PLACEMENT_PRICE, applyCoupon, getClashBasePrice, CLASH_ESTIMATED_HOURS,
+  applyMasterPlusPdlDiscount, estimateEloBoostHours, moneyToCents, centsToMoney, PLACEMENT_PRICE, applyCoupon,
+  getClashBasePrice, CLASH_ESTIMATED_HOURS,
   type OrderPriceInput, type RankTier,
 } from './pricing'
 
@@ -67,14 +68,15 @@ describe('Cálculo de addons — percentual sobre o preço base, não composto (
 })
 
 describe('Master+ — preço vem exclusivamente da tabela comercial (seção 14)', () => {
-  it('usa masterPlusPrice diretamente como preço base quando informado', () => {
+  it('usa masterPlusPrice como preço base, com o desconto fixo do trecho Mestre->alvo já aplicado', () => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'master', division: null },
       targetRank: { tier: 'challenger', division: null },
       masterPlusPrice: 250,
     }))
-    expect(priced.basePrice).toBe(250)
-    expect(priced.totalPrice).toBe(250)
+    const expected = applyMasterPlusPdlDiscount(250, 'challenger', 0, 'master', 'solo_duo')
+    expect(priced.basePrice).toBe(expected)
+    expect(priced.totalPrice).toBe(expected)
   })
 
   it('preço fica zerado (pedido bloqueado) quando a faixa não tem preço configurado', () => {
@@ -216,14 +218,36 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
     expect(toChallenger.price).toBe(toMaster.price)
   })
 
-  it('soma o preço por divisão (até Mestre) com o preço do Master+ informado', () => {
+  it('soma o preço por divisão (até Mestre) com o preço do Master+ informado, descontado pelo rank atual (Diamond)', () => {
     const { price: toMaster } = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'grandmaster', division: null },
       masterPlusPrice: 899.90,
     }))
-    expect(priced.basePrice).toBeCloseTo(toMaster + 899.90, 2)
+    const discountedMasterPlus = applyMasterPlusPdlDiscount(899.90, 'grandmaster', 0, 'diamond', 'solo_duo')
+    expect(priced.basePrice).toBeCloseTo(toMaster + discountedMasterPlus, 2)
+  })
+
+  it('desconto do trecho Mestre->alvo usa o win price do rank ATUAL (Diamond), não o de Mestre -- mesma fórmula do fluxo Master+ puro, só troca a tabela de referência', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'diamond', division: 'I' },
+      targetRank: { tier: 'grandmaster', division: null },
+      masterPlusPrice: 899.90,
+    }))
+    const { price: toMaster } = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
+    const masterPlusSegment = priced.basePrice - toMaster
+    // Desconto real aplicado ao trecho tem que ser estritamente menor que o
+    // preço cheio informado -- prova que o desconto (não implementado antes
+    // pra pedidos que partem de Diamond-) está de fato entrando no cálculo.
+    expect(masterPlusSegment).toBeLessThan(899.90)
+    // E tem que bater com o preço da Vitória Avulsa em Diamond, não em Mestre
+    // (o rank ATUAL da conta é Diamond nesse pedido).
+    const diamondWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'diamond'))
+    const masterWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'master'))
+    expect(diamondWinValue).not.toBe(masterWinValue)
+    const expectedSegment = applyMasterPlusPdlDiscount(899.90, 'grandmaster', 0, 'diamond', 'solo_duo')
+    expect(masterPlusSegment).toBeCloseTo(expectedSegment, 2)
   })
 
   it('sem masterPlusPrice configurado pro alvo, bloqueia o pedido (basePrice zerado) em vez de inventar preço', () => {
@@ -266,7 +290,7 @@ describe('Integridade monetária e entradas hostis', () => {
   it('arredonda percentuais uma única vez na menor unidade monetária', () => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'master', division: null },
-      targetRank: { tier: 'challenger', division: null },
+      targetRank: null, // sem alvo -- masterPlusPrice fica intacto, sem o desconto do trecho Mestre->alvo
       masterPlusPrice: 10.01,
       extras: [{ id: 'fractional', priceModifier: 0, priceModifierPct: 15 }],
     }))

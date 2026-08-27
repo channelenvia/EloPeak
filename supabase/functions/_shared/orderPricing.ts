@@ -91,7 +91,7 @@ const routingSchema = z.object({
 
 // Riot ID: gameName#tagLine. gameName é 3-16 chars (regras da Riot),
 // tagLine é 2-5 alfanuméricos.
-const riotIdSchema = z.string().regex(/^.{3,16}#[A-Za-z0-9]{2,5}$/, 'Riot ID inválido (formato: nome#tag)')
+const riotIdSchema = z.string().regex(/^.{3,16}#[^#]{2,5}$/, 'Riot ID inválido (formato: nome#tag)')
 
 // Rotas escolhidas pelo cliente no configurador -- mesma regra de
 // booster_services.lanes (migration 160): no máximo 2, subconjunto fixo das
@@ -409,7 +409,6 @@ export async function validateAndPriceIntent(
     if (rankStep(mp.target_rank.tier, null) <= rankStep(mp.current_rank.tier, null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
-    if (!mp.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     // pdlBracket é só informativo (gravado em orders.pdl_bracket) — não entra
     // mais na chave de preço, que agora é um valor fixo por tier alvo.
     pdlBracket = getPdlBracket(mp.current_pdl)
@@ -427,8 +426,9 @@ export async function validateAndPriceIntent(
     }
     masterPlusPrice = masterPlusPriceValue
 
-    // Corte atual de GM/Challenger, se já cacheado (riot-league-cutoffs) —
-    // só afeta a estimativa de horas exibida/gravada, nunca o preço acima.
+    // Corte atual de GM/Challenger, se já cacheado (riot-league-cutoffs) --
+    // afeta tanto a estimativa de horas quanto o desconto do trecho
+    // Mestre->alvo (applyMasterPlusPdlDiscount, via masterPlusTargetLp).
     // Sem cache ainda: computeOrderPrice cai pros alvos fixos default.
     const { data: cutoffRows } = await serviceClient
       .from('riot_league_cutoffs')
@@ -475,7 +475,6 @@ export async function validateAndPriceIntent(
     if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
-    if (!std.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'elo_boost',
       serviceId: std.service_id,
@@ -520,6 +519,21 @@ export async function validateAndPriceIntent(
         return { ok: false, response: badRequest(req, 'Preço ainda não configurado para essa combinação de tiers. Fale com o suporte.') }
       }
       masterPlusPrice = priceValue
+
+      // Mesmo corte ao vivo (riot-league-cutoffs) usado pelo fluxo Master+ --
+      // afeta a estimativa de horas E o desconto do trecho Mestre->alvo
+      // (applyMasterPlusPdlDiscount). Sem cache ainda: cai pros alvos fixos
+      // default (MASTER_PLUS_TARGET_LP).
+      const { data: cutoffRows } = await serviceClient
+        .from('riot_league_cutoffs')
+        .select('tier, cutoff_lp')
+        .eq('queue', std.queue_type)
+      if (cutoffRows?.length) {
+        masterPlusCutoffs = {
+          grandmaster: cutoffRows.find((r) => r.tier === 'grandmaster')?.cutoff_lp ?? null,
+          challenger: cutoffRows.find((r) => r.tier === 'challenger')?.cutoff_lp ?? null,
+        }
+      }
     }
   } else if (routed.data.service_type === 'md5') {
     const md5 = parsedIntent.data as z.infer<typeof md5IntentSchema>
@@ -529,7 +543,6 @@ export async function validateAndPriceIntent(
     if (md5.boost_mode === 'duo' && isMasterPlusCurrentTier(md5.current_rank.tier)) {
       return { ok: false, response: badRequest(req, 'Duo não é aceito para Mestre ou superior') }
     }
-    if (!md5.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'md5',
       serviceId: md5.service_id,
@@ -559,7 +572,6 @@ export async function validateAndPriceIntent(
     }
   } else if (routed.data.service_type === 'clash') {
     const clash = parsedIntent.data as z.infer<typeof clashIntentSchema>
-    if (!clash.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     normalized = {
       serviceType: 'clash',
       serviceId: clash.service_id,
@@ -598,7 +610,6 @@ export async function validateAndPriceIntent(
       if (other.win_package) return { ok: false, response: badRequest(req, 'Pacote de vitórias extras não é aceito em Vitórias') }
       if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em Vitórias') }
       if (!other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID é obrigatório para Vitórias') }
-      if (!other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Selecione ao menos uma rota') }
     }
     if (other.service_type === 'placement_matches') {
       if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank final da última temporada é obrigatório para MD5 Completo') }
@@ -713,8 +724,11 @@ export async function validateAndPriceIntent(
     normalized.currentPdl = verifiedMasterPlus ? leaguePoints : null
     normalized.avgLpGain = verifiedMasterPlus ? 30 : averages.gain
     normalized.avgLpLoss = verifiedMasterPlus ? 30 : averages.loss
-    normalized.avgPdlGain = verifiedMasterPlus ? averages.gain : null
-    normalized.avgPdlLoss = verifiedMasterPlus ? averages.loss : null
+    // Master+ nunca usa a média real de PDL/vitória vinda da Riot -- a
+    // progressão comercial é sempre fixa em 30 PDL/partida (mesmo valor de
+    // MASTER_PLUS_LP_PER_GAME). A média da API só entra para Diamond-.
+    normalized.avgPdlGain = verifiedMasterPlus ? 30 : null
+    normalized.avgPdlLoss = verifiedMasterPlus ? 30 : null
 
     if (normalized.serviceType === 'elo_boost') {
       if (!normalized.targetRank

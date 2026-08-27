@@ -51,11 +51,11 @@ export function StepReview() {
     ...((isBoostFlow || isClash) ? [{ icon: Shuffle, label: 'Modo', value: modoLabel }] : []),
     ...(isBoostFlow ? [{ icon: Users, label: 'Fila', value: queueType === 'solo_duo' ? 'Solo/Duo' : 'Flex' }] : []),
     ...((isBoostFlow || isClash) && riotId.trim() ? [{ icon: Hash, label: 'Riot ID', value: riotId.trim() }] : []),
-    ...((isBoostFlow || isClash) && customerLanes.length > 0
+    ...((isBoostFlow || isClash)
       ? [{
           icon: Route,
           label: boostMode === 'duo' ? 'Suas rotas' : 'Rotas para o booster',
-          value: <ServiceTagPills lanes={customerLanes} compact />,
+          value: <ServiceTagPills lanes={customerLanes} compact emptyFallback="---" />,
         }]
       : []),
     ...(isClash

@@ -46,7 +46,7 @@ const STEP_COMPONENTS: Record<OrderBuilderStep, React.ComponentType> = {
 // Riot ID no formato Nome#TAG (3-16 chars antes do #, 2-5 alfanuméricos
 // depois) — mesmo formato aceito pelo lookup da Riot em StepConfigure.tsx.
 function isValidRiotId(riotId: string): boolean {
-  return /^.{3,16}#[A-Za-z0-9]{2,5}$/.test(riotId.trim())
+  return /^.{3,16}#[^#]{2,5}$/.test(riotId.trim())
 }
 
 // Regras de "step completo" usadas só para gatear o botão Continuar — a
@@ -77,17 +77,17 @@ function isStepComplete(
   if (step === 'configure') {
     // Eloboost e Vitórias/MD5 só avançam depois de uma verificação de conta
     // bem-sucedida na fila atual (mesma trava que esconde os campos).
-    // Rota é obrigatória nos 3 modos que usam LaneSelectField (elo_boost,
+    // Rota é opcional nos 3 modos que usam LaneSelectField (elo_boost,
     // win_boost/md5, clash) -- coaching não tem esse conceito.
     if (state.serviceType === 'elo_boost') {
-      return state.riotVerified && !!state.currentRank && !!state.targetRank && isValidRiotId(state.riotId) && state.customerLanes.length > 0
+      return state.riotVerified && !!state.currentRank && !!state.targetRank && isValidRiotId(state.riotId)
     }
     if (state.serviceType === 'win_boost' || state.serviceType === 'md5') {
       const winsOk = !!state.winsPurchased
         && state.winsPurchased >= 1
         && state.winsPurchased <= 5
         && (!state.isMd5 || state.md5MatchesRemaining == null || state.winsPurchased <= state.md5MatchesRemaining)
-      return state.riotVerified && !!state.currentRank && winsOk && isValidRiotId(state.riotId) && state.customerLanes.length > 0
+      return state.riotVerified && !!state.currentRank && winsOk && isValidRiotId(state.riotId)
     }
     if (state.serviceType === 'coaching') return !!state.selectedCoachPackage
     // Riot ID obrigatório nos dois modos de Clash (Solo: referência do
@@ -95,7 +95,7 @@ function isStepComplete(
     // convidar o cliente pro time). O tier é sempre derivado da verificação
     // Riot e não pode ser escolhido manualmente.
     if (state.serviceType === 'clash') {
-      return state.riotVerified && !!state.clashTier && !!state.clashDay && isValidRiotId(state.riotId) && state.customerLanes.length > 0
+      return state.riotVerified && !!state.clashTier && !!state.clashDay && isValidRiotId(state.riotId)
     }
   }
   return true

@@ -69,16 +69,19 @@ const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
   danger:  'text-danger hover:bg-danger/10',
 }
 
-function AdminDropModal({ orderId, open, onClose }: { orderId: string; open: boolean; onClose: () => void }) {
+function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string; dropCount: number; open: boolean; onClose: () => void }) {
   const [dropReason, setDropReason] = useState('')
   const dropOrder = useAdminDropOrder(orderId)
+  const willCancel = dropCount >= 2
 
   return (
     <Modal
       open={open}
       onOpenChange={(next) => { if (!next) { onClose(); setDropReason('') } }}
       title="Dropar Pedido"
-      description="O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído."
+      description={willCancel
+        ? 'Este pedido já foi dropado 2 vezes -- o limite pra voltar pro painel automaticamente foi atingido. Confirmar aqui CANCELA o pedido; o pagamento do booster e o cliente precisam ser tratados manualmente depois.'
+        : 'O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'}
     >
       <div>
         <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
@@ -95,7 +98,7 @@ function AdminDropModal({ orderId, open, onClose }: { orderId: string; open: boo
           disabled={dropReason.trim().length < 10}
           onClick={() => dropOrder.mutate(dropReason.trim(), { onSuccess: () => { onClose(); setDropReason('') } })}
         >
-          Confirmar Drop
+          {willCancel ? 'Cancelar Pedido' : 'Confirmar Drop'}
         </Button>
       </div>
     </Modal>
@@ -225,7 +228,7 @@ export function AdminOrderDetailPage() {
         </span>
       ) : 'Não informado',
     }] : []),
-    ...getLaneDisplayItems(order, 'admin').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
+    ...getLaneDisplayItems(order, 'admin').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
     {
       icon: User, label: 'Booster associado', value: (() => {
         const boosterId = order.assigned_booster_id ?? order.preferred_booster_id
@@ -312,7 +315,7 @@ export function AdminOrderDetailPage() {
         }
       />
 
-      <AdminDropModal orderId={order.id} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
+      <AdminDropModal orderId={order.id} dropCount={order.drop_count} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
     </div>
   )
 }

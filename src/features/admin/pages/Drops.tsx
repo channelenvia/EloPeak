@@ -71,6 +71,14 @@ export function AdminDropsPage() {
                       <Link to={`/admin/orders/${r.order_id}`} className="text-brand hover:underline">
                         #{r.order_id.slice(0, 8).toUpperCase()}
                       </Link>
+                      {(r.order?.drop_count ?? 0) >= 2 && (
+                        <span
+                          title="Este pedido já foi dropado 2 vezes -- aprovar essa solicitação vai CANCELAR o pedido em vez de devolvê-lo pro painel."
+                          className="badge text-[10px] font-bold bg-danger/10 text-danger mt-1 block w-fit"
+                        >
+                          Cancela o pedido
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">
@@ -179,7 +187,9 @@ export function AdminDropsPage() {
         onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote('') } }}
         title={resolving?.approve ? 'Aprovar solicitação de drop' : 'Rejeitar solicitação de drop'}
         description={resolving?.approve
-          ? 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'
+          ? ((pendingRequests.find(r => r.id === resolving.id)?.order?.drop_count ?? 0) >= 2
+              ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui CANCELA o pedido em vez de devolvê-lo pro painel. Trate o pagamento do booster e o cliente manualmente depois.'
+              : 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.')
           : 'O pedido volta ao status anterior.'}
       >
         <div>

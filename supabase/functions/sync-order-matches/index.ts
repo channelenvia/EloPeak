@@ -32,9 +32,11 @@ const RANK_TRACKED_SERVICE_TYPES = new Set(['elo_boost', 'win_boost', 'md5'])
 // checamos em busca da conta duo, além das que já entraram no loop
 // principal por serem novas em order_matches. Cobre o caso "booster jogou
 // primeiro, só depois cadastrou a conta duo" -- sem isso, essas partidas
-// nunca seriam atribuídas ao booster (já estariam em order_matches, então
-// nunca cairiam em newMatchIds de novo).
-const DUO_BACKFILL_LOOKBACK = 5
+// nunca seriam atribuídas ao booster (já estariam em order_matches ou
+// order_ignored_matches, então nunca cairiam em newMatchIds de novo). Mesmo
+// teto do `count` default de fetchMatchIdsSince -- não faz sentido checar
+// menos partidas de backfill do que as que a própria lista já trouxe.
+const DUO_BACKFILL_LOOKBACK = 20
 
 const bodySchema = z.object({
   order_id: z.string().uuid(),
@@ -340,32 +342,34 @@ serve(async (req) => {
     }
 
     // Backfill: partidas jogadas ANTES do booster cadastrar a conta duo já
-    // estariam em order_matches (não passam por newMatchIds de novo), então
-    // nunca seriam checadas pra atribuição duo sem isso. Olha só as últimas
-    // DUO_BACKFILL_LOOKBACK do cliente, pulando as que o loop acima já
-    // checou ou que já têm linha em booster_duo_matches.
+    // estariam em order_matches ou order_ignored_matches (não passam por
+    // newMatchIds de novo), então nunca seriam checadas pra atribuição duo
+    // sem isso. Olha só as últimas DUO_BACKFILL_LOOKBACK do cliente, pulando
+    // as que o loop acima já checou nesta chamada.
     if (duoPuuid) {
       const backfillCandidates = idsMostRecentFirst
         .slice(0, DUO_BACKFILL_LOOKBACK)
         .filter((id) => !duoCheckedIds.has(id))
 
-      // Uma consulta batched pros até DUO_BACKFILL_LOOKBACK candidatos, em
-      // vez de um SELECT sequencial por candidato -- mesmo resultado, só sem
-      // pagar N round-trips ao banco antes de decidir se vale a pena buscar
-      // na Riot.
-      const alreadyInDuoMatches = backfillCandidates.length > 0
-        ? new Set(
-            (await serviceClient
-              .from('booster_duo_matches')
-              .select('external_match_id')
-              .eq('order_id', orderId)
-              .in('external_match_id', backfillCandidates)
-            ).data?.map((m) => m.external_match_id as string) ?? [],
-          )
-        : new Set<string>()
+      // Duas consultas batched, em vez de um SELECT sequencial por
+      // candidato -- mesmo resultado, só sem pagar N round-trips ao banco
+      // antes de decidir se vale a pena buscar na Riot.
+      const [duoMatchesResult, ignoredMatchesResult] = backfillCandidates.length > 0
+        ? await Promise.all([
+            serviceClient.from('booster_duo_matches').select('external_match_id').eq('order_id', orderId).in('external_match_id', backfillCandidates),
+            serviceClient.from('order_ignored_matches').select('external_match_id').eq('order_id', orderId).in('external_match_id', backfillCandidates),
+          ])
+        : [{ data: [] as { external_match_id: string }[] | null }, { data: [] as { external_match_id: string }[] | null }]
+      const alreadyInDuoMatches = new Set((duoMatchesResult.data ?? []).map((m) => m.external_match_id as string))
+      // Partidas marcadas como ignoradas ANTES da conta duo existir no
+      // sistema -- candidatas a serem recuperadas pro progresso do pedido se
+      // a conta duo de fato participou delas (ver record_order_match abaixo).
+      const previouslyIgnored = new Set((ignoredMatchesResult.data ?? []).map((m) => m.external_match_id as string))
 
       for (const matchId of backfillCandidates) {
-        if (alreadyInDuoMatches.has(matchId)) continue
+        // Já tem stats do booster gravadas E não ficou presa em ignorada --
+        // nada a recuperar aqui.
+        if (alreadyInDuoMatches.has(matchId) && !previouslyIgnored.has(matchId)) continue
 
         const bodyResult = await fetchMatchBody(matchId, RIOT_API_KEY, REGIONAL_ROUTE)
         if (!bodyResult.ok) {
@@ -373,7 +377,53 @@ serve(async (req) => {
           console.error('Riot match-v5 detail error (duo backfill)', matchId, bodyResult.status)
           continue
         }
-        await attributeDuoMatch(bodyResult.body, matchId)
+        const duoParticipated = alreadyInDuoMatches.has(matchId) || await attributeDuoMatch(bodyResult.body, matchId)
+
+        // Recupera pro progresso do pedido: essa partida foi ignorada na
+        // primeira sincronização (duo_participated=false porque a conta duo
+        // ainda não existia no sistema), mas agora confirmamos que ela de
+        // fato teve a conta duo dentro -- registra pro cliente exatamente
+        // como o loop principal teria feito se a conta já existisse então.
+        if (duoParticipated && previouslyIgnored.has(matchId)) {
+          const clientDetail = parseMatchDetail(bodyResult.body, clientPuuid, matchId)
+          if (clientDetail.ok) {
+            const { data: recordResult, error: recordErr } = await serviceClient.rpc('record_order_match', {
+              p_order_id: orderId,
+              p_external_match_id: clientDetail.detail.externalMatchId,
+              p_result: clientDetail.detail.result,
+              p_champion: clientDetail.detail.champion,
+              p_kills: clientDetail.detail.kills,
+              p_deaths: clientDetail.detail.deaths,
+              p_assists: clientDetail.detail.assists,
+              p_queue_id: clientDetail.detail.queueId,
+              p_duration_seconds: clientDetail.detail.durationSeconds,
+              p_played_at: clientDetail.detail.playedAt,
+              p_minions_killed: clientDetail.detail.minionsKilled,
+              p_neutral_minions_killed: clientDetail.detail.neutralMinionsKilled,
+              p_is_mvp: clientDetail.detail.isMvp,
+              p_vision_score: clientDetail.detail.visionScore,
+              p_duo_participated: true,
+            })
+            const result = recordResult as { success?: boolean; inserted?: boolean; error?: string } | null
+            if (recordErr || !result?.success) {
+              console.error('record_order_match failed (duo backfill)', matchId, result?.error ?? recordErr?.message)
+            } else {
+              if (result.inserted) {
+                recorded.push({
+                  external_match_id: clientDetail.detail.externalMatchId,
+                  result: clientDetail.detail.result,
+                  champion: clientDetail.detail.champion,
+                })
+              }
+              const { error: unignoreErr } = await serviceClient
+                .from('order_ignored_matches')
+                .delete()
+                .eq('order_id', orderId)
+                .eq('external_match_id', clientDetail.detail.externalMatchId)
+              if (unignoreErr) console.error('order_ignored_matches cleanup failed (duo backfill)', matchId, unignoreErr.message)
+            }
+          }
+        }
       }
     }
 

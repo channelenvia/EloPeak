@@ -17,7 +17,7 @@ import { LaneSelectField } from '@/components/order/LaneSelectField'
 // Mesmo formato aceito pelo backend (riot-account-rank bodySchema): 1-16 chars
 // antes do #, 2-5 alfanuméricos depois. Validar no cliente evita um 400
 // "Riot ID inválido" a cada busca com ID incompleto.
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[A-Za-z0-9]{2,5}$/
+const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
 type RiotRankResponse = {
   found?: boolean
@@ -120,8 +120,10 @@ export function StepConfigure() {
     setCurrentRank({ tier: result.tier, division: result.division ?? null })
     if (isMasterPlusCurrentTier(result.tier)) {
       setCurrentPdl(Math.max(0, Math.min(9999, result.league_points ?? 0)))
-      setAvgPdlGain(typeof result.avg_lp_gain === 'number' ? Math.max(1, result.avg_lp_gain) : 30)
-      setAvgPdlLoss(typeof result.avg_lp_loss === 'number' ? Math.max(1, result.avg_lp_loss) : 30)
+      // Master+ nunca usa a média real vinda da Riot -- progressão comercial
+      // sempre fixa em 30 PDL/partida (mesma regra do backend em orderPricing.ts).
+      setAvgPdlGain(30)
+      setAvgPdlLoss(30)
     } else {
       setCurrentLp(Math.max(0, Math.min(99, result.league_points ?? 0)))
       if (typeof result.avg_lp_gain === 'number') setAvgLpGain(Math.max(1, Math.min(50, result.avg_lp_gain)))
@@ -285,7 +287,8 @@ export function StepConfigure() {
           price,
           targetRank.tier as 'grandmaster' | 'challenger',
           currentPdl,
-          avgPdlGain,
+          currentRank.tier,
+          queueType,
           masterPlusCutoffs,
         )
         setBasePrice(discountedPrice)
@@ -311,13 +314,21 @@ export function StepConfigure() {
       const withLp = applyLpModifier(price, currentRank.tier, currentLp, avgLpGain, undefined, queueType)
       let combined = withLp
       if (isStandardToMasterPlus) {
-        if (masterPlusPriceRow?.price == null) {
+        if (masterPlusPriceRow?.price == null || !targetRank) {
           setBasePrice(0)
           setEstimatedHours(null)
           setPdlModifierPct(null)
           return
         }
-        combined = Math.round((withLp + masterPlusPriceRow.price) * 100) / 100
+        const discountedMasterPlusPrice = applyMasterPlusPdlDiscount(
+          masterPlusPriceRow.price,
+          targetRank.tier as 'grandmaster' | 'challenger',
+          0,
+          currentRank.tier,
+          queueType,
+          masterPlusCutoffs,
+        )
+        combined = Math.round((withLp + discountedMasterPlusPrice) * 100) / 100
       }
       const finalPrice = boostMode === 'duo'
         ? Math.round(combined * (1 + DUO_BOOST_PCT / 100) * 100) / 100
@@ -724,7 +735,6 @@ export function StepConfigure() {
             lanes={customerLanes}
             onChange={setCustomerLanes}
             boostMode={boostMode}
-            error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
           />
         )}
 
@@ -827,7 +837,6 @@ export function StepConfigure() {
             lanes={customerLanes}
             onChange={setCustomerLanes}
             boostMode={boostMode}
-            error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
           />
         )}
 

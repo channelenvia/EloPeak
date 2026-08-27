@@ -315,6 +315,10 @@ export interface OrderDropRequest {
   resolved_at: string | null
   requested_by_role: 'booster' | 'admin' | 'customer'
   status_at_request: OrderStatus | null
+  // Presente só quando a query embeda orders(drop_count) -- ver
+  // listAdminDropRequests -- pra saber se aprovar essa solicitação vai
+  // cancelar o pedido (limite de 2 drops já atingido) em vez de reatribuir.
+  order?: { drop_count: number } | null
 }
 
 export interface OrderMatch {

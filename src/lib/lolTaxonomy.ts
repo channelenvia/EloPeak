@@ -6,11 +6,11 @@
 import type { RankTier } from '@/types'
 
 export const LANES = [
-  { key: 'top',     label: 'Topo'     },
-  { key: 'jungle',  label: 'Selva'    },
-  { key: 'mid',     label: 'Meio'     },
-  { key: 'bot',     label: 'Atirador' },
-  { key: 'support', label: 'Suporte'  },
+  { key: 'top',     label: 'Top'    },
+  { key: 'jungle',  label: 'Jungle' },
+  { key: 'mid',     label: 'Mid'    },
+  { key: 'bot',     label: 'Adc'    },
+  { key: 'support', label: 'Sup'    },
 ] as const
 
 export const LANE_LABEL: Record<string, string> = Object.fromEntries(LANES.map(l => [l.key, l.label]))
@@ -43,36 +43,43 @@ export interface LaneDisplayItem {
   lanes: string[]
 }
 
+// service_types em que o conceito de rota existe -- mesma lista reforçada em
+// orderPricing.ts (badRequest só nasce/morre pra esses); os demais
+// (coaching, placement_matches) nunca tiveram customer_lanes preenchido.
+const LANE_ELIGIBLE_SERVICE_TYPES = ['elo_boost', 'win_boost', 'md5', 'clash']
+
 // Política única de "quais rotas mostrar pra qual papel, com qual rótulo" --
 // antes reimplementada em paralelo em OrderCardDetails.tsx, JobDetail.tsx,
 // customer/pages/OrderDetail.tsx e admin/pages/OrderDetail.tsx. Retorna []
-// quando não há nada pra mostrar (pedido sem rotas escolhidas, ou
-// service_type que não usa isso -- customer_lanes já vem null nesse caso).
+// só quando o service_type não usa esse conceito; rota é opcional agora, então
+// um pedido elegível sem nenhuma escolhida ainda devolve a linha (lanes: []),
+// pro chamador renderizar "---" em vez de sumir o campo inteiro.
 export function getLaneDisplayItems(
-  order: { customer_lanes: string[] | null; boost_mode: string },
+  order: { customer_lanes: string[] | null; boost_mode: string; service_type: string },
   viewerRole: 'customer' | 'booster' | 'admin',
 ): LaneDisplayItem[] {
-  if (!order.customer_lanes?.length) return []
+  if (!LANE_ELIGIBLE_SERVICE_TYPES.includes(order.service_type)) return []
   const isDuo = order.boost_mode === 'duo'
+  const chosen = order.customer_lanes ?? []
 
   if (viewerRole === 'customer') {
-    return [{ label: isDuo ? 'Suas rotas' : 'Rotas pedidas ao booster', lanes: order.customer_lanes }]
+    return [{ label: isDuo ? 'Suas rotas' : 'Rotas pedidas ao booster', lanes: chosen }]
   }
   if (viewerRole === 'booster') {
     return [{
       label: isDuo ? 'Rotas disponíveis' : 'Rotas pedidas pelo cliente',
-      lanes: isDuo ? getAvailableLanes(order.customer_lanes) : order.customer_lanes,
+      lanes: isDuo ? getAvailableLanes(chosen) : chosen,
     }]
   }
   // admin -- vê os dois lados em duo (cliente e o que sobra pro booster);
   // em solo é a mesma linha única que o cliente vê (é a mesma informação).
   if (isDuo) {
     return [
-      { label: 'Rotas do cliente', lanes: order.customer_lanes },
-      { label: 'Rotas disponíveis pro booster', lanes: getAvailableLanes(order.customer_lanes) },
+      { label: 'Rotas do cliente', lanes: chosen },
+      { label: 'Rotas disponíveis pro booster', lanes: getAvailableLanes(chosen) },
     ]
   }
-  return [{ label: 'Rotas pedidas ao booster', lanes: order.customer_lanes }]
+  return [{ label: 'Rotas pedidas ao booster', lanes: chosen }]
 }
 
 export const COACH_SPECIALTIES = [

@@ -99,7 +99,7 @@ function DuoAccountHistoryModal({ account, onClose }: { account: AdminDuoAccount
   )
 }
 
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[A-Za-z0-9]{2,5}$/
+const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
 interface AccountForm {
   riot_id: string

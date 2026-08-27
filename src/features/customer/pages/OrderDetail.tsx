@@ -393,7 +393,7 @@ export function OrderDetailPage() {
       ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
       : []),
     ...((isBoostFlow || isClash) ? [{ icon: Hash, label: 'Riot ID', value: order.riot_id ?? 'Não informado' }] : []),
-    ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
+    ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
     { icon: UserCheck, label: 'Booster associado', value: <AssignedBoosterValue order={order} /> },
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: t('customer.order.totalPaid'), value: currency(order.total_price) },

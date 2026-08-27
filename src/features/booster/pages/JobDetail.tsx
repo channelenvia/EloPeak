@@ -255,7 +255,7 @@ export function JobDetailPage() {
         ),
       }]
       : []),
-    ...laneDisplayItems.map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact /> })),
+    ...laneDisplayItems.map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
     {
       icon: Clock, label: 'Entrega estimada', value: isClash
         ? clashClosingLabel

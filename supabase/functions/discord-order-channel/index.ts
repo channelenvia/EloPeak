@@ -38,11 +38,14 @@ const VOICE_ADDON_CODES = ['duo_voice', 'live_stream']
 
 // Mirrors LANE_LABEL/LANES em src/lib/lolTaxonomy.ts (não importável aqui --
 // runtime Deno separado do bundle Vite, mesmo motivo pelo qual RANK_TIER_LABEL
-// acima também é duplicado em vez de importado). Em inglês abreviado (só
-// aqui, no Discord) pra ocupar menos espaço horizontal no campo "Rotas" --
-// diferente do site, que mostra o nome completo em português.
+// acima também é duplicado em vez de importado). Mesmo rótulo usado no site
+// (Top/Jungle/Mid/Adc/Sup) -- só aqui, no Discord, cada um leva um emoji
+// próprio na frente pra dar pra reconhecer a rota sem precisar ler o texto.
 const LANE_LABEL: Record<string, string> = {
   top: 'Top', jungle: 'Jungle', mid: 'Mid', bot: 'Adc', support: 'Sup',
+}
+const LANE_EMOJI: Record<string, string> = {
+  top: '🗡️', jungle: '🌳', mid: '✨', bot: '🏹', support: '🛡️',
 }
 const LANE_KEYS = ['top', 'jungle', 'mid', 'bot', 'support']
 
@@ -202,8 +205,8 @@ const currency = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currenc
 // deno-lint-ignore no-explicit-any
 function lanesValue(order: any): string {
   const customerLanes: string[] = order.customer_lanes ?? []
-  if (!customerLanes.length) return '—'
-  const laneNames = (keys: string[]) => keys.map((k) => LANE_LABEL[k] ?? k).join(', ')
+  if (!customerLanes.length) return '---'
+  const laneNames = (keys: string[]) => keys.map((k) => `${LANE_EMOJI[k] ?? ''} ${LANE_LABEL[k] ?? k}`.trim()).join(', ')
   if (order.boost_mode === 'duo') {
     const available = LANE_KEYS.filter((k) => !customerLanes.includes(k))
     return `Cliente: ${laneNames(customerLanes)}\nDisponíveis: ${laneNames(available)}`

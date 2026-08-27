@@ -111,7 +111,7 @@ export function HomePage() {
   return (
     <div>
       <SEOHead
-        title="Boosting de Elo Profissional para League of Legends"
+        title="EloPeak"
         description="Boosting de elo, win boost, MD5, Clash e coaching para League of Legends. Boosters verificados, entrega segura e garantida via PIX."
       />
       {/* ── HERO ─────────────────────────────────────────────────────────── */}

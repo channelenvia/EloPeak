@@ -92,7 +92,6 @@ serve(async (req) => {
       ? `${APP_URL}/boosters/${encodeURIComponent(boosterRow.display_name)}`
       : `${APP_URL}/admin/orders/${review.order_id}`
 
-    const shortCode = String(review.order_id).slice(0, 8).toUpperCase()
     // Mesmo bloco padronizado-mas-dinâmico do buildOrderFields em
     // discord-order-channel (coreServiceFields) -- Modo/Fila só aparecem pra
     // quem tem esse conceito. order só é null se a FK tiver sido apagada
@@ -115,7 +114,6 @@ serve(async (req) => {
             { name: '⭐ Nota', value: starBar(review.rating), inline: true },
             { name: '🧑‍💻 Booster', value: boosterLabel, inline: true },
             { name: '🙋 Cliente', value: customerLabel, inline: true },
-            { name: '🧾 Pedido', value: `[#${shortCode}](${APP_URL}/admin/orders/${review.order_id})`, inline: false },
           ],
           thumbnail: { url: thumbnailUrl },
           footer: eloPeakFooter(APP_URL),

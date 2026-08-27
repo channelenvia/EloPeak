@@ -74,4 +74,15 @@ describe('CaptchaChallenge — desafio de campeão hachurado', () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
   })
+
+  it('aceita o nome com qualquer capitalização, desde que o apóstrofo esteja certo (case-insensitive)', async () => {
+    const user = userEvent.setup()
+    const { onSuccess } = renderCaptcha()
+
+    const input = await screen.findByPlaceholderText('Nome do campeão')
+    await user.type(input, "KAI'SA")
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
+  })
 })

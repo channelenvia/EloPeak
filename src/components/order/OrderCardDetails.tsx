@@ -98,7 +98,7 @@ export function OrderCardDetails({ order, viewerRole }: OrderCardDetailsProps) {
         <div key={item.label} className="flex items-center gap-1.5 mb-3 text-xs text-ink-secondary">
           <Route className="h-3 w-3 shrink-0 text-ink-muted" />
           <span>{item.label}:</span>
-          <ServiceTagPills lanes={item.lanes} compact />
+          <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" />
         </div>
       ))}
 

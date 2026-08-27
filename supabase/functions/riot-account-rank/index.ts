@@ -23,7 +23,7 @@ const REGIONAL_ROUTE = 'americas'
 const PLATFORM_ROUTE = 'br1'
 
 const bodySchema = z.object({
-  riot_id: z.string().trim().min(3).max(32).regex(/^[^#]{1,16}#[A-Za-z0-9]{2,5}$/),
+  riot_id: z.string().trim().min(3).max(32).regex(/^[^#]{1,16}#[^#]{2,5}$/),
   queue: z.enum(['solo_duo', 'flex']).default('solo_duo'),
 }).strict()
 

@@ -16,8 +16,8 @@ interface LaneSelectFieldProps {
 // sentido com a modalidade: solo = o cliente pede uma rota pro BOOSTER
 // jogar (só ele joga a conta); duo = o cliente escolhe a rota que ELE MESMO
 // vai jogar, o resto fica disponível pro booster (getAvailableLanes).
-// Obrigatório (pelo menos 1) -- mesma regra reforçada no backend
-// (orderPricing.ts, validateAndPriceIntent).
+// Opcional -- pode ficar sem nenhuma selecionada (mesma regra no backend,
+// orderPricing.ts, que não rejeita mais customer_lanes vazio).
 export function LaneSelectField({ lanes, onChange, boostMode, error }: LaneSelectFieldProps) {
   function toggle(key: string) {
     if (lanes.includes(key)) onChange(lanes.filter(l => l !== key))
@@ -27,12 +27,11 @@ export function LaneSelectField({ lanes, onChange, boostMode, error }: LaneSelec
   return (
     <FormField
       label={boostMode === 'duo' ? 'Suas rotas' : 'Rotas para o booster'}
-      required
       error={error}
       hint={
         boostMode === 'duo'
-          ? 'Escolha até 2 rotas que você mesmo vai jogar — as demais ficam liberadas para o booster.'
-          : 'Escolha até 2 rotas que você quer que o booster jogue nesta conta.'
+          ? 'Opcional. Escolha até 2 rotas que você mesmo vai jogar — as demais ficam liberadas para o booster.'
+          : 'Opcional. Escolha até 2 rotas que você quer que o booster jogue nesta conta.'
       }
     >
       <div className="flex flex-wrap gap-2">

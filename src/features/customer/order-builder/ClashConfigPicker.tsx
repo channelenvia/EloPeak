@@ -19,7 +19,7 @@ import type { ClashDay, BoostMode } from '@/types'
 
 // Mesmo formato aceito pelo backend (riot-account-rank bodySchema) e usado
 // em StepConfigure.tsx para elo_boost/win_boost/md5.
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[A-Za-z0-9]{2,5}$/
+const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
 const CLASH_DAYS: ClashDay[] = ['saturday', 'sunday']
 const CLASH_MODES: { mode: BoostMode; title: string; desc: string }[] = [
@@ -222,7 +222,6 @@ export function ClashConfigPicker() {
           lanes={customerLanes}
           onChange={setCustomerLanes}
           boostMode={boostMode}
-          error={stepAttempted && customerLanes.length === 0 ? 'Selecione ao menos 1 rota' : undefined}
         />
       )}
     </div>

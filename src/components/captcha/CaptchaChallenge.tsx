@@ -14,10 +14,10 @@ import {
 // aprovado) -- sem chave de API própria, só o CDN público do Data Dragon
 // (mesmo usado em toda a parte de campeões do produto). O ícone vem
 // hachurado (SVG crosshatch + leve rotação/zoom) pra dificultar OCR/visão
-// computacional; a validação exige o nome EXATO retornado pelo catálogo
-// pt_BR (maiúsculas, apóstrofos, acentos -- sem normalizar nada), porque um
-// booster que reconhece o campeão de vista sabe digitar certo, um bot que só
-// tenta ler a imagem raramente acerta a grafia exata de primeira.
+// computacional; a validação é case-insensitive (Locke/LoCke/LOCKE aceitos
+// igual) mas ainda exige apóstrofos/acentos corretos do catálogo pt_BR --
+// um booster que reconhece o campeão de vista sabe digitar certo, um bot que
+// só tenta ler a imagem raramente acerta a grafia exata de primeira.
 interface CaptchaChallengeProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -41,7 +41,7 @@ export function CaptchaChallenge({ open, onOpenChange, onSuccess }: CaptchaChall
       open={open}
       onOpenChange={onOpenChange}
       title="Verificação de segurança"
-      description="Digite o nome do campeão exatamente como aparece no jogo (maiúsculas, apóstrofos etc.) para confirmar o aceite."
+      description="Digite o nome do campeão como aparece no jogo (apóstrofos, acentos etc. -- maiúsculas/minúsculas não importam) para confirmar o aceite."
       maxWidth="sm"
     >
       <ChampionCaptcha key={nonce} onSuccess={handleSuccess} />
@@ -72,7 +72,7 @@ function ChampionCaptcha({ onSuccess }: { onSuccess: () => void }) {
 
   function submit() {
     if (!target || !value.trim()) return
-    if (value.trim() === target.name) {
+    if (value.trim().toLowerCase() === target.name.toLowerCase()) {
       onSuccess()
     } else {
       setError(true)
@@ -131,15 +131,19 @@ function HatchedChampionIcon({ src }: { src: string }) {
       />
       <svg className="absolute inset-0 w-full h-full pointer-events-none text-ink" aria-hidden="true">
         <defs>
-          <pattern id={`${patternId}-a`} width="9" height="9" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="9" stroke="currentColor" strokeWidth="3" />
+          <pattern id={`${patternId}-a`} width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="3.5" />
           </pattern>
-          <pattern id={`${patternId}-b`} width="9" height="9" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="9" stroke="currentColor" strokeWidth="3" />
+          <pattern id={`${patternId}-b`} width="6" height="6" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="3.5" />
+          </pattern>
+          <pattern id={`${patternId}-c`} width="5" height="5" patternTransform="rotate(90)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="5" stroke="currentColor" strokeWidth="1.5" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill={`url(#${patternId}-a)`} opacity={0.35} />
-        <rect width="100%" height="100%" fill={`url(#${patternId}-b)`} opacity={0.35} />
+        <rect width="100%" height="100%" fill={`url(#${patternId}-a)`} opacity={0.5} />
+        <rect width="100%" height="100%" fill={`url(#${patternId}-b)`} opacity={0.5} />
+        <rect width="100%" height="100%" fill={`url(#${patternId}-c)`} opacity={0.25} />
       </svg>
     </div>
   )

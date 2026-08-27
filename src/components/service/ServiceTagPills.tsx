@@ -12,16 +12,22 @@ interface ServiceTagPillsProps {
   /** Cada tipo (Rotas/Campeões/Especialidades) em sua própria linha rotulada, em vez de tudo misturado num flex-wrap só -- usado no modal "Visualizar serviço", que tem espaço de sobra. */
   labeled?: boolean
   className?: string
+  /** Texto mostrado no lugar de sumir o bloco quando não há nada pra exibir --
+   * usado nas linhas de rota do pedido (customer_lanes agora é opcional, então
+   * ausência de escolha é um estado válido, "---", não "nada aqui"). */
+  emptyFallback?: string
 }
 
 // Reaproveitado nos 5 lugares que exibem lanes/campeões/especialidades de um
 // serviço (card do booster, perfil público, modal de visualizar, picker de
 // coaching do cliente e revisão/detalhe do pedido) -- fonte única de ícone +
 // estilo, pra não divergir entre telas.
-export function ServiceTagPills({ lanes, champions, specialties, compact, labeled, className }: ServiceTagPillsProps) {
+export function ServiceTagPills({ lanes, champions, specialties, compact, labeled, className, emptyFallback }: ServiceTagPillsProps) {
   const ddragonVersion = useDdragonVersion()
   const championIds = useDdragonChampionIds(ddragonVersion)
-  if (!lanes?.length && !champions?.length && !specialties?.length) return null
+  if (!lanes?.length && !champions?.length && !specialties?.length) {
+    return emptyFallback ? <span className={cn('text-ink-muted', className)}>{emptyFallback}</span> : null
+  }
 
   const pillCls = cn(
     'font-bold flex items-center gap-1.5',
