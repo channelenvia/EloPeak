@@ -107,60 +107,57 @@ describe('Tabela master_plus_pricing — 12 combinações válidas, sem preço f
 
 // A partir da migration 090 o preço do Master+ passou a depender do PAR
 // (tier atual, tier alvo) -- não mais só do tier alvo (028-078, superseded).
-// A migration 093 acrescentou fila e degrau de PDL; a 099 enxugou os degraus
-// de PDL da SoloQ e tirou os da Flex por completo; a 146 (atual) reajustou
-// todos os valores em +30%, mantendo a mesma estrutura de degraus. O preço
-// EXIBIDO na página pública vem do código (MASTER_PLUS_TIER_PRICE_CENTS,
-// chaveado pelo TIER ATUAL da linha exibida — "master" = custo de avançar de
-// Mestre pra Grão-Mestre, "grandmaster" = custo de avançar de Grão-Mestre pra
-// Challenger) enquanto o preço COBRADO vem da tabela master_plus_pricing no
-// banco (lida em StepConfigure e revalidada em orderPricing.ts), sempre no
-// PRIMEIRO degrau de PDL (menor pdl_from) da fila solo_duo -- mesma
-// referência que a página pública usa (PDL=0 de quem acabou de entrar no
-// tier atual). São duas fontes de verdade pro mesmo valor monetário: se
-// divergirem, o cliente vê um preço e é cobrado outro. Este teste amarra a
-// seed da migration 146 (estado FINAL do banco) ao constante do código.
-describe('master_plus_pricing (146) — seed do banco bate com o preço exibido na página pública', () => {
-  const migration146 = readFileSync(
-    join(__dirname, '..', 'supabase', 'migrations_archive', '146_master_plus_pricing_30pct_increase.sql'),
+// A migration 20260827120000 colapsou os múltiplos degraus de PDL pra 1
+// preço "cheio" por par -- o desconto contínuo de 5%/vitória
+// (applyMasterPlusPdlDiscount) já cuida sozinho da redução conforme o PDL
+// sobe, então não há mais degraus a testar aqui. Fila Flex agora tem o
+// mesmo preço da Solo/Duo (não há mais diferenciação comercial por fila no
+// Master+). O preço EXIBIDO na página pública vem do código
+// (MASTER_PLUS_TIER_PRICE_CENTS, chaveado pelo TIER ATUAL da linha exibida)
+// enquanto o preço COBRADO vem da tabela master_plus_pricing no banco (lida
+// em StepConfigure e revalidada em orderPricing.ts). São duas fontes de
+// verdade pro mesmo valor monetário: se divergirem, o cliente vê um preço e
+// é cobrado outro. Este teste amarra a seed da migration atual ao
+// constante do código.
+describe('master_plus_pricing (20260827120000) — seed do banco bate com o preço exibido na página pública', () => {
+  const migration = readFileSync(
+    join(__dirname, '..', 'supabase', 'migrations', '20260827120000_master_plus_pricing_new_rates.sql'),
     'utf-8',
   )
 
-  function parseFirstBracketPrices(source: string): Record<string, number> {
+  function parsePrices(source: string): Record<string, number> {
     const insertBlock = source.match(/insert into public\.master_plus_pricing[\s\S]*?;/)
     expect(insertBlock).not.toBeNull()
     const rowRegex = /\('([a-z]+)',\s*'([a-z]+)',\s*'([a-z_]+)',\s*(\d+),\s*(\d+\.\d+)\)/g
-    const lowestPdlFrom: Record<string, number> = {}
     const out: Record<string, number> = {}
     let match: RegExpExecArray | null
     while ((match = rowRegex.exec(insertBlock![0]))) {
-      const [, currentTier, targetTier, queueType, pdlFromStr, priceStr] = match
+      const [, currentTier, targetTier, queueType, , priceStr] = match
       if (queueType !== 'solo_duo') continue
-      const key = `${currentTier}->${targetTier}`
-      const pdlFrom = Number(pdlFromStr)
-      if (!(key in lowestPdlFrom) || pdlFrom < lowestPdlFrom[key]) {
-        lowestPdlFrom[key] = pdlFrom
-        out[key] = Number(priceStr)
-      }
+      out[`${currentTier}->${targetTier}`] = Number(priceStr)
     }
     return out
   }
 
-  const seeded = parseFirstBracketPrices(migration146)
+  const seeded = parsePrices(migration)
 
-  it('semeia o primeiro degrau (solo_duo) dos 3 pares válidos (master->grandmaster, grandmaster->challenger, master->challenger)', () => {
+  it('semeia exatamente os 3 pares válidos (master->grandmaster, grandmaster->challenger, master->challenger), fila solo_duo', () => {
     expect(Object.keys(seeded).sort()).toEqual(['grandmaster->challenger', 'master->challenger', 'master->grandmaster'])
   })
 
-  it('preço cobrado (banco, primeiro degrau) para master->grandmaster == preço exibido (código) para "master" (avançar de Mestre)', () => {
+  it('preço cobrado (banco) para master->grandmaster == preço exibido (código) para "master"', () => {
     expect(seeded['master->grandmaster']).toBe(centsToMoney(MASTER_PLUS_TIER_PRICE_CENTS.master))
   })
 
-  it('preço cobrado (banco, primeiro degrau) para grandmaster->challenger == preço exibido (código) para "grandmaster" (avançar de Grão-Mestre)', () => {
+  it('preço cobrado (banco) para grandmaster->challenger == preço exibido (código) para "grandmaster"', () => {
     expect(seeded['grandmaster->challenger']).toBe(centsToMoney(MASTER_PLUS_TIER_PRICE_CENTS.grandmaster))
   })
 
-  it('preço cobrado (banco, primeiro degrau) para master->challenger == preço exibido (código) para challenger (rota direta)', () => {
+  it('preço cobrado (banco) para master->challenger == preço exibido (código) para "challenger" (rota direta)', () => {
     expect(seeded['master->challenger']).toBe(centsToMoney(MASTER_PLUS_TIER_PRICE_CENTS.challenger))
+  })
+
+  it('challenger é exatamente a soma de master->grandmaster + grandmaster->challenger', () => {
+    expect(seeded['master->challenger']).toBeCloseTo(seeded['master->grandmaster'] + seeded['grandmaster->challenger'], 2)
   })
 })

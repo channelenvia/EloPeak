@@ -40,20 +40,10 @@ function defaultIsActive(pathname: string, href: string, homeHref: string): bool
 
 /**
  * "Precision Rail" -- sidebar única reaproveitada pelos painéis de cliente,
- * booster e admin. Antes cada layout duplicava essa estrutura inteira;
- * unificar evita que o bloco de conta (avatar/username/notificações) ficasse
- * dessincronizado entre os três painéis.
- *
- * Sempre ocupa só a largura do rail (ícones) no fluxo da página -- a coluna
- * de conteúdo principal nunca varia de largura. Expande por 3 caminhos
- * independentes, cada um resolvendo uma lacuna real do modelo anterior
- * (hover-only):
- *  1. hover (mouse) -- comportamento original, inalterado pra quem usa mouse;
- *  2. foco de teclado (Tab) -- expande via onFocus/onBlur no <aside> inteiro
- *     (equivalente a :focus-within), senão navegar só de teclado nunca
- *     revelava os rótulos;
- *  3. pin (clique/toque) -- estado persistido (useSidebarStore), único
- *     caminho realista em tablet/touch, que não tem hover.
+ * booster e admin (evita o bloco de conta dessincronizar entre eles).
+ * Sempre ocupa só a largura do rail; expande por hover (mouse), foco de
+ * teclado (onFocus/onBlur, equivalente a :focus-within) ou pin persistido
+ * (useSidebarStore, único caminho viável em touch).
  */
 export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, breakpoint = 'md' }: AppSidebarProps) {
   const { pathname } = useLocation()

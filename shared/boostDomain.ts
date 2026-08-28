@@ -1,19 +1,11 @@
-// Domínio central do configurador de boost — Solo Boost, Duo Boost e
-// Boost Master+. Fonte única de verdade para: fluxos aplicáveis, ranks
-// aceitos como origem/destino, addons válidos por fluxo (e sua ordem de
-// exibição), faixas de PDL do Master+ e o cálculo de addons sobre o preço
-// base.
-//
-// Roda nos dois runtimes (Vite/React e a Edge Function Deno
-// create-pix-payment), assim como shared/pricing.ts — não importe nada de
-// `@/...` nem de APIs específicas de browser/Deno aqui.
-//
-// O frontend usa este módulo só para montar uma boa experiência (mostrar as
-// opções certas, na ordem certa). A Edge Function usa exatamente as mesmas
-// funções para validar e rejeitar qualquer combinação inválida — não confie
-// em nenhuma decisão de fluxo/addon recalculada apenas no cliente.
+// Domínio central do configurador de boost (Solo/Duo/Master+): fluxos,
+// ranks aceitos, addons válidos por fluxo e faixas de PDL do Master+.
+// Roda em Vite/React e na Edge Function Deno (como shared/pricing.ts) —
+// nada de `@/...` nem de APIs de browser/Deno aqui. O frontend usa isto só
+// pra UX; a Edge Function usa as mesmas funções para validar de verdade —
+// não confie em nenhuma decisão recalculada apenas no cliente.
 
-import { rankStep, type Division, type RankTier, type ServiceType } from './pricing.ts'
+import { rankStep, type Division, type RankTier, type ServiceType, type QueueType } from './pricing.ts'
 
 export type BoostMode = 'solo' | 'duo'
 export type BoostFlow = 'solo_standard' | 'duo_standard' | 'master_plus'
@@ -40,6 +32,18 @@ export function isMasterPlusCurrentTier(tier: RankTier): tier is 'master' | 'gra
   return tier === 'master' || tier === 'grandmaster'
 }
 
+// A Riot agora libera Duo (fila solo/duo) até o rank Mestre — Grão-Mestre e
+// Challenger continuam bloqueados pra Duo em qualquer serviço de progressão
+// por rank (Elo Boost, Vitórias). Exceção: MD5 nunca bloqueia Duo por rank
+// (ver a checagem de md5 em orderPricing.ts) porque o rank informado é o da
+// temporada passada — a partida real acontece bem abaixo desse elo. Esse
+// bloqueio por rank só existe na fila Solo/Duo -- na Flex a Riot não
+// restringe duo por elo, então este helper nunca é o único fator: quem
+// chama sempre combina com `queueType === 'solo_duo'` (ver getBoostFlow).
+export function isDuoBlockedAtTier(tier: RankTier): boolean {
+  return tier === 'grandmaster' || tier === 'challenger'
+}
+
 // Tiers sem divisão (I–IV) — Master, Grão-Mestre e Challenger são medidos só
 // por PDL, sem subdivisões. Vale tanto para rank atual quanto para rank
 // alvo: um cliente Diamond pode mirar Master/Grão-Mestre/Challenger pelo
@@ -51,14 +55,15 @@ export function tierHasDivisions(tier: RankTier): boolean {
   return !NO_DIVISION_TIERS.includes(tier)
 }
 
-// Determina o fluxo aplicável a partir do rank atual e da modalidade pedida.
-// Retorna null quando a combinação é inválida (ex.: Duo pedido com rank
-// Master/Grão-Mestre, ou Challenger como rank atual) — quem chamar deve
-// tratar null como pedido rejeitado, nunca "cair" silenciosamente em outro
-// fluxo.
-export function getBoostFlow(currentTier: RankTier, requestedMode: BoostMode): BoostFlow | null {
+// Determina o fluxo aplicável a partir do rank atual, da modalidade pedida e
+// da fila. Retorna null quando a combinação é inválida (ex.: Duo pedido com
+// rank Master/Grão-Mestre — Elo Boost Duo só existe Iron–Diamond agora, em
+// qualquer fila — ou Challenger como rank atual) — quem chamar deve tratar
+// null como pedido rejeitado, nunca "cair" silenciosamente em outro fluxo.
+export function getBoostFlow(currentTier: RankTier, requestedMode: BoostMode, _queueType: QueueType): BoostFlow | null {
   if (isMasterPlusCurrentTier(currentTier)) {
-    return requestedMode === 'duo' ? null : 'master_plus'
+    if (requestedMode === 'duo') return null
+    return 'master_plus'
   }
   if (isStandardTier(currentTier)) {
     return requestedMode === 'duo' ? 'duo_standard' : 'solo_standard'
@@ -102,16 +107,11 @@ export function isAddonCodeValidForFlow(flow: BoostFlow, code: string): boolean 
 }
 
 // Um addon (code) é UMA linha em service_extras compartilhada por todo
-// service_type que reaproveita seu flow (ex.: solo_standard serve Elo Boost
-// Solo, Vitórias, MD5 e Solo Clash) — o name/description base foi escrito
-// pensando só em Elo Boost. service_type_overrides (migration 121) guarda
-// como o MESMO addon deve ser chamado/descrito para os demais service_types
-// daquele flow, sem duplicar a linha (preço/flow/code continuam únicos).
-// Chave ausente (ou campo ausente dentro dela) sempre cai pro texto base —
-// nunca um texto vazio. Usado tanto pelo frontend (StepExtras/OrderBuilder,
-// exibição ao vivo) quanto pela Edge Function (snapshot congelado em
-// orders.extras) — o mesmo texto que o cliente viu ao escolher o addon é o
-// que fica gravado no pedido.
+// service_type do mesmo flow (ex.: solo_standard serve Elo Boost Solo,
+// Vitórias, MD5 e Solo Clash), com name/description base escritos pensando
+// só em Elo Boost. service_type_overrides (migration 121) guarda como
+// renomear/redescrever o mesmo addon pros outros service_types sem duplicar
+// a linha; chave/campo ausente cai pro texto base, nunca vazio.
 export interface AddonLabelOverride {
   name?: string
   description?: string
@@ -138,18 +138,10 @@ export function hasDuplicateAddonCodes(codes: string[]): boolean {
   return new Set(codes).size !== codes.length
 }
 
-// Ordena qualquer lista de addons (catálogo, seleção do usuário, snapshot de
-// pedido) pela propriedade explícita de ordenação — nunca pela ordem em que
-// chegaram do banco ou pela ordem de clique do usuário.
-//
-// Cálculo de preço dos addons: cada addon é um percentual aplicado sobre o
-// preço base, somado linearmente (nunca composto) — isso já é o que
-// `computeOrderPrice`/`extrasBreakdown` em shared/pricing.ts fazem para
-// qualquer `OrderExtraInput` (basta mapear o addon do fluxo para
-// `{ id: code, priceModifier: 0, priceModifierPct: percentage }`). Não há
-// uma segunda função de soma aqui de propósito — um único lugar calcula
-// addon sobre preço base, tanto para os 4 extras legados quanto para os
-// addons de Solo/Duo/Master+.
+// Ordena addons pela propriedade explícita `sort_order` — nunca pela ordem
+// do banco ou de clique do usuário. Preço dos addons é calculado só por
+// `computeOrderPrice`/`extrasBreakdown` em shared/pricing.ts (percentual
+// linear sobre o preço base); não há uma segunda função de soma aqui.
 export function sortAddonsBySortOrder<T extends { sort_order: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.sort_order - b.sort_order)
 }

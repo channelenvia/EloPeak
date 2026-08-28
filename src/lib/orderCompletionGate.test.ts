@@ -58,9 +58,53 @@ describe('canMarkOrderComplete', () => {
     expect(result).toEqual({ allowed: false, reason: 'no_matches_played' })
   })
 
-  it('win_boost allows once wins_played meets wins_purchased and match evidence exists', () => {
+  it('win_boost allows once wins_played meets wins_purchased with no losses', () => {
+    const result = canMarkOrderComplete(
+      order({ service_type: 'win_boost', wins_purchased: 3, wins_played: 3, losses_played: 0 }),
+      new Date(),
+    )
+    expect(result).toEqual({ allowed: true })
+  })
+
+  // Garantia de saldo líquido do win_boost (StepReview.tsx explica isso ao
+  // cliente): toda derrota precisa ser compensada com uma vitória extra --
+  // raw wins_played atingir wins_purchased NÃO basta se houve derrota no
+  // meio do caminho.
+  it('win_boost blocks when raw wins_played meets wins_purchased but a loss still leaves the net balance short', () => {
     const result = canMarkOrderComplete(
       order({ service_type: 'win_boost', wins_purchased: 3, wins_played: 3, losses_played: 1 }),
+      new Date(),
+    )
+    expect(result).toEqual({ allowed: false, reason: 'objective_not_reached' })
+  })
+
+  it('win_boost allows once the loss has been compensated by an extra win (net balance meets wins_purchased)', () => {
+    const result = canMarkOrderComplete(
+      order({ service_type: 'win_boost', wins_purchased: 3, wins_played: 4, losses_played: 1 }),
+      new Date(),
+    )
+    expect(result).toEqual({ allowed: true })
+  })
+
+  it('win_boost with 2 losses needs 2 extra wins to compensate before it unblocks', () => {
+    const blocked = canMarkOrderComplete(
+      order({ service_type: 'win_boost', wins_purchased: 5, wins_played: 6, losses_played: 2 }),
+      new Date(),
+    )
+    expect(blocked).toEqual({ allowed: false, reason: 'objective_not_reached' })
+
+    const allowed = canMarkOrderComplete(
+      order({ service_type: 'win_boost', wins_purchased: 5, wins_played: 7, losses_played: 2 }),
+      new Date(),
+    )
+    expect(allowed).toEqual({ allowed: true })
+  })
+
+  // md5 é garantia de win RATE (80%+), não de saldo líquido 1:1 -- continua
+  // olhando só vitórias cruas, sem compensação de derrota igual ao win_boost.
+  it('md5 is unaffected by losses -- raw wins_played meeting wins_purchased is enough', () => {
+    const result = canMarkOrderComplete(
+      order({ service_type: 'md5', wins_purchased: 3, wins_played: 3, losses_played: 1 }),
       new Date(),
     )
     expect(result).toEqual({ allowed: true })

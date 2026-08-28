@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeOrderPrice, calcEloPrice, getEloDivPrice, getWinBoostPrice, getMd5WinPrice, applyLpModifier, lpModifierPct,
-  applyMasterPlusPdlDiscount, estimateEloBoostHours, moneyToCents, centsToMoney, PLACEMENT_PRICE, applyCoupon,
+  applyMasterPlusPdlDiscount, estimateEloBoostHours, moneyToCents, PLACEMENT_PRICE, applyCoupon,
   getClashBasePrice, CLASH_ESTIMATED_HOURS,
   type OrderPriceInput, type RankTier,
 } from './pricing'
@@ -34,7 +34,7 @@ describe('Cálculo de addons — percentual sobre o preço base, não composto (
   it('exemplo do enunciado: base R$100, Gameplay Explicativa 30% + Acesso Prioritário 15% = R$145', () => {
     const input = baseInput({
       currentRank: { tier: 'iron', division: 'I' },
-      targetRank: { tier: 'bronze', division: 'IV' }, // 1 passo => 1x ELO_DIV_PRICE.iron = 11.05, não 100 — testamos a fórmula com um basePrice sintético abaixo
+      targetRank: { tier: 'bronze', division: 'IV' }, // 1 passo => 1x ELO_DIV_PRICE.iron = 10.90, não 100 — testamos a fórmula com um basePrice sintético abaixo
     })
     // Usamos o motor real de addons isoladamente: soma percentuais sobre um
     // basePrice conhecido, sem depender da tabela de rank por divisão.
@@ -79,6 +79,34 @@ describe('Master+ — preço vem exclusivamente da tabela comercial (seção 14)
     expect(priced.totalPrice).toBe(expected)
   })
 
+  it('0 PDL atual => sem desconto, cobra o valor cheio', () => {
+    expect(applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 0, 'master', 'solo_duo')).toBe(1119.17)
+  })
+
+  it('desconto é floor(PDL atual / 50) vitórias, não a distância até o corte -- Mestre 200 PDL indo pra Grão-Mestre desconta 4 vitórias', () => {
+    // floor(200/50) = 4 -- desconta 4 * (preço da Vitória Avulsa em Mestre, R$58,30) * 5% = R$11,66.
+    const result = applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 200, 'master', 'solo_duo')
+    expect(result).toBeCloseTo(1119.17 - 4 * 58.30 * 0.05, 2)
+    expect(result).toBeCloseTo(1107.51, 2)
+  })
+
+  it('49 PDL atual ainda arredonda pra baixo => 0 vitórias de desconto (mesmo preço de 0 PDL)', () => {
+    expect(applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 49, 'master', 'solo_duo')).toBe(1119.17)
+  })
+
+  it('50 PDL atual já desconta exatamente 1 vitória', () => {
+    // 1 * 5830 centavos * 5% = 291.5 centavos, arredonda pra 292 (R$2,92) --
+    // arredondamento único na menor unidade monetária, mesma convenção do
+    // resto do módulo (moneyToCents/centsToMoney).
+    const result = applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 50, 'master', 'solo_duo')
+    expect(result).toBeCloseTo(1116.25, 2)
+  })
+
+  it('desconto nunca deixa o preço negativo mesmo com PDL muito alto', () => {
+    const result = applyMasterPlusPdlDiscount(10, 'grandmaster', 100_000, 'master', 'solo_duo')
+    expect(result).toBe(0)
+  })
+
   it('preço fica zerado (pedido bloqueado) quando a faixa não tem preço configurado', () => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'master', division: null },
@@ -89,14 +117,47 @@ describe('Master+ — preço vem exclusivamente da tabela comercial (seção 14)
     expect(priced.totalPrice).toBe(0)
   })
 
-  it('Duo Boost nunca é aplicado ao preço do Master+ (defesa em profundidade)', () => {
+  it('Duo Boost é sempre bloqueado no Master+, mesmo Mestre mirando Grão-Mestre (Riot liberava Duo até lá antes)', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'master', division: null },
+      targetRank: { tier: 'grandmaster', division: null },
+      masterPlusPrice: 1119.17,
+      boostMode: 'duo',
+    }))
+    expect(priced.basePrice).toBe(0)
+  })
+
+  it('Duo Boost continua bloqueado (price 0) quando o alvo é Challenger, mesmo vindo de Master', () => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'master', division: null },
       targetRank: { tier: 'challenger', division: null },
       masterPlusPrice: 250,
-      boostMode: 'duo', // não deveria acontecer (validado antes na Edge Function), mas se acontecer:
+      boostMode: 'duo',
     }))
-    expect(priced.basePrice).toBe(0) // bloqueado, não "250 * 1.5"
+    expect(priced.basePrice).toBe(0)
+  })
+
+  it('Duo Boost continua bloqueado (price 0) a partir de Grão-Mestre (defesa em profundidade)', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'grandmaster', division: null },
+      targetRank: { tier: 'challenger', division: null },
+      masterPlusPrice: 250,
+      // Não deveria acontecer (validado antes na Edge Function/getBoostFlow),
+      // mas se acontecer o preço fica zerado, nunca inflado.
+      boostMode: 'duo',
+    }))
+    expect(priced.basePrice).toBe(0)
+  })
+
+  it('na fila Flex, Duo Boost também é bloqueado no Master+ (a exceção de fila não existe mais para Elo Boost)', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'grandmaster', division: null },
+      targetRank: { tier: 'challenger', division: null },
+      masterPlusPrice: 250,
+      boostMode: 'duo',
+      queueType: 'flex',
+    }))
+    expect(priced.basePrice).toBe(0)
   })
 
   it('estima Master até Challenger usando 30 PDL por partida, ultrapassando o alvo de 2200', () => {
@@ -179,8 +240,8 @@ describe('Estimativa dinâmica de entrega', () => {
   })
 })
 
-describe('Fluxo padrão (Iron–Diamond) — Duo aplica +50% sobre o preço com LP já modulado', () => {
-  it('duo é exatamente 1.5x o preço solo equivalente', () => {
+describe('Fluxo padrão (Iron–Diamond) — Duo usa tabela própria por divisão', () => {
+  it('duo usa a tabela de duo por divisão, não um percentual sobre o solo', () => {
     const solo = computeOrderPrice(baseInput({
       currentRank: { tier: 'iron', division: 'IV' },
       targetRank: { tier: 'iron', division: 'I' },
@@ -191,11 +252,9 @@ describe('Fluxo padrão (Iron–Diamond) — Duo aplica +50% sobre o preço com 
       targetRank: { tier: 'iron', division: 'I' },
       boostMode: 'duo',
     }))
-    // Comparação em centavos inteiros (mesma técnica de arredondamento do
-    // código de produção) -- multiplicar o float solo.basePrice direto por
-    // 1.5 pode cair num "empate" de meio centavo cujo arredondamento diverge
-    // por erro de ponto flutuante, sem relação com nenhum bug de preço.
-    expect(duo.basePrice).toBeCloseTo(centsToMoney(Math.round(moneyToCents(solo.basePrice) * 1.5)), 2)
+    // Iron IV -> Iron I é 3 degraus dentro do mesmo tier.
+    expect(solo.basePrice).toBeCloseTo(10.90 * 3, 2)
+    expect(duo.basePrice).toBeCloseTo(20.90 * 3, 2)
   })
 
   it('rank alvo igual ou abaixo do atual não gera preço (calcEloPrice retorna 0)', () => {
@@ -205,13 +264,37 @@ describe('Fluxo padrão (Iron–Diamond) — Duo aplica +50% sobre o preço com 
     }))
     expect(priced.basePrice).toBe(0)
   })
+
+  it('subir um tier inteiro (IV até entrar no próximo tier) custa exatamente 4x o preço por divisão do tier de ORIGEM, nunca 3x origem + 1x destino', () => {
+    // Ferro IV -> Bronze IV: os 4 degraus (III, II, I, Bronze IV) são todos
+    // cobrados na tabela do Ferro (tier de origem) -- bate com "tier
+    // completo" da tabela (R$43,60), não R$45,60 (3x10.90 + 1x12.90).
+    const { price: ironToBronze } = calcEloPrice('solo_duo', 'solo', 'iron', 'IV', 'bronze', 'IV')
+    expect(ironToBronze).toBeCloseTo(10.90 * 4, 2)
+    expect(ironToBronze).toBeCloseTo(43.60, 2)
+
+    const { price: bronzeToSilver } = calcEloPrice('solo_duo', 'solo', 'bronze', 'IV', 'silver', 'IV')
+    expect(bronzeToSilver).toBeCloseTo(12.90 * 4, 2)
+    expect(bronzeToSilver).toBeCloseTo(51.60, 2)
+
+    const { price: diamondToMaster } = calcEloPrice('solo_duo', 'solo', 'diamond', 'IV', 'master', null)
+    expect(diamondToMaster).toBeCloseTo(102.90 * 4, 2)
+    expect(diamondToMaster).toBeCloseTo(411.60, 2)
+  })
+
+  it('cada "tier completo" solo da tabela bate exatamente com Ferro IV -> Mestre acumulado', () => {
+    // Soma de todos os "tier completo" Ferro..Diamante = preço de Ferro IV -> Mestre.
+    const perTierComplete = [43.60, 51.60, 67.60, 87.60, 127.60, 251.60, 411.60]
+    const { price } = calcEloPrice('solo_duo', 'solo', 'iron', 'IV', 'master', null)
+    expect(price).toBeCloseTo(perTierComplete.reduce((a, b) => a + b, 0), 2)
+  })
 })
 
 describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger direto)', () => {
   it('calcEloPrice para no degrau de Mestre -- não cobra taxa de divisão pelos degraus de GM/Challenger', () => {
-    const toMaster = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
-    const toGrandmaster = calcEloPrice('solo_duo', 'diamond', 'I', 'grandmaster', null)
-    const toChallenger = calcEloPrice('solo_duo', 'diamond', 'I', 'challenger', null)
+    const toMaster = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'master', null)
+    const toGrandmaster = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'grandmaster', null)
+    const toChallenger = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'challenger', null)
     // Os 3 custam o mesmo por divisão -- o trecho Mestre->GM/Challenger tem
     // preço próprio (master_plus_pricing), somado por fora em computeOrderPrice.
     expect(toGrandmaster.price).toBe(toMaster.price)
@@ -219,13 +302,13 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
   })
 
   it('soma o preço por divisão (até Mestre) com o preço do Master+ informado, descontado pelo rank atual (Diamond)', () => {
-    const { price: toMaster } = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
+    const { price: toMaster } = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'master', null)
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'grandmaster', division: null },
-      masterPlusPrice: 899.90,
+      masterPlusPrice: 1119.17,
     }))
-    const discountedMasterPlus = applyMasterPlusPdlDiscount(899.90, 'grandmaster', 0, 'diamond', 'solo_duo')
+    const discountedMasterPlus = applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 0, 'diamond', 'solo_duo')
     expect(priced.basePrice).toBeCloseTo(toMaster + discountedMasterPlus, 2)
   })
 
@@ -233,20 +316,20 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'grandmaster', division: null },
-      masterPlusPrice: 899.90,
+      masterPlusPrice: 1119.17,
     }))
-    const { price: toMaster } = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
+    const { price: toMaster } = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'master', null)
     const masterPlusSegment = priced.basePrice - toMaster
     // Desconto real aplicado ao trecho tem que ser estritamente menor que o
-    // preço cheio informado -- prova que o desconto (não implementado antes
-    // pra pedidos que partem de Diamond-) está de fato entrando no cálculo.
-    expect(masterPlusSegment).toBeLessThan(899.90)
+    // preço cheio informado -- prova que o desconto está de fato entrando no
+    // cálculo pra pedidos que partem de Diamond-.
+    expect(masterPlusSegment).toBeLessThan(1119.17)
     // E tem que bater com o preço da Vitória Avulsa em Diamond, não em Mestre
     // (o rank ATUAL da conta é Diamond nesse pedido).
-    const diamondWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'diamond'))
-    const masterWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'master'))
+    const diamondWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'diamond', 'solo'))
+    const masterWinValue = moneyToCents(getWinBoostPrice('solo_duo', 'master', 'solo'))
     expect(diamondWinValue).not.toBe(masterWinValue)
-    const expectedSegment = applyMasterPlusPdlDiscount(899.90, 'grandmaster', 0, 'diamond', 'solo_duo')
+    const expectedSegment = applyMasterPlusPdlDiscount(1119.17, 'grandmaster', 0, 'diamond', 'solo_duo')
     expect(masterPlusSegment).toBeCloseTo(expectedSegment, 2)
   })
 
@@ -259,24 +342,39 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
     expect(priced.basePrice).toBe(0)
   })
 
-  it('Duo Boost aplica +50% sobre o preço combinado (divisão + Master+), não só sobre o trecho de divisão', () => {
-    const solo = computeOrderPrice(baseInput({
+  it('Duo Boost bloqueado (price 0) quando o alvo é Grão-Mestre, a partir de um rank padrão (Diamond) -- Duo é Iron-Diamond only agora', () => {
+    const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'grandmaster', division: null },
-      masterPlusPrice: 899.90,
-      boostMode: 'solo',
-    }))
-    const duo = computeOrderPrice(baseInput({
-      currentRank: { tier: 'diamond', division: 'I' },
-      targetRank: { tier: 'grandmaster', division: null },
-      masterPlusPrice: 899.90,
+      masterPlusPrice: 1119.17,
       boostMode: 'duo',
     }))
-    expect(duo.basePrice).toBeCloseTo(Math.round(solo.basePrice * 1.5 * 100) / 100, 2)
+    expect(priced.basePrice).toBe(0)
+  })
+
+  it('Duo Boost bloqueado (price 0) quando o alvo é Challenger, mesmo vindo de um rank padrão (Diamond)', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'diamond', division: 'I' },
+      targetRank: { tier: 'challenger', division: null },
+      masterPlusPrice: 2718.04,
+      boostMode: 'duo',
+    }))
+    expect(priced.basePrice).toBe(0)
+  })
+
+  it('na fila Flex, Duo Boost também é bloqueado com alvo Master+ a partir de um rank padrão (Diamond) -- a exceção de fila não existe mais', () => {
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'diamond', division: 'I' },
+      targetRank: { tier: 'challenger', division: null },
+      masterPlusPrice: 2718.04,
+      boostMode: 'duo',
+      queueType: 'flex',
+    }))
+    expect(priced.basePrice).toBe(0)
   })
 
   it('alvo "master" exato não soma masterPlusPrice -- já coberto pelo preço por divisão', () => {
-    const { price: expected } = calcEloPrice('solo_duo', 'diamond', 'I', 'master', null)
+    const { price: expected } = calcEloPrice('solo_duo', 'solo', 'diamond', 'I', 'master', null)
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'master', division: null },
@@ -323,7 +421,7 @@ describe('Integridade monetária e entradas hostis', () => {
       currentRank: { tier: 'gold', division: 'II' },
       winsPurchased,
     }))
-    expect(priced.basePrice).toBe(winsPurchased * 5.07)
+    expect(priced.basePrice).toBeCloseTo(winsPurchased * 5.67, 2)
     expect(priced.totalPrice).toBe(priced.basePrice)
   })
 
@@ -343,7 +441,7 @@ describe('Integridade monetária e entradas hostis', () => {
       currentRank: { tier: 'gold', division: 'II' },
       winsPurchased: 5,
     }))
-    expect(validAtBoundary.basePrice).toBe(5 * 5.07)
+    expect(validAtBoundary.basePrice).toBe(5 * 5.67)
 
     const invalidAtBoundary = computeOrderPrice(baseInput({
       serviceType: 'win_boost',
@@ -360,7 +458,7 @@ describe('Integridade monetária e entradas hostis', () => {
       winsPurchased: 2,
     }))
 
-    expect(priced.basePrice).toBe(259.74)
+    expect(priced.basePrice).toBe(288.80)
   })
 
   it('calcula MD5 proporcional ao pacote de 5 partidas com Master+', () => {
@@ -370,8 +468,8 @@ describe('Integridade monetária e entradas hostis', () => {
       winsPurchased: 3,
     }))
 
-    // grandmaster: Vitória Avulsa R$77,87/vitória com 50% de desconto = R$38,94/vitória
-    expect(priced.basePrice).toBe(116.82)
+    // grandmaster: MD5 é tabela própria agora, R$29,90/vitória.
+    expect(priced.basePrice).toBe(89.70)
   })
 
   it('recusa quantidade negativa (basePrice zerado, mesma faixa 1-5 do MD5)', () => {
@@ -385,21 +483,21 @@ describe('Integridade monetária e entradas hostis', () => {
 })
 
 describe('MD5 — preço por vitória líquida (garantia de win rate nas placements)', () => {
-  it('preço por vitória = preço da Vitória Avulsa com 50% de desconto, arredondado a 2 casas', () => {
+  it('MD5 usa tabela própria por tier, independente da Vitória Avulsa', () => {
     const priced = computeOrderPrice(baseInput({
       serviceType: 'md5',
       currentRank: { tier: 'gold', division: null },
       winsPurchased: 3,
     }))
-    // Gold solo_duo: Vitória Avulsa R$5,07/vitória com 50% de desconto = R$2,54/vitória
-    expect(priced.basePrice).toBeCloseTo(2.54 * 3, 2)
+    // Gold solo: MD5 R$5,98/vitória (tabela própria, não derivada do Win Boost).
+    expect(priced.basePrice).toBeCloseTo(5.98 * 3, 2)
   })
 
-  it('todos os 10 tiers derivam de getWinBoostPrice com 50% de desconto (solo_duo)', () => {
+  it('todos os 10 tiers usam a tabela própria de MD5 (solo, solo_duo)', () => {
     const cases: [string, number][] = [
-      ['iron', 1.89], ['bronze', 1.89], ['silver', 2.54], ['gold', 2.54],
-      ['platinum', 4.49], ['emerald', 6.44], ['diamond', 10.34],
-      ['master', 29.19], ['grandmaster', 38.94], ['challenger', 64.94],
+      ['iron', 3.80], ['bronze', 4.50], ['silver', 5.09], ['gold', 5.98],
+      ['platinum', 8.25], ['emerald', 10.11], ['diamond', 10.98],
+      ['master', 16.02], ['grandmaster', 29.90], ['challenger', 47.88],
     ]
     for (const [tier, perWinPrice] of cases) {
       const priced = computeOrderPrice(baseInput({
@@ -451,95 +549,150 @@ describe('placement_matches (MD5 Completo, legado) — PLACEMENT_PRICE segue com
 })
 
 describe('Preços por fila — Vitória Avulsa', () => {
-  const soloDuo: [RankTier, number][] = [
-    ['iron', 377], ['bronze', 377], ['silver', 507], ['gold', 507], ['platinum', 897],
-    ['emerald', 1287], ['diamond', 2067], ['master', 5837], ['grandmaster', 7787], ['challenger', 12987],
+  const solo: [RankTier, number][] = [
+    ['iron', 458], ['bronze', 458], ['silver', 479], ['gold', 567], ['platinum', 930],
+    ['emerald', 1315], ['diamond', 1685], ['master', 5830], ['grandmaster', 8620], ['challenger', 14440],
   ]
-  const flex: [RankTier, number][] = [
-    ['iron', 377], ['bronze', 377], ['silver', 507], ['gold', 507], ['platinum', 897],
-    ['emerald', 1287], ['diamond', 2067], ['master', 5253], ['grandmaster', 7008], ['challenger', 11688],
+  const duo: [RankTier, number][] = [
+    ['iron', 605], ['bronze', 605], ['silver', 795], ['gold', 929], ['platinum', 1085],
+    ['emerald', 2005], ['diamond', 2995], ['master', 8515],
   ]
-  it.each(soloDuo)('solo_duo %s = %i centavos', (tier, cents) => {
-    expect(moneyToCents(getWinBoostPrice('solo_duo', tier))).toBe(cents)
+  it.each(solo)('solo_duo solo %s = %i centavos', (tier, cents) => {
+    expect(moneyToCents(getWinBoostPrice('solo_duo', tier, 'solo'))).toBe(cents)
   })
-  it.each(flex)('flex %s = %i centavos', (tier, cents) => {
-    expect(moneyToCents(getWinBoostPrice('flex', tier))).toBe(cents)
+  it.each(solo)('flex solo %s = %i centavos (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getWinBoostPrice('flex', tier, 'solo'))).toBe(cents)
+  })
+  it.each(duo)('solo_duo duo %s = %i centavos', (tier, cents) => {
+    expect(moneyToCents(getWinBoostPrice('solo_duo', tier, 'duo'))).toBe(cents)
+  })
+  it.each(duo)('flex duo %s = %i centavos (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getWinBoostPrice('flex', tier, 'duo'))).toBe(cents)
   })
 })
 
-describe('Preços por fila — MD5 (garantia de win rate, por vitória — Vitória Avulsa com 50% de desconto)', () => {
-  const soloDuo: [RankTier, number][] = [
-    ['iron', 189], ['bronze', 189], ['silver', 254], ['gold', 254], ['platinum', 449],
-    ['emerald', 644], ['diamond', 1034], ['master', 2919], ['grandmaster', 3894], ['challenger', 6494],
+describe('Preços por fila — MD5 (tabela própria por vitória líquida)', () => {
+  const solo: [RankTier, number][] = [
+    ['iron', 380], ['bronze', 450], ['silver', 509], ['gold', 598], ['platinum', 825],
+    ['emerald', 1011], ['diamond', 1098], ['master', 1602], ['grandmaster', 2990], ['challenger', 4788],
   ]
-  const flex: [RankTier, number][] = [
-    ['iron', 189], ['bronze', 189], ['silver', 254], ['gold', 254], ['platinum', 449],
-    ['emerald', 644], ['diamond', 1034], ['master', 2627], ['grandmaster', 3504], ['challenger', 5844],
+  const duo: [RankTier, number][] = [
+    ['iron', 540], ['bronze', 628], ['silver', 726], ['gold', 809], ['platinum', 953],
+    ['emerald', 1498], ['diamond', 1999], ['master', 3350],
   ]
-  it.each(soloDuo)('solo_duo %s = %i centavos', (tier, cents) => {
-    expect(moneyToCents(getMd5WinPrice('solo_duo', tier))).toBe(cents)
+  it.each(solo)('solo_duo solo %s = %i centavos', (tier, cents) => {
+    expect(moneyToCents(getMd5WinPrice('solo_duo', tier, 'solo'))).toBe(cents)
   })
-  it.each(flex)('flex %s = %i centavos', (tier, cents) => {
-    expect(moneyToCents(getMd5WinPrice('flex', tier))).toBe(cents)
+  it.each(solo)('flex solo %s = %i centavos (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getMd5WinPrice('flex', tier, 'solo'))).toBe(cents)
+  })
+  it.each(duo)('solo_duo duo %s = %i centavos', (tier, cents) => {
+    expect(moneyToCents(getMd5WinPrice('solo_duo', tier, 'duo'))).toBe(cents)
+  })
+  it.each(duo)('flex duo %s = %i centavos (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getMd5WinPrice('flex', tier, 'duo'))).toBe(cents)
   })
 })
 
 describe('Preços por fila — Elo Boost (por divisão)', () => {
-  // Iron..Diamond entry price per division, in cents.
-  const soloDuo: [RankTier, number][] = [
-    ['iron', 1105], ['bronze', 1287], ['silver', 1755], ['gold', 2197],
-    ['platinum', 3107], ['emerald', 6097], ['diamond', 9737],
+  const solo: [RankTier, number][] = [
+    ['iron', 1090], ['bronze', 1290], ['silver', 1690], ['gold', 2190],
+    ['platinum', 3190], ['emerald', 6290], ['diamond', 10290],
   ]
-  // Flex deixou de ter desconto sobre solo_duo -- mesmos valores das duas filas.
-  const flex: [RankTier, number][] = [
-    ['iron', 1105], ['bronze', 1287], ['silver', 1755], ['gold', 2197],
-    ['platinum', 3107], ['emerald', 6097], ['diamond', 9737],
+  const duo: [RankTier, number][] = [
+    ['iron', 2090], ['bronze', 2390], ['silver', 2690], ['gold', 3290],
+    ['platinum', 4890], ['emerald', 9890], ['diamond', 15790],
   ]
-  it.each(soloDuo)('solo_duo %s = %i centavos/divisão', (tier, cents) => {
-    expect(moneyToCents(getEloDivPrice('solo_duo', tier))).toBe(cents)
+  it.each(solo)('solo_duo solo %s = %i centavos/divisão', (tier, cents) => {
+    expect(moneyToCents(getEloDivPrice('solo_duo', tier, 'solo'))).toBe(cents)
   })
-  it.each(flex)('flex %s = %i centavos/divisão', (tier, cents) => {
-    expect(moneyToCents(getEloDivPrice('flex', tier))).toBe(cents)
+  it.each(solo)('flex solo %s = %i centavos/divisão (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getEloDivPrice('flex', tier, 'solo'))).toBe(cents)
+  })
+  it.each(duo)('solo_duo duo %s = %i centavos/divisão', (tier, cents) => {
+    expect(moneyToCents(getEloDivPrice('solo_duo', tier, 'duo'))).toBe(cents)
+  })
+  it.each(duo)('flex duo %s = %i centavos/divisão (Flex espelha Solo/Duo)', (tier, cents) => {
+    expect(moneyToCents(getEloDivPrice('flex', tier, 'duo'))).toBe(cents)
   })
 })
 
-describe('Modificador de PDL — limiares corrigidos (15%/normal/-5%)', () => {
-  it('19 PDL de média aplica +15%', () => {
+describe('Modificador de PDL — limiar único (10%/normal)', () => {
+  it('19 PDL de média aplica +10%', () => {
     const withMod = applyLpModifier(100, 'gold', 0, 19)
-    expect(withMod).toBeCloseTo(115, 2)
+    expect(withMod).toBeCloseTo(110, 2)
   })
-  it('20 PDL de média é preço normal (limite inferior incluído)', () => {
+  it('20 PDL de média é preço normal (limite incluído)', () => {
     expect(applyLpModifier(100, 'gold', 0, 20)).toBeCloseTo(100, 2)
   })
-  it('25 PDL de média é preço normal (limite superior incluído)', () => {
-    expect(applyLpModifier(100, 'gold', 0, 25)).toBeCloseTo(100, 2)
-  })
-  it('26 PDL de média aplica -5%', () => {
-    expect(applyLpModifier(100, 'gold', 0, 26)).toBeCloseTo(95, 2)
+  it('30 PDL de média continua preço normal (não há mais desconto acima de 25)', () => {
+    expect(applyLpModifier(100, 'gold', 0, 30)).toBeCloseTo(100, 2)
   })
 })
 
-describe('lpModifierPct — mesmos limiares expostos como percentual', () => {
-  it('19 PDL de média => +15', () => {
-    expect(lpModifierPct(19)).toBe(15)
+describe('Desconto por vitória já banked no LP atual (Iron–Diamond) — não é proporcional à divisão inteira', () => {
+  it('0 LP atual => sem desconto nenhum, preço cheio', () => {
+    expect(applyLpModifier(102.90, 'diamond', 0, 22)).toBe(102.90)
   })
-  it('20 PDL de média => 0 (limite inferior incluído)', () => {
+
+  it('exemplo real: Diamante III 23 LP atual, média 22 -- 1 vitória banked, desconta 5% da Vitória Avulsa em Diamante', () => {
+    // floor(23/22) = 1 vitória banked. Vitória Avulsa solo em Diamante =
+    // R$16,85 -> 5% = R$0,8425, arredonda pra R$0,84 (centavo mais próximo).
+    const { price: fullPrice } = calcEloPrice('solo_duo', 'solo', 'diamond', 'III', 'diamond', 'II')
+    expect(fullPrice).toBeCloseTo(102.90, 2)
+    const result = applyLpModifier(fullPrice, 'diamond', 23, 22, undefined, 'solo_duo', 'solo')
+    expect(result).toBeCloseTo(102.06, 2)
+  })
+
+  it('LP atual menor que a média => 0 vitórias banked, sem desconto (mesmo com LP > 0)', () => {
+    // 15 LP atual, média 22 -- floor(15/22) = 0, nenhuma vitória completa banked.
+    expect(applyLpModifier(102.90, 'diamond', 15, 22)).toBe(102.90)
+  })
+
+  it('2 vitórias banked desconta 2x o valor de uma Vitória Avulsa no tier atual', () => {
+    // Gold: 60 LP atual, média 25 -- floor(60/25) = 2. Vitória Avulsa Gold R$5,67 -> 5% = R$0,2835/vitória.
+    const result = applyLpModifier(100, 'gold', 60, 25)
+    expect(result).toBeCloseTo(100 - 2 * 5.67 * 0.05, 2)
+  })
+
+  it('desconto usa a tabela de Duo quando o boost é Duo, não a de Solo', () => {
+    const solo = applyLpModifier(100, 'gold', 25, 25, undefined, 'solo_duo', 'solo')
+    const duo = applyLpModifier(100, 'gold', 25, 25, undefined, 'solo_duo', 'duo')
+    // Vitória Avulsa Gold: solo R$5,67, duo R$9,29 -- descontos diferentes.
+    expect(solo).not.toBe(duo)
+    expect(duo).toBeCloseTo(100 - 1 * 9.29 * 0.05, 2)
+  })
+
+  it('desconto por LP banked e o modificador de +10%/normal se combinam (desconta primeiro, depois aplica o percentual)', () => {
+    // Iron: 15 LP atual, média 19 (< 20 => +10%) -- floor(15/19) = 0 vitórias banked aqui,
+    // então só o +10% se aplica.
+    expect(applyLpModifier(100, 'iron', 15, 19)).toBeCloseTo(110, 2)
+  })
+
+  it('desconto nunca deixa o preço negativo mesmo com muitas vitórias banked', () => {
+    // 99 LP atual, média 1 -- floor(99/1) = 99 vitórias, desconto estourado.
+    expect(applyLpModifier(1, 'iron', 99, 1)).toBe(0)
+  })
+})
+
+describe('lpModifierPct — limiar único exposto como percentual', () => {
+  it('19 PDL de média => 10', () => {
+    expect(lpModifierPct(19)).toBe(10)
+  })
+  it('20 PDL de média => 0 (limite incluído)', () => {
     expect(lpModifierPct(20)).toBe(0)
   })
-  it('25 PDL de média => 0 (limite superior incluído)', () => {
-    expect(lpModifierPct(25)).toBe(0)
-  })
-  it('26 PDL de média => -5', () => {
-    expect(lpModifierPct(26)).toBe(-5)
+  it('30 PDL de média => 0 (não há mais desconto acima de 25)', () => {
+    expect(lpModifierPct(30)).toBe(0)
   })
 })
 
 describe('computeOrderPrice — pdlModifierPct exposto no resultado (fluxo padrão elo_boost)', () => {
   it.each([
-    [19, 15],
+    [19, 10],
     [20, 0],
     [25, 0],
-    [26, -5],
+    [30, 0],
   ])('avgLpGain=%i => pdlModifierPct=%i', (avgLpGain, expectedPct) => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'iron', division: 'IV' },

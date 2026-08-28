@@ -239,7 +239,7 @@ export function OrderBuilderPage() {
   // Mesma regra de StepExtras.tsx/StepPayment.tsx — Clash reaproveita
   // solo_standard/duo_standard pela modalidade, sem currentRank envolvido.
   const flow = serviceType === 'elo_boost' && currentRank
-    ? getBoostFlow(currentRank.tier, boostMode)
+    ? getBoostFlow(currentRank.tier, boostMode, queueType)
     : serviceType === 'win_boost' || serviceType === 'md5' || serviceType === 'clash'
       ? (boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
       : null
@@ -381,7 +381,7 @@ export function OrderBuilderPage() {
   const WIN_PACKAGE_DISCOUNTS: Record<number, number> = { 1: 10, 3: 20, 5: 30 }
   const winPackagePrice = winPackage && currentRank
     ? Math.round(
-        getWinBoostPrice(queueType, currentRank.tier, currentRank.division ?? null)
+        getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
         * winPackage
         * (1 - (WIN_PACKAGE_DISCOUNTS[winPackage] ?? 0) / 100)
         * 100
@@ -435,9 +435,10 @@ export function OrderBuilderPage() {
         />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      {/* Grid (não flex) pra travar a proporção 70/30 (col-span 7/3 de 10). */}
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 lg:items-start">
         {/* Main step content */}
-        <div className="flex-1 min-w-0">
+        <div className="lg:col-span-7 min-w-0">
           <Card padding="lg" className="animate-fade-in">
             <StepContent />
 
@@ -486,102 +487,98 @@ export function OrderBuilderPage() {
           </Modal>
         </div>
 
-        {/* Summary panel — acompanha o pedido em todas as etapas (sticky),
-            não só na revisão final, pra o cliente ver quanto está pagando
-            desde o início. Largura maior que antes (era lg:w-72): nesse
-            tamanho os botões de Voltar/Ir para Pagamento da revisão ficavam
-            espremidos contra o padding do Card. O sticky vai no wrapper
-            interno (não no <aside> nem só no primeiro Card): o <aside> é
-            esticado pelo flex pai até a altura da coluna principal (bem mais
-            alto que os 2 cards juntos), então "sticky" direto nele não tem
-            efeito nenhum -- e sticky só no Card de preço fazia o card de
-            confiança (abaixo, em fluxo normal) rolar por trás/sobre ele.
-            Com os dois dentro do mesmo wrapper sticky, sobem e "grudam"
-            juntos, sem sobreposição. */}
-        <aside className="lg:w-80 xl:w-96 shrink-0">
-          <div className="sticky top-6 space-y-5">
-          <Card padding="lg">
-            <div className="space-y-2.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-ink-secondary">Preço base</span>
-                <span className="text-ink">{currency(basePrice)}</span>
-              </div>
-
-              {winPackage && (
+        {/* Summary panel — acompanha o pedido em todas as etapas, não só na
+            revisão final, pra o cliente ver quanto está pagando desde o
+            início. Flui normalmente com a página, igual à coluna principal. */}
+        <aside className="lg:col-span-3">
+          <div className="space-y-5">
+            {/* variant flat (sem blur/sombra/transparência) -- o card
+                "vidro" padrão, isolado nessa coluna estreita, lia como um
+                painel flutuando por cima da página; a coluna da esquerda
+                não tem esse problema porque o Card lá ocupa quase toda a
+                largura, então a mesma sombra/blur não chama atenção. */}
+            <Card padding="lg" className="shadow-none backdrop-blur-none bg-bg-surface">
+              <div className="space-y-2.5">
                 <div className="flex justify-between text-xs">
-                  <span className="text-ink-secondary">Pacote {winPackage} {winPackage === 1 ? 'vitória' : 'vitórias'} (-{WIN_PACKAGE_DISCOUNTS[winPackage]}%)</span>
-                  <span className="text-ink">+{currency(winPackagePrice)}</span>
+                  <span className="text-ink-secondary">Preço base</span>
+                  <span className="text-ink">{currency(basePrice)}</span>
                 </div>
-              )}
-              {selectedAddons.map((extra) => (
-                <div key={extra.id} className="flex justify-between text-xs">
-                  <span className="text-ink-secondary">{serviceType ? resolveAddonLabel(extra, serviceType).name : extra.name}</span>
-                  <span className="text-ink">
-                    {extra.price_modifier > 0 ? `+${currency(extra.price_modifier)}` :
-                     extra.price_modifier_pct > 0 ? `+${extra.price_modifier_pct}%` : 'Grátis'}
-                  </span>
-                </div>
-              ))}
 
-              {/* Cupom fixo — aplicado automaticamente pelo store
-                  (couponCode inicia em DEFAULT_COUPON_CODE), sem o cliente
-                  precisar digitar nada. Só aparece quando de fato se aplica
-                  (elo boost/vitórias/md5/clash — Coaching fica fora porque
-                  o preço é o pacote do próprio booster, ver
-                  COUPON_ELIGIBLE_SERVICE_TYPES em shared/pricing.ts). */}
-              {coupon?.couponApplied && (
-                <div className="flex items-center gap-1.5 py-2 text-xs text-success font-medium">
-                  <Tag className="h-3.5 w-3.5 shrink-0" />
-                  Cupom {couponCode} aplicado · -{coupon.discountPct}%
-                </div>
-              )}
-
-              {discountPrice > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-success font-medium">Desconto (-{coupon?.discountPct}%)</span>
-                  <span className="text-success font-medium">-{currency(discountPrice)}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-end pt-2">
-                <span className="text-sm font-semibold text-ink">Total</span>
-                {discountPrice > 0 ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-ink-muted line-through">{currency(subtotal)}</span>
-                    <span className="text-lg font-extrabold text-success">{currency(totalPrice)}</span>
+                {winPackage && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-ink-secondary">Pacote {winPackage} {winPackage === 1 ? 'vitória' : 'vitórias'} (-{WIN_PACKAGE_DISCOUNTS[winPackage]}%)</span>
+                    <span className="text-ink">+{currency(winPackagePrice)}</span>
                   </div>
-                ) : (
-                  <span className="text-base font-bold text-brand">{currency(totalPrice)}</span>
+                )}
+                {selectedAddons.map((extra) => (
+                  <div key={extra.id} className="flex justify-between text-xs">
+                    <span className="text-ink-secondary">{serviceType ? resolveAddonLabel(extra, serviceType).name : extra.name}</span>
+                    <span className="text-ink">
+                      {extra.price_modifier > 0 ? `+${currency(extra.price_modifier)}` :
+                       extra.price_modifier_pct > 0 ? `+${extra.price_modifier_pct}%` : 'Grátis'}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Cupom fixo — aplicado automaticamente pelo store
+                    (couponCode inicia em DEFAULT_COUPON_CODE), sem o cliente
+                    precisar digitar nada. Só aparece quando de fato se aplica
+                    (elo boost/vitórias/md5/clash — Coaching fica fora porque
+                    o preço é o pacote do próprio booster, ver
+                    COUPON_ELIGIBLE_SERVICE_TYPES em shared/pricing.ts). */}
+                {coupon?.couponApplied && (
+                  <div className="flex items-center gap-1.5 py-2 text-xs text-success font-medium">
+                    <Tag className="h-3.5 w-3.5 shrink-0" />
+                    Cupom {couponCode} aplicado · -{coupon.discountPct}%
+                  </div>
+                )}
+
+                {discountPrice > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-success font-medium">Desconto (-{coupon?.discountPct}%)</span>
+                    <span className="text-success font-medium">-{currency(discountPrice)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-end pt-2">
+                  <span className="text-sm font-semibold text-ink">Total</span>
+                  {discountPrice > 0 ? (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-ink-muted line-through">{currency(subtotal)}</span>
+                      <span className="text-lg font-extrabold text-success">{currency(totalPrice)}</span>
+                    </div>
+                  ) : (
+                    <span className="text-base font-bold text-brand">{currency(totalPrice)}</span>
+                  )}
+                </div>
+
+                {step === 'review' && (
+                  <div className="flex gap-2.5 pt-4">
+                    <Button variant="ghost" onClick={goBackFromReview} className="shrink-0">
+                      Voltar
+                    </Button>
+                    <Button onClick={() => setPixModalOpen(true)} className="flex-1" rightIcon={<ChevronRight className="h-4 w-4" />}>
+                      {serviceType === 'coaching' ? 'Confirmar' : 'Ir para Pagamento'}
+                    </Button>
+                  </div>
                 )}
               </div>
+            </Card>
 
-              {step === 'review' && (
-                <div className="flex gap-2.5 pt-4">
-                  <Button variant="ghost" onClick={goBackFromReview} className="shrink-0">
-                    Voltar
-                  </Button>
-                  <Button onClick={() => setPixModalOpen(true)} className="flex-1" rightIcon={<ChevronRight className="h-4 w-4" />}>
-                    {serviceType === 'coaching' ? 'Confirmar' : 'Ir para Pagamento'}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Trust badges */}
-          <Card padding="lg" variant="brand">
-            <div className="space-y-4">
-              {[
-                { icon: Shield, text: 'VPN & proteção offline' },
-                { icon: Star, text: 'Garantia 100% de conclusão' },
-                { icon: Clock, text: 'Inicia em até 30 minutos' },
-              ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-2 text-xs text-ink-secondary">
-                  <Icon className="h-3.5 w-3.5 text-brand shrink-0" />
-                  {text}
-                </div>
-              ))}
-            </div>
-          </Card>
+            {/* Trust badges */}
+            <Card padding="lg" variant="brand">
+              <div className="space-y-4">
+                {[
+                  { icon: Shield, text: 'VPN & proteção offline' },
+                  { icon: Star, text: 'Garantia 100% de conclusão' },
+                  { icon: Clock, text: 'Inicia em até 30 minutos' },
+                ].map(({ icon: Icon, text }) => (
+                  <div key={text} className="flex items-center gap-2 text-xs text-ink-secondary">
+                    <Icon className="h-3.5 w-3.5 text-brand shrink-0" />
+                    {text}
+                  </div>
+                ))}
+              </div>
+            </Card>
           </div>
         </aside>
       </div>

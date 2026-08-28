@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, RefreshCw } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, CurrencyMaskedInput, EmptyState, ErrorAlert, Modal, Skeleton } from '@/components/ui'
@@ -25,9 +25,9 @@ const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 // que já aconteceu, não chama o Mercado Pago. Por isso pede o ID completo do
 // pedido (não dá pra buscar por texto parcial) e mostra cliente/valor total
 // do pedido encontrado como confirmação antes de deixar submeter.
-function NewManualRefundModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: boolean; onClose: () => void; initialOrderId?: string }) {
   const currency = useCurrency()
-  const [orderId, setOrderId] = useState('')
+  const [orderId, setOrderId] = useState(initialOrderId)
   const [reason, setReason] = useState('')
   const [amountCents, setAmountCents] = useState(0)
   const createRefund = useAdminCreateManualRefund()
@@ -121,7 +121,12 @@ function NewManualRefundModal({ open, onClose }: { open: boolean; onClose: () =>
 export function AdminRefundsPage() {
   const { t } = useTranslation()
   const currency = useCurrency()
-  const [newRefundOpen, setNewRefundOpen] = useState(false)
+  const [searchParams] = useSearchParams()
+  // Chegando daqui via "Marcar pra reembolsar" na página do pedido (admin)
+  // -- abre o formulário de reembolso manual já com o pedido preenchido, em
+  // vez do admin precisar copiar/colar o UUID de novo.
+  const prefilledOrderId = searchParams.get('order_id') ?? ''
+  const [newRefundOpen, setNewRefundOpen] = useState(!!prefilledOrderId)
 
   const { data: refunds, isLoading } = useAdminRefunds()
 
@@ -186,7 +191,7 @@ export function AdminRefundsPage() {
         )}
       </div>
 
-      <NewManualRefundModal open={newRefundOpen} onClose={() => setNewRefundOpen(false)} />
+      <NewManualRefundModal open={newRefundOpen} onClose={() => setNewRefundOpen(false)} initialOrderId={prefilledOrderId} />
     </div>
   )
 }

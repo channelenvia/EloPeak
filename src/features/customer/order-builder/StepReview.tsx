@@ -1,5 +1,5 @@
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
-import { formatEstimatedDelivery, orderRequiresAccountAccess } from '@/lib/utils'
+import { formatEstimatedDelivery } from '@/lib/utils'
 import { isMasterPlusCurrentTier } from '@/lib/boostDomain'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { GuaranteeNotice } from '@/components/ui'
@@ -22,7 +22,6 @@ export function StepReview() {
   } = useOrderBuilderStore()
 
   const currentIsMasterPlus = currentRank ? isMasterPlusCurrentTier(currentRank.tier) : false
-  const showAccountAccessNotice = serviceType != null && orderRequiresAccountAccess({ service_type: serviceType, boost_mode: boostMode })
   const showWinsGuarantee = serviceType === 'win_boost' || serviceType === 'md5'
 
   const isBoostFlow = serviceType === 'elo_boost' || serviceType === 'win_boost' || serviceType === 'md5'
@@ -133,25 +132,12 @@ export function StepReview() {
           </div>
         </div>
 
-        {(showWinsGuarantee || showAccountAccessNotice) && (
-          <div className={`grid grid-cols-1 gap-4 ${showWinsGuarantee && showAccountAccessNotice ? 'md:grid-cols-2' : ''}`}>
-            {showWinsGuarantee && (
-              <GuaranteeNotice title={isMd5 ? 'Garantia de Win Rate MD5' : 'Garantia de Win Rate - Vitórias Extras'}>
-                {isMd5
-                  ? 'Asseguramos uma taxa de vitória de 80% ou mais nas suas partidas classificatórias. Caso o desempenho final fique abaixo desse percentual, adicionamos vitórias extras como compensação até atingir o resultado acordado.'
-                  : 'Trabalhamos com o sistema de vitórias líquidas, considerando o saldo entre vitórias e derrotas. Se houver alguma derrota durante o serviço, ela será compensada com uma vitória adicional, garantindo que você receba exatamente a quantidade de vitórias contratada. Exemplo: você compra 2 vitórias. Se o resultado for 3 vitórias e 1 derrota, o saldo final será de +2 vitórias líquidas, exatamente como contratado.'}
-              </GuaranteeNotice>
-            )}
-
-            {showAccountAccessNotice && (
-              <GuaranteeNotice title="Evite entrar na conta durante o pedido" variant="warning">
-                Nesse tipo de serviço, o booster faz login e joga direto na sua conta. Para não
-                atrapalhar o progresso nem gerar divergência de resultado, evite entrar na conta
-                até o pedido ser finalizado — você pode acompanhar tudo por aqui e pelo chat com o
-                booster.
-              </GuaranteeNotice>
-            )}
-          </div>
+        {showWinsGuarantee && (
+          <GuaranteeNotice title={isMd5 ? 'Garantia de Win Rate MD5' : 'Garantia de Win Rate - Vitórias Extras'}>
+            {isMd5
+              ? 'Asseguramos uma taxa de vitória de 80% ou mais nas suas partidas classificatórias. Caso o desempenho final fique abaixo desse percentual, adicionamos vitórias extras como compensação até atingir o resultado acordado.'
+              : 'Trabalhamos com o sistema de vitórias líquidas, considerando o saldo entre vitórias e derrotas. Se houver alguma derrota durante o serviço, ela será compensada com uma vitória adicional, garantindo que você receba exatamente a quantidade de vitórias contratada. Exemplo: você compra 2 vitórias. Se o resultado for 3 vitórias e 1 derrota, o saldo final será de +2 vitórias líquidas, exatamente como contratado.'}
+          </GuaranteeNotice>
         )}
 
         {/* Notes — editable before payment */}
@@ -168,10 +154,6 @@ export function StepReview() {
             <p className="text-[10px] text-ink-muted mt-1 text-right">{customerNotes.length}/500</p>
           )}
         </div>
-
-        <p className="text-xs text-ink-muted text-center">
-          Pagamento processado pelo Mercado Pago. Seus dados nunca tocam nossos servidores.
-        </p>
       </div>
     </div>
   )

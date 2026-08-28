@@ -91,7 +91,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   // Clash reaproveita o mesmo catálogo do Elo Boost (ver StepExtras.tsx):
   // Solo Clash usa 'solo_standard', Duo Clash usa 'duo_standard'.
   const flow = store.serviceType === 'elo_boost' && store.currentRank
-    ? getBoostFlow(store.currentRank.tier, store.boostMode)
+    ? getBoostFlow(store.currentRank.tier, store.boostMode, store.queueType)
     : store.serviceType === 'win_boost' || store.serviceType === 'md5' || isClash
       ? (store.boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
       : null
@@ -271,7 +271,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         ? {
             ...baseWithRank,
             target_rank: store.targetRank,
-            boost_mode: 'solo',
+            boost_mode: store.boostMode,
             addon_codes: addonCodes,
             riot_id: store.riotId,
             customer_lanes: store.customerLanes,

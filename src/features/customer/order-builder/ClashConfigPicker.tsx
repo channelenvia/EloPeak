@@ -122,74 +122,78 @@ export function ClashConfigPicker() {
         </div>
       </div>
 
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Dia</p>
-        <div className="grid grid-cols-2 gap-3">
-          {CLASH_DAYS.map((day) => (
+      {/* Dia + Riot ID na mesma linha, mesmo esquema do Elo Boost/Vitórias
+          em StepConfigure.tsx (fila/dia à esquerda, Riot ID + verificação à
+          direita). Riot ID obrigatório nos dois modos — no Solo é
+          referência do booster (que loga via credenciais), no Duo é o
+          identificador que o booster usa pra te convidar pro time dentro do
+          jogo. A busca preenche o tier sozinho a partir do rank atual na
+          fila solo/duo. */}
+      <div className="grid sm:grid-cols-[2fr_3fr] gap-4 items-start">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Dia</p>
+          <div className="grid grid-cols-2 gap-3">
+            {CLASH_DAYS.map((day) => (
+              <button
+                key={day}
+                type="button"
+                onClick={() => setClashDay(day)}
+                className={cn(
+                  'py-3 rounded-xl text-sm font-bold border-2 transition-all',
+                  clashDay === day
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-border-subtle bg-bg-card text-ink-secondary hover:border-brand/30',
+                )}
+              >
+                {CLASH_DAY_LABEL[day]}
+              </button>
+            ))}
+          </div>
+          {stepAttempted && !clashDay && <p className="text-xs text-danger mt-2">Selecione um dia</p>}
+        </div>
+
+        <FormField
+          label="Riot ID"
+          required
+          error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
+        >
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={riotId}
+              onChange={e => {
+                setRiotId(e.target.value)
+                setClashTier(null)
+                setRiotLookupMessage(null)
+                setRiotLookupError(null)
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void lookupRiotRank()
+                }
+              }}
+              placeholder="NomeDoInvocador#TAG"
+              className="input-base flex-1"
+              maxLength={32}
+            />
             <button
-              key={day}
               type="button"
-              onClick={() => setClashDay(day)}
+              onClick={() => void lookupRiotRank()}
+              disabled={riotLookupLoading}
               className={cn(
-                'py-3 rounded-xl text-sm font-bold border-2 transition-all',
-                clashDay === day
-                  ? 'border-brand bg-brand/10 text-brand'
-                  : 'border-border-subtle bg-bg-card text-ink-secondary hover:border-brand/30',
+                'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
+                'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
               )}
             >
-              {CLASH_DAY_LABEL[day]}
+              <Search className="h-4 w-4" />
+              {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
             </button>
-          ))}
-        </div>
-        {stepAttempted && !clashDay && <p className="text-xs text-danger mt-2">Selecione um dia</p>}
+          </div>
+          {riotLookupMessage && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
+          {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
+        </FormField>
       </div>
-
-      {/* Riot ID: obrigatório nos dois modos — no Solo é referência do
-          booster (que loga via credenciais), no Duo é o identificador que
-          o booster usa pra te convidar pro time dentro do jogo. A busca
-          preenche o tier sozinho a partir do rank atual na fila solo/duo. */}
-      <FormField
-        label="Riot ID"
-        required
-        hint="Informe seu Nome#TAG para verificar seu Tier do Clash. O booster também usa isso para identificar sua conta."
-        error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
-      >
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            value={riotId}
-            onChange={e => {
-              setRiotId(e.target.value)
-              setClashTier(null)
-              setRiotLookupMessage(null)
-              setRiotLookupError(null)
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                void lookupRiotRank()
-              }
-            }}
-            placeholder="NomeDoInvocador#TAG"
-            className="input-base flex-1"
-            maxLength={32}
-          />
-          <button
-            type="button"
-            onClick={() => void lookupRiotRank()}
-            disabled={riotLookupLoading}
-            className={cn(
-              'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
-              'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
-            )}
-          >
-            <Search className="h-4 w-4" />
-            {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
-          </button>
-        </div>
-        {riotLookupMessage && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
-        {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
-      </FormField>
 
       {riotVerified && riotAutoFilled && clashTier && detectedTierRanks && (
         <div>

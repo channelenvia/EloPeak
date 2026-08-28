@@ -6,7 +6,7 @@ import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { CheckCircle2, Zap, Tv, Crosshair, User, Trophy, Shield, Lightbulb, Mic } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
 import { getWinBoostPrice } from '@/lib/pricing'
-import { getBoostFlow, isMasterPlusCurrentTier, resolveAddonLabel } from '@/lib/boostDomain'
+import { getBoostFlow, resolveAddonLabel } from '@/lib/boostDomain'
 import { CLASH_ADDON_CODES } from '@/lib/clashDomain'
 import type { ServiceExtra } from '@/types'
 
@@ -39,18 +39,20 @@ export function StepExtras() {
   // 'solo_standard' (mesmo de Solo Boost/Vitórias/MD5), Duo Clash usa
   // 'duo_standard' (mesmo de Duo Boost) — mesmos extras, decisão de produto.
   const flow = serviceType === 'elo_boost' && currentRank
-    ? getBoostFlow(currentRank.tier, boostMode)
+    ? getBoostFlow(currentRank.tier, boostMode, queueType)
     : serviceType === 'win_boost' || serviceType === 'md5' || isClash
       ? (boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
       : null
-  const currentIsMasterPlus = currentRank ? isMasterPlusCurrentTier(currentRank.tier) : false
-
-  // Pacote de vitórias não existe no Master+ — o preço lá vem da tabela
-  // comercial por faixa de PDL, não de um preço por vitória.
-  const showWinPackages = !!currentRank && serviceType === 'elo_boost' && !currentIsMasterPlus
+  // Pacote de vitórias extras vale pra qualquer tier de Elo Boost, Master+
+  // incluso -- WIN_PRICE_CENTS (getWinBoostPrice, shared/pricing.ts) já tem
+  // preço por vitória próprio pra master/grandmaster/challenger, só não é o
+  // mesmo preço usado pra calcular o trecho Master+ em si (que vem da
+  // master_plus_pricing por faixa de PDL). computeOrderPrice no backend já
+  // soma winPackagePrice sem excluir Master+ nenhum -- só faltava aqui.
+  const showWinPackages = !!currentRank && serviceType === 'elo_boost'
 
   const unitWinPrice = showWinPackages && currentRank
-    ? getWinBoostPrice(queueType, currentRank.tier, currentRank.division ?? null)
+    ? getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
     : 0
 
   function packageTotal(wins: number, discountPct: number): number {

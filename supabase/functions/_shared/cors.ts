@@ -20,7 +20,11 @@ function configuredOrigins(): string[] {
     ? `https://${Deno.env.get('VERCEL_URL')}`
     : ''
 
-  return [...explicit, appUrl, vercelUrl, ...DEFAULT_PROD_ORIGINS, ...DEFAULT_DEV_ORIGINS]
+  // Mesmo padrão de dev-bypass do mercadopago-webhook: origens de
+  // localhost só entram fora de produção, nunca hardcoded incondicional.
+  const devOrigins = Deno.env.get('DENO_ENV') === 'development' ? DEFAULT_DEV_ORIGINS : []
+
+  return [...explicit, appUrl, vercelUrl, ...DEFAULT_PROD_ORIGINS, ...devOrigins]
     .filter(Boolean)
     .map((origin) => origin.replace(/\/$/, ''))
 }

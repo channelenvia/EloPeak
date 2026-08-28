@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   BOOST_CURRENT_RANK_TIERS, STANDARD_RANK_TIERS, PRIORITY_ADDON_CODE,
   BOOST_ADDON_CODES, PDL_BRACKETS, NO_DIVISION_TIERS,
-  isStandardTier, isMasterPlusCurrentTier, getBoostFlow, tierHasDivisions,
+  isStandardTier, isMasterPlusCurrentTier, isDuoBlockedAtTier, getBoostFlow, tierHasDivisions,
   getPdlBracket, isAddonCodeValidForFlow, hasDuplicateAddonCodes,
   sortAddonsBySortOrder, isRankLocked,
 } from './boostDomain'
@@ -25,32 +25,43 @@ describe('BOOST_CURRENT_RANK_TIERS — origem dos ranks atuais', () => {
   })
 })
 
-describe('getBoostFlow — resolução de fluxo a partir de rank atual + modalidade', () => {
-  it('Iron a Diamond + solo => solo_standard', () => {
+describe('getBoostFlow — resolução de fluxo a partir de rank atual + modalidade + fila', () => {
+  it('Iron a Diamond + solo => solo_standard (qualquer fila)', () => {
     for (const tier of STANDARD_RANK_TIERS) {
-      expect(getBoostFlow(tier, 'solo')).toBe('solo_standard')
+      expect(getBoostFlow(tier, 'solo', 'solo_duo')).toBe('solo_standard')
+      expect(getBoostFlow(tier, 'solo', 'flex')).toBe('solo_standard')
     }
   })
 
-  it('Iron a Diamond + duo => duo_standard', () => {
+  it('Iron a Diamond + duo => duo_standard (qualquer fila)', () => {
     for (const tier of STANDARD_RANK_TIERS) {
-      expect(getBoostFlow(tier, 'duo')).toBe('duo_standard')
+      expect(getBoostFlow(tier, 'duo', 'solo_duo')).toBe('duo_standard')
+      expect(getBoostFlow(tier, 'duo', 'flex')).toBe('duo_standard')
     }
   })
 
-  it('Master/Grão-Mestre + solo => master_plus', () => {
-    expect(getBoostFlow('master', 'solo')).toBe('master_plus')
-    expect(getBoostFlow('grandmaster', 'solo')).toBe('master_plus')
+  it('Master/Grão-Mestre + solo => master_plus (qualquer fila)', () => {
+    expect(getBoostFlow('master', 'solo', 'solo_duo')).toBe('master_plus')
+    expect(getBoostFlow('grandmaster', 'solo', 'solo_duo')).toBe('master_plus')
   })
 
-  it('Master/Grão-Mestre + duo => rejeitado (null), nunca cai em outro fluxo', () => {
-    expect(getBoostFlow('master', 'duo')).toBeNull()
-    expect(getBoostFlow('grandmaster', 'duo')).toBeNull()
+  it('Master + duo => rejeitado (null) em qualquer fila -- Duo Boost é Iron-Diamond only agora', () => {
+    expect(getBoostFlow('master', 'duo', 'solo_duo')).toBeNull()
+    expect(getBoostFlow('master', 'duo', 'flex')).toBeNull()
   })
 
-  it('Challenger como rank atual => sempre rejeitado, em qualquer modalidade', () => {
-    expect(getBoostFlow('challenger', 'solo')).toBeNull()
-    expect(getBoostFlow('challenger', 'duo')).toBeNull()
+  it('Grão-Mestre + duo na fila Solo/Duo => rejeitado (null), nunca cai em outro fluxo', () => {
+    expect(getBoostFlow('grandmaster', 'duo', 'solo_duo')).toBeNull()
+  })
+
+  it('Grão-Mestre + duo na fila Flex => também rejeitado (null) -- a exceção de fila não existe mais para Elo Boost', () => {
+    expect(getBoostFlow('grandmaster', 'duo', 'flex')).toBeNull()
+  })
+
+  it('Challenger como rank atual => sempre rejeitado, em qualquer modalidade/fila', () => {
+    expect(getBoostFlow('challenger', 'solo', 'solo_duo')).toBeNull()
+    expect(getBoostFlow('challenger', 'duo', 'solo_duo')).toBeNull()
+    expect(getBoostFlow('challenger', 'duo', 'flex')).toBeNull()
   })
 })
 
@@ -172,6 +183,20 @@ describe('isStandardTier / isMasterPlusCurrentTier', () => {
     const tier: RankTier = 'challenger'
     expect(isStandardTier(tier)).toBe(false)
     expect(isMasterPlusCurrentTier(tier)).toBe(false)
+  })
+})
+
+describe('isDuoBlockedAtTier — Duo liberado pela Riot até Master', () => {
+  it('bloqueia Grão-Mestre e Challenger', () => {
+    expect(isDuoBlockedAtTier('grandmaster')).toBe(true)
+    expect(isDuoBlockedAtTier('challenger')).toBe(true)
+  })
+
+  it('libera Master e qualquer tier padrão (Iron–Diamond)', () => {
+    expect(isDuoBlockedAtTier('master')).toBe(false)
+    for (const tier of STANDARD_RANK_TIERS) {
+      expect(isDuoBlockedAtTier(tier)).toBe(false)
+    }
   })
 })
 

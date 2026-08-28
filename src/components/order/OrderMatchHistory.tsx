@@ -186,19 +186,12 @@ function MatchListPanel({
   )
 }
 
-// A janela de partidas contadas é definida pelo backend (order_matches +
-// match_sync_started_at, ver migration 052) -- desde que o booster clicou em
-// "Iniciar pedido" até a conclusão, nunca antes disso. Esta tela só exibe o
-// que já foi sincronizado, nunca recalcula a janela no front.
-// `locked` cobre o intervalo entre o pedido existir e o booster de fato
-// iniciá-lo -- sem partida nenhuma pra sincronizar ainda. Card continua
-// aparecendo (com título e o botão de sincronizar, só travado) em vez de
-// sumir e reaparecer depois, pro layout não pular de posição.
-// `boostMode === 'duo'` divide o conteúdo em 2 colunas (cliente + booster) --
-// order_matches é sempre a conta do CLIENTE (mesmo em duo, é a conta sendo
-// entregue, ver sync-order-matches); booster_duo_matches é sempre a conta
-// duo do booster (própria ou do pool). Pedido solo continua com 1 lista só,
-// já que não existe uma segunda conta separada nesse modo.
+// Janela de partidas é definida pelo backend (order_matches +
+// match_sync_started_at) -- esta tela só exibe o já sincronizado, nunca
+// recalcula no front. `locked` cobre o intervalo antes do booster iniciar
+// (card fica travado em vez de sumir, evita pulo de layout). Em duo,
+// order_matches é sempre a conta do cliente e booster_duo_matches é a conta
+// duo do booster -- daí as 2 colunas; solo usa 1 lista só.
 export function OrderMatchHistory({ orderId, sync, pdlEstimate, locked, boostMode }: { orderId: string; sync?: SyncControls; pdlEstimate?: PdlEstimate | null; locked?: string; boostMode?: string }) {
   const isDuo = boostMode === 'duo'
   const { data: matches, isLoading } = useOrderMatches(locked ? undefined : orderId)

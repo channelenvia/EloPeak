@@ -7,6 +7,7 @@
 
 import { CLASH_TIER_BOUNDARY_RANKS, CLASH_TIER_LABEL, CLASH_DAY_LABEL } from '../../../shared/clashDomain.ts'
 import type { ClashTier, ClashDay } from '../../../shared/pricing.ts'
+import { CDRAGON_RANK_CREST_BASE } from '../../../shared/riotAssets.ts'
 
 export const RANK_TIER_LABEL: Record<string, string> = {
   iron: 'Ferro', bronze: 'Bronze', silver: 'Prata', gold: 'Ouro', platinum: 'Platina',
@@ -61,24 +62,26 @@ export function rankIconTier(order: any): string | null {
   }
 }
 
-// Emblema quadrado, auto-hospedado em public/ranks/{tier}.png (256x256,
-// fundo transparente) -- recorte quadrado centralizado do banner oficial da
-// Community Dragon (que só tem PNG em formato 16:9, banner, não ícone;
-// Discord também não renderiza o .svg quadrado que a Community Dragon
-// oferece). Hospedar no próprio domínio em vez de linkar direto a CDN
-// externa no `thumbnail` evita depender da Community Dragon responder bem
-// pro crawler de imagem do Discord (curl direto sempre funcionou, mas o
-// fetcher do Discord é outra origem/UA -- sem controle nem visibilidade
-// sobre isso hotlinkando).
-export function rankIconUrl(appUrl: string, tier: string | null): string | null {
-  if (!tier || !RANK_TIER_LABEL[tier]) return null
-  return `${appUrl}/ranks/${tier}.png`
+// Emblema ao vivo da Community Dragon -- MESMA fonte/constante usada em
+// RankIcon (src/lib/riotAssets.ts, riotRankEmblemUrl, via shared/riotAssets),
+// só que em PNG em vez de SVG: Discord não renderiza SVG no `thumbnail` de
+// embed (fica em branco, sem erro nenhum). Sem asset local nenhum aqui de
+// propósito -- se a Community Dragon não tiver o PNG desse tier (hoje é só o
+// caso de emerald, tier mais novo, testado manualmente: 404 puro nesse
+// diretório), cai pro logo da EloPeak via cardThumbnailUrl em vez de um
+// recorte nosso desatualizado.
+const RANK_TIERS_WITHOUT_LIVE_PNG = new Set(['emerald'])
+
+export function rankIconUrl(tier: string | null): string | null {
+  if (!tier || !RANK_TIER_LABEL[tier] || RANK_TIERS_WITHOUT_LIVE_PNG.has(tier)) return null
+  return `${CDRAGON_RANK_CREST_BASE}/${tier}.png`
 }
 
 // Fallback pro logo da EloPeak quando o serviço não tem rank associado
-// (coaching) -- todo card sempre tem thumbnail, mesmo os sem rank.
+// (coaching) OU quando a Community Dragon não tem o PNG desse tier ainda
+// (emerald) -- todo card sempre tem thumbnail, mesmo sem rank/asset.
 export function cardThumbnailUrl(appUrl: string, tier: string | null): string {
-  return rankIconUrl(appUrl, tier) ?? `${appUrl}/images/logo.png`
+  return rankIconUrl(tier) ?? `${appUrl}/images/logo.png`
 }
 
 // Footer padronizado -- MESMO em toda mensagem transacional (job público,
@@ -181,4 +184,15 @@ export function coreServiceFields(order: any): EmbedField[] {
 // gap vertical extra: cada campo inline (Serviço/Modo/Fila/Rank/etc) já sai
 // marcado `inline: true` na ordem certa em coreServiceFields/buildOrderFields,
 // então basta passar o array direto pro `fields` do embed.
+
+// Escapa markdown do Discord em texto vindo de usuário (chat, review) antes
+// de colocar em `description`/`content` de embed -- ao contrário de
+// `footer.text` (sempre texto puro), esses campos renderizam markdown, então
+// um cliente/booster podia escrever `[texto](url-maliciosa)` dentro de uma
+// mensagem e produzir um link disfarçado de confiável dentro de um embed com
+// a marca EloPeak (vetor de phishing). `allowed_mentions: { parse: ['users'] }`
+// já cobre @everyone/@here; isto cobre a sintaxe de link/ênfase.
+export function escapeDiscordMarkdown(text: string): string {
+  return text.replace(/([\\*_~`|>[\]()])/g, '\\$1')
+}
 

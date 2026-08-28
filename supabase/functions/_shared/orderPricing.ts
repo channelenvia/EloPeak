@@ -4,6 +4,7 @@ import {
   type BoostFlow,
   isAddonCodeValidForFlow,
   isMasterPlusCurrentTier,
+  isDuoBlockedAtTier,
   isStandardTier,
   hasDuplicateAddonCodes,
   getPdlBracket,
@@ -87,6 +88,7 @@ const routingSchema = z.object({
   service_type: z.enum(['elo_boost', 'win_boost', 'placement_matches', 'coaching', 'md5', 'clash']),
   current_rank: genericRankSchema.nullable().optional(),
   boost_mode: z.enum(['solo', 'duo']).optional(),
+  queue_type: z.enum(['solo_duo', 'flex']).optional(),
 }).passthrough()
 
 // Riot ID: gameName#tagLine. gameName é 3-16 chars (regras da Riot),
@@ -136,15 +138,17 @@ const standardEloIntentSchema = z.object({
 }).strict()
 
 // Boost Master+ — rank atual Master ou Grão-Mestre. Sem PDL alvo: o preço
-// vem da tabela comercial (origem × destino × faixa de PDL atual). Sem Duo
-// (boost_mode nem existe neste schema). Sem pacote de vitórias (o modelo de
-// preço por vitória não se aplica ao Master+).
+// vem da tabela comercial (origem × destino × faixa de PDL atual). Duo é
+// aceito só quando current_rank.tier === 'master' (isDuoBlockedAtTier rejeita
+// Grão-Mestre/Challenger na roteação de fluxo, antes deste schema rodar).
+// Sem pacote de vitórias (o modelo de preço por vitória não se aplica ao
+// Master+).
 const masterPlusIntentSchema = z.object({
   service_type: z.literal('elo_boost'),
   service_id: z.string().uuid(),
   game_id: z.string().uuid(),
   queue_type: z.enum(['solo_duo', 'flex']),
-  boost_mode: z.literal('solo'),
+  boost_mode: z.enum(['solo', 'duo']),
   server: z.string().trim().min(2).max(16),
   current_rank: masterPlusCurrentRankSchema,
   target_rank: masterPlusTargetRankSchema,
@@ -366,7 +370,11 @@ export async function validateAndPriceIntent(
     if (tier === 'challenger') return { ok: false, response: badRequest(req, 'Challenger não pode ser selecionado como rank atual') }
 
     if (isMasterPlusCurrentTier(tier)) {
-      if (routed.data.boost_mode === 'duo') return { ok: false, response: badRequest(req, 'Duo Boost não é aceito no fluxo Master+') }
+      // Duo Boost não existe mais no Master+ em nenhuma combinação, em
+      // nenhuma fila -- só Iron-Diamond aceita Duo Boost agora.
+      if (routed.data.boost_mode === 'duo') {
+        return { ok: false, response: badRequest(req, 'Duo Boost não é aceito no Master+ — disponível apenas até Diamante') }
+      }
       flow = 'master_plus'
     } else if (isStandardTier(tier)) {
       flow = routed.data.boost_mode === 'duo' ? 'duo_standard' : 'solo_standard'
@@ -446,7 +454,7 @@ export async function validateAndPriceIntent(
       serviceId: mp.service_id,
       gameId: mp.game_id,
       queueType: mp.queue_type,
-      boostMode: 'solo',
+      boostMode: mp.boost_mode,
       server: mp.server,
       currentRank: { tier: mp.current_rank.tier, division: null },
       targetRank: { tier: mp.target_rank.tier, division: null },
@@ -474,6 +482,12 @@ export async function validateAndPriceIntent(
     const std = parsedIntent.data as z.infer<typeof standardEloIntentSchema>
     if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
+    }
+    // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger) como
+    // alvo, em nenhuma fila -- só dá pra chegar lá sozinho (solo). Duo Boost
+    // segue disponível normalmente Iron-Diamond.
+    if (std.boost_mode === 'duo' && (std.target_rank.tier === 'master' || std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger')) {
+      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Master+ — disponível apenas até Diamante') }
     }
     normalized = {
       serviceType: 'elo_boost',
@@ -537,12 +551,10 @@ export async function validateAndPriceIntent(
     }
   } else if (routed.data.service_type === 'md5') {
     const md5 = parsedIntent.data as z.infer<typeof md5IntentSchema>
-    // Mesma regra do fluxo padrão de elo_boost -- Duo nunca disponível a
-    // partir de Mestre+ (rank "da última temporada" informado pelo cliente,
-    // nunca reverificado ao vivo pra MD5/Vitórias com conta em colocação).
-    if (md5.boost_mode === 'duo' && isMasterPlusCurrentTier(md5.current_rank.tier)) {
-      return { ok: false, response: badRequest(req, 'Duo não é aceito para Mestre ou superior') }
-    }
+    // MD5 nunca bloqueia Duo por rank, mesmo em Grão-Mestre/Challenger --
+    // diferente de Elo Boost/Vitórias, o rank aqui é "da última temporada"
+    // (informado pelo cliente, nunca reverificado ao vivo) e a partida real
+    // de MD5 acontece bem abaixo desse elo, então Duo sempre é viável.
     normalized = {
       serviceType: 'md5',
       serviceId: md5.service_id,
@@ -700,11 +712,18 @@ export async function validateAndPriceIntent(
     if (normalized.serviceType === 'elo_boost' && verifiedMasterPlus !== (flow === 'master_plus')) {
       return { ok: false, response: badRequest(req, 'Seu elo mudou desde a consulta. Verifique a conta novamente antes de pagar.') }
     }
-    // Mesma regra do fluxo padrão de elo_boost -- Duo Vitórias nunca
-    // disponível a partir de Mestre+, agora com o rank confirmado ao vivo
-    // pela Riot (Vitórias sempre reverifica, diferente de MD5 acima).
-    if (normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo' && verifiedMasterPlus) {
-      return { ok: false, response: badRequest(req, 'Duo não é aceito para Mestre ou superior') }
+    // Duo tem regras diferentes por serviço agora: Elo Boost Duo é
+    // Iron-Diamond only (bloqueado assim que o rank confirmado pela Riot já
+    // é Master+, em qualquer fila); Vitórias/MD5 seguem aceitando Duo até
+    // Master, bloqueado só a partir de Grão-Mestre (isDuoBlockedAtTier),
+    // também em qualquer fila agora. Pega tanto um elo que mudou de tier
+    // entre a cotação e o pagamento quanto um current_rank adulterado que
+    // passou pela checagem inicial.
+    if (normalized.serviceType === 'elo_boost' && normalized.boostMode === 'duo' && isMasterPlusCurrentTier(verifiedTier)) {
+      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito no Master+ — disponível apenas até Diamante') }
+    }
+    if (normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo' && isDuoBlockedAtTier(verifiedTier)) {
+      return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Grão-Mestre') }
     }
 
     normalized.currentRank = { tier: verifiedTier, division: verifiedDivision }

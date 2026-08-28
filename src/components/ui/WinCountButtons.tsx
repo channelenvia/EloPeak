@@ -9,7 +9,9 @@ interface WinCountButtonsProps {
 // Botões quadrados 1..max (nunca mais que 5) — nunca um <select>. `max` é
 // sempre o limite JÁ calculado pelo chamador (5 fixo para Vitórias comuns,
 // ou o teto de partidas restantes para MD5) — este componente nunca decide
-// o limite sozinho, só o renderiza.
+// o limite sozinho, só o renderiza. Sem largura máxima -- as 5 tiles
+// esticam pra preencher toda a largura da coluna em vez de sobrar espaço
+// vazio do lado (o teto de 56px deixava um vão feio em colunas largas).
 export function WinCountButtons({ value, max, onChange }: WinCountButtonsProps) {
   const options = [1, 2, 3, 4, 5]
   return (
@@ -18,7 +20,7 @@ export function WinCountButtons({ value, max, onChange }: WinCountButtonsProps) 
         <SelectableTile
           key={n}
           size="md"
-          className="flex-1 aspect-square max-w-[56px]"
+          className="flex-1 aspect-square"
           selected={value === n}
           locked={n > max}
           onClick={() => onChange(n)}

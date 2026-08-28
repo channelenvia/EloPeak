@@ -70,13 +70,21 @@ describe('StepConfigure — Modalidade (Solo/Duo Boost)', () => {
     expect(useOrderBuilderStore.getState().boostMode).toBe('duo')
   })
 
-  it('com rank atual Mestre+, Duo Boost fica desabilitado e o motivo aparece', () => {
+  it('com rank atual Grão-Mestre, Duo Boost fica desabilitado e o motivo aparece', () => {
     useOrderBuilderStore.getState().setCurrentRank({ tier: 'grandmaster', division: null })
     renderStepConfigure()
 
     expect(screen.getByRole('button', { name: /^Duo Boost/ })).toBeDisabled()
-    expect(screen.getByText('Indisponível para Mestre ou superior.')).toBeInTheDocument()
-    // setCurrentRank já força solo automaticamente pra Mestre+ (store).
+    expect(screen.getByText('Indisponível a partir de Mestre — Duo Boost é só até Diamante.')).toBeInTheDocument()
+    // setCurrentRank já força solo automaticamente a partir de Mestre (store).
+    expect(useOrderBuilderStore.getState().boostMode).toBe('solo')
+  })
+
+  it('com rank atual Mestre, Duo Boost também fica desabilitado (Duo Boost é Iron-Diamond only agora)', () => {
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'master', division: null })
+    renderStepConfigure()
+
+    expect(screen.getByRole('button', { name: /^Duo Boost/ })).toBeDisabled()
     expect(useOrderBuilderStore.getState().boostMode).toBe('solo')
   })
 
@@ -93,26 +101,14 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     useOrderBuilderStore.getState().setService('win_boost', 'win_boost')
   })
 
-  it('antes de verificar o Riot ID, mostra Vitórias como padrão e a dica de detecção automática', () => {
+  it('antes de verificar o Riot ID, mostra a dica de detecção automática (sem botões clicáveis)', () => {
     renderStepConfigure()
-    expect(screen.getByText('Ativa se sua conta já tiver rank nesta fila.')).toBeInTheDocument()
+    expect(screen.getByText('Detectamos automaticamente se é Vitórias ou MD5 pelo rank da sua conta, ao verificar o Riot ID abaixo.')).toBeInTheDocument()
+    // Não é mais um par de botões -- nunca foi uma escolha manual livre, e o
+    // botão "simulando" a escolha virou só uma linha de texto.
+    expect(screen.queryByRole('button', { name: /^Vitórias/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^MD5/ })).not.toBeInTheDocument()
     expect(useOrderBuilderStore.getState().isMd5).toBe(false)
-  })
-
-  it('os dois botões são sempre não-clicáveis -- nunca uma escolha manual livre', async () => {
-    const user = userEvent.setup()
-    renderStepConfigure()
-
-    // Nome parcial (regex ancorada no início) -- "Solo Vitórias"/"Duo
-    // Vitórias" do seletor de Modalidade (StepConfigure.tsx) também contêm
-    // a substring "Vitórias" e quebrariam um match solto.
-    const vitoriasBtn = screen.getByRole('button', { name: /^Vitórias/ })
-    const md5Btn = screen.getByRole('button', { name: /^MD5/ })
-    expect(vitoriasBtn).toBeDisabled()
-    expect(md5Btn).toBeDisabled()
-
-    await user.click(md5Btn)
-    expect(useOrderBuilderStore.getState().isMd5).toBe(false) // clique num botão disabled não faz nada
   })
 
   it('depois de verificado com isMd5=true, mostra a mensagem de MD5 ativado automaticamente', () => {
@@ -123,11 +119,27 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     expect(screen.getByText(/garantia de 80%\+ de win rate/)).toBeInTheDocument()
   })
 
-  it('depois de verificado com isMd5=false (conta já rankeada), mostra a mensagem de MD5 indisponível', () => {
+  it('depois de verificado com isMd5=false (conta já rankeada), mostra o modo Vitórias detectado', () => {
     useOrderBuilderStore.getState().setRiotVerified(true)
     useOrderBuilderStore.getState().setIsMd5(false)
     renderStepConfigure()
 
-    expect(screen.getByText('Indisponível — conta já possui rank nesta fila.')).toBeInTheDocument()
+    expect(screen.getByText(/sua conta já possui rank nesta fila/)).toBeInTheDocument()
+  })
+
+  it('Vitórias: Duo bloqueado a partir de Grão-Mestre (regra própria, diferente de Elo Boost que agora é Iron-Diamond only)', () => {
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'grandmaster', division: null })
+    renderStepConfigure()
+
+    expect(screen.getByRole('button', { name: /^Duo Vitórias/ })).toBeDisabled()
+    expect(screen.getByText('Indisponível a partir de Grão-Mestre.')).toBeInTheDocument()
+  })
+
+  it('MD5: Duo nunca é bloqueado por rank, mesmo em Grão-Mestre (rank é da temporada passada)', () => {
+    useOrderBuilderStore.getState().setIsMd5(true)
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'grandmaster', division: null })
+    renderStepConfigure()
+
+    expect(screen.getByRole('button', { name: /^Duo MD5/ })).not.toBeDisabled()
   })
 })

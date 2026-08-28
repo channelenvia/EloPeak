@@ -1,16 +1,10 @@
 // shared/clashDomain.ts
-// Domínio do serviço Clash (Solo Clash / Duo Clash) — tier/dia e rótulos de
-// exibição. O preço em si (tabela + computeOrderPrice) vive em
-// shared/pricing.ts, igual ao Elo Boost. Addons do Clash reaproveitam a
-// LINHA/tabela do catálogo 'solo_standard' (mesmo de Solo Boost/Vitórias/
-// MD5) e 'duo_standard' (mesmo de Duo Boost) em service_extras — mas o
-// Clash só aceita um subconjunto desses códigos (CLASH_ADDON_CODES abaixo),
-// não a whitelist inteira do fluxo. Ver shared/boostDomain.ts
-// (BoostFlow/BOOST_ADDON_CODES) pra whitelist cheia dos demais serviços.
-//
-// Roda nos dois runtimes (Vite/React e a Edge Function Deno
-// create-pix-payment) — não importe nada de `@/...` nem de APIs específicas
-// de browser/Deno aqui.
+// Domínio do serviço Clash (Solo/Duo) — tier/dia e rótulos de exibição.
+// Preço vive em shared/pricing.ts. Addons reaproveitam o catálogo
+// solo_standard/duo_standard de service_extras, mas o Clash só aceita um
+// subconjunto (CLASH_ADDON_CODES abaixo) — ver boostDomain.ts para a
+// whitelist cheia dos demais serviços. Roda em Vite/React e na Edge
+// Function Deno — nada de `@/...` nem de APIs de browser/Deno aqui.
 
 import type { ClashDay, ClashTier, RankTier } from './pricing.ts'
 import { PRIORITY_ADDON_CODE, sortAddonsBySortOrder, type BoostMode } from './boostDomain.ts'

@@ -59,8 +59,18 @@ export function canMarkOrderComplete(
   const hasMatchEvidence = order.wins_played + order.losses_played >= 1
   if (!hasMatchEvidence) return { allowed: false, reason: 'no_matches_played' }
 
-  if (order.wins_purchased != null && order.wins_played < order.wins_purchased) {
-    return { allowed: false, reason: 'objective_not_reached' }
+  if (order.wins_purchased != null) {
+    // win_boost: garantia de saldo líquido (StepReview.tsx explica isso ao
+    // cliente) -- toda derrota durante o serviço precisa ser compensada com
+    // uma vitória extra, então o gate real é (vitórias - derrotas) >=
+    // contratado, não vitórias cruas. md5 é garantia de win RATE (80%+), um
+    // cálculo totalmente diferente -- continua olhando só vitórias cruas.
+    const effectiveWins = order.service_type === 'win_boost'
+      ? order.wins_played - order.losses_played
+      : order.wins_played
+    if (effectiveWins < order.wins_purchased) {
+      return { allowed: false, reason: 'objective_not_reached' }
+    }
   }
 
   return { allowed: true }

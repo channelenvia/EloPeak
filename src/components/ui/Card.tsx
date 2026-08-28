@@ -1,18 +1,13 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
-// Sistema de superfícies funcionais — 7 tipos com um propósito cada, não 7
-// níveis de decoração (Standard, Interactive, Primary, Operational,
-// Achievement, Attention, Elevated Overlay). Toda variante carrega a classe
-// literal "card"/"card-raised"/"card-glass"/"card-brand" como base — isso
-// preserva a herança tipográfica definida em @layer components (ver
-// globals.css) mesmo quando utilities de @layer utilities sobrescrevem
-// bg/border/shadow depois (utilities sempre vencem components por ordem de
-// layer do Tailwind, independente da ordem no className).
-//
-// Os 4 nomes antigos (default/elevated/brand/glass) continuam válidos como
-// aliases dos novos — nenhum uso existente de <Card variant="..."> precisa
-// mudar.
+// Sistema de superfícies funcionais — 7 tipos com um propósito cada. Toda
+// variante carrega a classe base "card"/"card-raised"/"card-glass"/
+// "card-brand" pra preservar a herança tipográfica de @layer components
+// (globals.css) mesmo quando @layer utilities sobrescreve bg/border/shadow
+// (utilities sempre vence components na ordem de layer do Tailwind). Os 4
+// nomes antigos (default/elevated/brand/glass) continuam válidos como
+// aliases.
 const cardVariants = cva('transition-all duration-base', {
   variants: {
     variant: {

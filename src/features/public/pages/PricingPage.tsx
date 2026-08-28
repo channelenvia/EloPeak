@@ -6,9 +6,10 @@ import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
 import { RANK_TIER_LABEL, RANK_TIER_COLOR } from '@/lib/utils'
 import {
-  getWinBoostPrice, getMd5WinPrice, ELO_TIERS, MASTER_PLUS_TIER_PRICE_CENTS, centsToMoney, getClashBasePrice,
+  getWinBoostPrice, getMd5WinPrice, getEloDivPrice, ELO_TIERS, MASTER_PLUS_TIER_PRICE_CENTS, centsToMoney, getClashBasePrice,
   DEFAULT_COUPON_CODE, DEFAULT_COUPON_DISCOUNT_PCT, applyCoupon, type ServiceType,
 } from '@/lib/pricing'
+import { isDuoBlockedAtTier } from '@/lib/boostDomain'
 import { CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL, CLASH_TIER_BOUNDARY_RANKS, CLASH_DAY_LABEL } from '@/lib/clashDomain'
 import { useCurrency } from '@/hooks/useCurrency'
 import type { ClashDay, ClashTier, RankTier } from '@/types'
@@ -227,7 +228,7 @@ export function PricingPage() {
               </thead>
               <tbody className="divide-y divide-bg-elevated">
                 {ELO_TIERS.map(({ tier, perDiv }) => {
-                  const duoDiv = Math.round(perDiv * 1.5 * 100) / 100
+                  const duoDiv = getEloDivPrice('solo_duo', tier, 'duo')
                   return (
                     <tr key={tier} className="hover:bg-bg-elevated/40 transition-colors">
                       <td className="py-3 px-5">
@@ -282,7 +283,7 @@ export function PricingPage() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-ink-muted mt-2">Abaixo de Mestre: média menor que 20 LP/partida aplica +15%; entre 20 e 25 mantém o preço; acima de 25 aplica -5%.</p>
+          <p className="text-xs text-ink-muted mt-2">Abaixo de Mestre: média menor que 20 LP/partida aplica +10%; 20 LP/partida ou mais mantém o preço base.</p>
         </section>
 
         {/* ── Vitórias / MD5 ── */}
@@ -291,7 +292,8 @@ export function PricingPage() {
           <p className="text-sm text-ink-secondary mb-4">Preço por vitória de acordo com o seu rank atual.</p>
           <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
             {WIN_TIERS.map((tier) => {
-              const price = getWinBoostPrice('solo_duo', tier, null)
+              const price = getWinBoostPrice('solo_duo', tier, 'solo', null)
+              const duoPrice = isDuoBlockedAtTier(tier) ? null : getWinBoostPrice('solo_duo', tier, 'duo', null)
               return (
                 <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
                   <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
@@ -300,7 +302,16 @@ export function PricingPage() {
                     price={price} serviceType="win_boost" discountRevealed={discountRevealed}
                     currency={currency} sizeClassName="text-xl font-extrabold" align="center"
                   />
-                  <p className="text-[10px] text-ink-muted mt-0.5">por vitória</p>
+                  <p className="text-[10px] text-ink-muted mt-0.5">solo / vitória</p>
+                  {duoPrice != null && (
+                    <>
+                      <PriceWithDiscount
+                        price={duoPrice} serviceType="win_boost" discountRevealed={discountRevealed}
+                        currency={currency} sizeClassName="text-sm font-bold text-ink-secondary" align="center"
+                      />
+                      <p className="text-[10px] text-ink-muted">duo / vitória</p>
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -309,22 +320,35 @@ export function PricingPage() {
           {/* + MD5 sub-row */}
           <div className="mt-8">
             <h3 className="text-base font-bold text-ink mb-1">+ MD5: garantia de win rate — ative automaticamente se ainda não jogou o posicionamento</h3>
-            <p className="text-xs text-ink-secondary mb-3">Preço da Vitória Avulsa com 50% de desconto. Valor abaixo já é o pacote completo de 5 vitórias — menos vitórias desconta proporcionalmente.</p>
+            <p className="text-xs text-ink-secondary mb-3">Preço fixo por vitória líquida durante o posicionamento. Valor abaixo já é o pacote completo de 5 vitórias — menos vitórias desconta proporcionalmente.</p>
             <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
-              {MD5_TIERS.map((tier) => (
-                <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
-                  <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
-                  <p className={`text-sm font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</p>
-                  <PriceWithDiscount
-                    price={getMd5WinPrice('solo_duo', tier) * 5} serviceType="md5" discountRevealed={discountRevealed}
-                    currency={currency} sizeClassName="text-xl font-extrabold" align="center"
-                  />
-                  <p className="text-[10px] text-ink-muted mt-0.5">pacote MD5</p>
-                </div>
-              ))}
+              {MD5_TIERS.map((tier) => {
+                const price = getMd5WinPrice('solo_duo', tier, 'solo') * 5
+                const duoPrice = isDuoBlockedAtTier(tier) ? null : getMd5WinPrice('solo_duo', tier, 'duo') * 5
+                return (
+                  <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
+                    <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
+                    <p className={`text-sm font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</p>
+                    <PriceWithDiscount
+                      price={price} serviceType="md5" discountRevealed={discountRevealed}
+                      currency={currency} sizeClassName="text-xl font-extrabold" align="center"
+                    />
+                    <p className="text-[10px] text-ink-muted mt-0.5">solo / pacote MD5</p>
+                    {duoPrice != null && (
+                      <>
+                        <PriceWithDiscount
+                          price={duoPrice} serviceType="md5" discountRevealed={discountRevealed}
+                          currency={currency} sizeClassName="text-sm font-bold text-ink-secondary" align="center"
+                        />
+                        <p className="text-[10px] text-ink-muted">duo / pacote MD5</p>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
-          <p className="text-xs text-ink-muted mt-4">SoloQ e Flex têm o mesmo preço por vitória até Diamante — o valor só muda a partir de Mestre (Master+).</p>
+          <p className="text-xs text-ink-muted mt-4">SoloQ e Flex têm sempre o mesmo preço por vitória, em qualquer rank.</p>
         </section>
 
         {/* ── Clash ── */}

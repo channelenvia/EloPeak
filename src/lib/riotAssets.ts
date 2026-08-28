@@ -1,5 +1,6 @@
 import { invokeEdgeFunction } from './invokeEdgeFunction'
 import type { RankTier } from '@/types'
+import { CDRAGON_RANK_CREST_BASE } from '../../shared/riotAssets'
 
 // Emblemas de elo (mini-crests) servidos ao vivo pela Community Dragon
 // (mesmo domínio já liberado na CSP para profile icons — ver vercel.json).
@@ -10,8 +11,6 @@ import type { RankTier } from '@/types'
 // RankLockGrid usam isso como primeira tentativa, com as imagens locais em
 // public/ranks/ como fallback automático via onError caso a CDN mude ou
 // fique fora do ar — nunca depende só da rede externa.
-const CDRAGON_RANK_CREST_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-mini-crests'
-
 export function riotRankEmblemUrl(tier: RankTier): string {
   return `${CDRAGON_RANK_CREST_BASE}/${tier}.svg`
 }

@@ -64,41 +64,70 @@ export function rankStep(tier: RankTier, div: Division | null): number {
 export type QueueType = 'solo_duo' | 'flex'
 
 // ── Elo Boost — preço por divisão ao ENTRAR em cada tier, em CENTAVOS ───────
-// Tabela oficial por fila. Master+ não usa esta tabela — vem de
-// `master_plus_pricing` no banco (ver shared/boostDomain.ts e a migration
-// que cria essa tabela).
+// Tabela oficial por fila — Flex espelha Solo/Duo integralmente (não há mais
+// diferenciação comercial por fila em Elo Boost). Master+ não usa esta
+// tabela — vem de `master_plus_pricing` no banco (ver shared/boostDomain.ts
+// e a migration que cria essa tabela).
 const ELO_DIV_PRICE_CENTS: Record<QueueType, Record<string, number>> = {
   solo_duo: {
-    iron: 1105, bronze: 1287, silver: 1755, gold: 2197,
-    platinum: 3107, emerald: 6097, diamond: 9737,
+    iron: 1090, bronze: 1290, silver: 1690, gold: 2190,
+    platinum: 3190, emerald: 6290, diamond: 10290,
   },
   flex: {
-    iron: 1105, bronze: 1287, silver: 1755, gold: 2197,
-    platinum: 3107, emerald: 6097, diamond: 9737,
+    iron: 1090, bronze: 1290, silver: 1690, gold: 2190,
+    platinum: 3190, emerald: 6290, diamond: 10290,
+  },
+}
+
+// Duo Boost agora é uma tabela própria por divisão (não é mais um percentual
+// fixo sobre o preço solo — a proporção varia por tier, de ~1.17x a ~1.92x).
+// Só existe para o fluxo padrão Iron–Diamond: Duo Boost nunca chega em
+// Master+ (ver getBoostFlow em shared/boostDomain.ts e o bloqueio em
+// computeOrderPrice abaixo) — nenhuma linha "master"/"grandmaster"/
+// "challenger" é necessária aqui.
+const ELO_DIV_PRICE_CENTS_DUO: Record<QueueType, Record<string, number>> = {
+  solo_duo: {
+    iron: 2090, bronze: 2390, silver: 2690, gold: 3290,
+    platinum: 4890, emerald: 9890, diamond: 15790,
+  },
+  flex: {
+    iron: 2090, bronze: 2390, silver: 2690, gold: 3290,
+    platinum: 4890, emerald: 9890, diamond: 15790,
   },
 }
 
 // Tabela usada só pela página pública de preços (sem seleção de fila) —
 // reflete a fila solo_duo, a padrão exibida antes do configurador.
 export const ELO_TIERS: { tier: RankTier; perDiv: number }[] = [
-  { tier: 'iron',     perDiv: 11.05 },
-  { tier: 'bronze',   perDiv: 12.87 },
-  { tier: 'silver',   perDiv: 17.55 },
-  { tier: 'gold',     perDiv: 21.97 },
-  { tier: 'platinum', perDiv: 31.07 },
-  { tier: 'emerald',  perDiv: 60.97 },
-  { tier: 'diamond',  perDiv: 97.37 },
+  { tier: 'iron',     perDiv: 10.90 },
+  { tier: 'bronze',   perDiv: 12.90 },
+  { tier: 'silver',   perDiv: 16.90 },
+  { tier: 'gold',     perDiv: 21.90 },
+  { tier: 'platinum', perDiv: 31.90 },
+  { tier: 'emerald',  perDiv: 62.90 },
+  { tier: 'diamond',  perDiv: 102.90 },
 ]
 
 const TIER_NAMES = ['iron', 'bronze', 'silver', 'gold', 'platinum', 'emerald', 'diamond']
 
-export function getEloDivPrice(queue: QueueType, tier: RankTier): number {
-  return centsToMoney(ELO_DIV_PRICE_CENTS[queue][tier] ?? ELO_DIV_PRICE_CENTS[queue].diamond)
+function eloDivTable(mode: 'solo' | 'duo'): Record<QueueType, Record<string, number>> {
+  return mode === 'duo' ? ELO_DIV_PRICE_CENTS_DUO : ELO_DIV_PRICE_CENTS
 }
 
-function divPriceCentsForStep(queue: QueueType, step: number): number {
-  const ti = Math.min(Math.floor(step / 4), 6)
-  return ELO_DIV_PRICE_CENTS[queue][TIER_NAMES[ti]] ?? ELO_DIV_PRICE_CENTS[queue].diamond
+export function getEloDivPrice(queue: QueueType, tier: RankTier, mode: 'solo' | 'duo' = 'solo'): number {
+  const table = eloDivTable(mode)
+  return centsToMoney(table[queue][tier] ?? table[queue].diamond)
+}
+
+// O preço de subir PARA o degrau `step` é cobrado na tabela do tier de ONDE
+// se está saindo (`step - 1`), não do tier de destino -- é assim que 4
+// degraus dentro do mesmo tier somam exatamente o "tier completo" da tabela
+// (ex.: Ferro IV -> Bronze IV = 4x o valor do Ferro, nunca 3x Ferro + 1x
+// Bronze). `step` sempre >= 1 aqui (calcEloPrice começa o loop em `from+1`).
+function divPriceCentsForStep(queue: QueueType, step: number, mode: 'solo' | 'duo'): number {
+  const table = eloDivTable(mode)
+  const ti = Math.min(Math.floor((step - 1) / 4), 6)
+  return table[queue][TIER_NAMES[ti]] ?? table[queue].diamond
 }
 
 // Degrau de "entrar em Mestre" (rankStep('master', null)) -- calcEloPrice
@@ -109,6 +138,7 @@ const MASTER_STEP = 28
 
 export function calcEloPrice(
   queue: QueueType,
+  mode: 'solo' | 'duo',
   fTier: RankTier, fDiv: Division | null,
   tTier: RankTier, tDiv: Division | null,
 ): { price: number } {
@@ -117,20 +147,36 @@ export function calcEloPrice(
   if (to <= from) return { price: 0 }
 
   let priceCents = 0
-  for (let s = from + 1; s <= to; s++) priceCents += divPriceCentsForStep(queue, s)
+  for (let s = from + 1; s <= to; s++) priceCents += divPriceCentsForStep(queue, s, mode)
 
   return { price: centsToMoney(priceCents) }
 }
 
 // ── Vitória Avulsa (Win Boost) — preço por vitória, em CENTAVOS ─────────────
-const WIN_PRICE_CENTS: Record<QueueType, Record<string, number>> = {
+// Duo é uma tabela própria (não percentual fixo) — só cobre até Mestre
+// porque Duo é bloqueado a partir de Grão-Mestre (isDuoBlockedAtTier); o
+// fallback pra 'master' abaixo nunca é exercitado em uso válido, é só defesa
+// contra chamada direta fora da validação normal.
+const WIN_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
   solo_duo: {
-    iron: 377, bronze: 377, silver: 507, gold: 507, platinum: 897,
-    emerald: 1287, diamond: 2067, master: 5837, grandmaster: 7787, challenger: 12987,
+    solo: {
+      iron: 458, bronze: 458, silver: 479, gold: 567, platinum: 930,
+      emerald: 1315, diamond: 1685, master: 5830, grandmaster: 8620, challenger: 14440,
+    },
+    duo: {
+      iron: 605, bronze: 605, silver: 795, gold: 929, platinum: 1085,
+      emerald: 2005, diamond: 2995, master: 8515,
+    },
   },
   flex: {
-    iron: 377, bronze: 377, silver: 507, gold: 507, platinum: 897,
-    emerald: 1287, diamond: 2067, master: 5253, grandmaster: 7008, challenger: 11688,
+    solo: {
+      iron: 458, bronze: 458, silver: 479, gold: 567, platinum: 930,
+      emerald: 1315, diamond: 1685, master: 5830, grandmaster: 8620, challenger: 14440,
+    },
+    duo: {
+      iron: 605, bronze: 605, silver: 795, gold: 929, platinum: 1085,
+      emerald: 2005, diamond: 2995, master: 8515,
+    },
   },
 }
 
@@ -252,7 +298,7 @@ export function estimateEloBoostHours(input: {
 
 // ── Cupom de desconto ────────────────────────────────────────────────────────
 // Mesmo padrão das tabelas hardcoded acima (WIN_PACKAGE_DISCOUNTS/
-// MD5_DISCOUNT_PCT): whitelist fixa em código, não uma tabela editável em
+// MD5_PRICE_CENTS): whitelist fixa em código, não uma tabela editável em
 // runtime. O cliente só envia o CÓDIGO digitado -- o percentual de desconto
 // nunca vem do cliente, é sempre resolvido aqui contra esta lista. Qualquer
 // código fora dela (typo, cupom expirado inventado, string arbitrária)
@@ -309,21 +355,45 @@ export function applyCoupon(subtotal: number, code: string | null | undefined, s
 
 const WIN_PACKAGE_DISCOUNTS: Record<number, number> = { 1: 10, 3: 20, 5: 30 }
 
-export function getWinBoostPrice(queue: QueueType, tier: RankTier, _div?: Division | null): number {
-  return centsToMoney(WIN_PRICE_CENTS[queue][tier] ?? WIN_PRICE_CENTS[queue].diamond)
+export function getWinBoostPrice(queue: QueueType, tier: RankTier, mode: 'solo' | 'duo', _div?: Division | null): number {
+  const table = WIN_PRICE_CENTS[queue][mode]
+  return centsToMoney(table[tier] ?? table.master ?? WIN_PRICE_CENTS[queue].solo.diamond)
 }
 
 // ── MD5 — garantia de win rate, preço por vitória líquida ──────────────────
-// Derivado do preço da Vitória Avulsa (mesma fila/tier) com 50% de desconto —
-// não é mais uma tabela independente. O pacote cheio de 5 partidas de
-// placement é só 5× esse preço por vitória; comprar menos vitórias (4, 3...)
-// desconta proporcionalmente, nunca cobra o pacote inteiro (a soma acontece
-// em computeOrderPrice, multiplicando por winsPurchased).
-export const MD5_DISCOUNT_PCT = 50
+// Tabela própria, independente da Vitória Avulsa (não é mais 50% de
+// desconto sobre WIN_PRICE_CENTS — os valores comerciais não seguem essa
+// proporção). O pacote cheio de 5 partidas de placement é só 5× esse preço
+// por vitória; comprar menos vitórias (4, 3...) desconta proporcionalmente,
+// nunca cobra o pacote inteiro (a soma acontece em computeOrderPrice,
+// multiplicando por winsPurchased). Duo só cobre até Mestre (mesma razão do
+// Win Boost acima — bloqueado a partir de Grão-Mestre).
+const MD5_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
+  solo_duo: {
+    solo: {
+      iron: 380, bronze: 450, silver: 509, gold: 598, platinum: 825,
+      emerald: 1011, diamond: 1098, master: 1602, grandmaster: 2990, challenger: 4788,
+    },
+    duo: {
+      iron: 540, bronze: 628, silver: 726, gold: 809, platinum: 953,
+      emerald: 1498, diamond: 1999, master: 3350,
+    },
+  },
+  flex: {
+    solo: {
+      iron: 380, bronze: 450, silver: 509, gold: 598, platinum: 825,
+      emerald: 1011, diamond: 1098, master: 1602, grandmaster: 2990, challenger: 4788,
+    },
+    duo: {
+      iron: 540, bronze: 628, silver: 726, gold: 809, platinum: 953,
+      emerald: 1498, diamond: 1999, master: 3350,
+    },
+  },
+}
 
-export function getMd5WinPrice(queue: QueueType, tier: RankTier): number {
-  const winPriceCents = moneyToCents(getWinBoostPrice(queue, tier))
-  return centsToMoney(Math.round(winPriceCents * (1 - MD5_DISCOUNT_PCT / 100)))
+export function getMd5WinPrice(queue: QueueType, tier: RankTier, mode: 'solo' | 'duo'): number {
+  const table = MD5_PRICE_CENTS[queue][mode]
+  return centsToMoney(table[tier] ?? table.master ?? MD5_PRICE_CENTS[queue].solo.diamond)
 }
 
 export type ClashTier = 'tier_4' | 'tier_3' | 'tier_2' | 'tier_1'
@@ -358,29 +428,16 @@ export const PLACEMENT_PRICE: Record<string, number> = {
 }
 
 // ── Elo Boost Master+ — resumo pra página pública de preços ─────────────────
-// Fonte de referência apenas — o preço autoritativo do pedido vem da tabela
-// `master_plus_pricing` (ver migration 099), chaveada por (tier atual, tier
-// alvo, fila, faixa de PDL). Cada chave aqui é o preço do PRIMEIRO degrau de
-// PDL (0 do tier atual) daquela progressão — mesmo significado usado pelas
-// linhas de Iron–Diamond (preço "tier completo" partindo daquele tier), não
-// um custo acumulado desde Mestre:
-//   master      -> avançar de Mestre para Grão-Mestre     (R$ 1.169,87)
-//   grandmaster -> avançar de Grão-Mestre para Challenger (R$ 1.624,87)
-//   challenger  -> Mestre->Challenger direto (pula Grão-Mestre), soma dos
-//                  dois primeiros degraus acima — único caso sem "tier
-//                  atual == linha", mantido só como referência (não é
-//                  exibido na página pública hoje)                (R$ 2.794,74)
+// Fonte de referência apenas — o preço autoritativo vem da tabela
+// `master_plus_pricing` (pdl_from=0), chaveada por (tier atual, tier alvo,
+// fila). master/grandmaster = preço cheio daquela progressão; challenger =
+// Mestre->Challenger direto (soma dos dois degraus), único caso sem "tier
+// atual == linha", mantido só como referência (não exibido hoje).
 export const MASTER_PLUS_TIER_PRICE_CENTS: Record<'master' | 'grandmaster' | 'challenger', number> = {
-  master: 116987,
-  grandmaster: 162487,
-  challenger: 279474,
+  master: 111917,
+  grandmaster: 159887,
+  challenger: 271804,
 } as const
-
-// ── Duo Boost — percentual sobre o elo boost ──────────────────────────────────
-// Duo Boost só existe para o fluxo padrão (Iron–Diamond) — Master+ não aceita
-// Duo (ver shared/boostDomain.ts::getBoostFlow). Este percentual nunca é
-// aplicado a um preço de Master+.
-export const DUO_BOOST_PCT = 50
 
 // ── Master+ — preço vem da tabela comercial `master_plus_pricing` ───────────
 // Não existe fórmula de LP-alvo para Master+: o preço é definido pela regra
@@ -392,46 +449,50 @@ export const DUO_BOOST_PCT = 50
 // ── LP Modifier for Iron–Diamond ──────────────────────────────────────────────
 // Percentual de eficiência aplicado conforme a média de LP por partida —
 // função isolada para que `applyLpModifier` e `computeOrderPrice` consultem
-// os mesmos limiares (19/20/25/26) sem duas checagens independentes
-// divergirem no futuro.
+// o mesmo limiar (20) sem duas checagens independentes divergirem no futuro.
 export function lpModifierPct(avgLpPerGame: number): number {
-  if (avgLpPerGame < 20) return 15
-  if (avgLpPerGame > 25) return -5
-  return 0
+  return avgLpPerGame < 20 ? 10 : 0
 }
 
-// ── Master+ — desconto do trecho Mestre 0PDL→alvo ───────────────────────────
-// Determinístico, nunca depende de média real vinda da Riot: a progressão
-// comercial do trecho Master+ é sempre 30 PDL/vitória (MASTER_PLUS_LP_PER_GAME),
-// então o número de vitórias necessárias é o mesmo já usado pra estimar prazo
-// (gamesToPassMasterPlusCutoff). Cada vitória desconta 5% do preço da Vitória
-// Avulsa NO RANK ATUAL da conta (Diamond, Mestre, Grão-Mestre...) -- mesma
-// regra tanto pra quem já está em Mestre+ quanto pro trecho Mestre->alvo de
-// quem vem de Diamond- (current_pdl sempre 0 nesse caso) -- nunca deixa o
-// preço final negativo.
-export const MASTER_PLUS_PDL_WIN_VALUE_PCT = 5
+// Desconto por vitórias já "banked" -- mesmo mecanismo usado tanto no fluxo
+// padrão Iron–Diamond (applyLpModifier, contando vitórias equivalentes ao LP
+// atual) quanto no Master+ (applyMasterPlusPdlDiscount, contando vitórias
+// equivalentes ao PDL atual): desconta BANKED_WIN_DISCOUNT_PCT (5%) do valor
+// de uma Vitória Avulsa no tier/rank atual por vitória já "adiantada".
+// Constante única para que os dois fluxos nunca divirjam silenciosamente.
+export const BANKED_WIN_DISCOUNT_PCT = 5
+
+function applyBankedWinDiscount(baseCents: number, winsBanked: number, winValueCents: number): number {
+  if (winsBanked <= 0) return baseCents
+  const decrementCents = Math.round(winsBanked * winValueCents * (BANKED_WIN_DISCOUNT_PCT / 100))
+  const cappedDecrementCents = Math.min(Math.max(0, decrementCents), baseCents)
+  return baseCents - cappedDecrementCents
+}
+
+// ── Master+ — desconto pelo PDL já acumulado no rank atual ──────────────────
+// Depende só do PDL ATUAL da conta, não da distância até o corte. A cada
+// MASTER_PLUS_PDL_DISCOUNT_STEP (50) PDL banked no rank atual, desconta
+// BANKED_WIN_DISCOUNT_PCT do preço da Vitória Avulsa nesse rank, do preço
+// cheio do pacote. Em 0 PDL não há desconto (current_pdl sempre 0 pra quem
+// vem de Diamond-); nunca deixa o preço final negativo.
+export const MASTER_PLUS_PDL_DISCOUNT_STEP = 50
 
 export function applyMasterPlusPdlDiscount(
   basePrice: number,
-  targetTier: 'grandmaster' | 'challenger',
+  _targetTier: 'grandmaster' | 'challenger',
   currentPdl: number,
   currentTier: RankTier,
   queue: QueueType,
-  masterPlusCutoffs?: MasterPlusCutoffs,
+  _masterPlusCutoffs?: MasterPlusCutoffs,
 ): number {
   if (basePrice <= 0) return basePrice
   const clampedPdl = Math.max(0, currentPdl)
-  const targetLp = masterPlusTargetLp(targetTier, masterPlusCutoffs)
-  const distance = targetLp - clampedPdl
-  if (distance <= 0) return basePrice
-  const winsNeeded = gamesToPassMasterPlusCutoff(clampedPdl, targetLp)
-  if (winsNeeded <= 0) return basePrice
+  const discountedGames = Math.floor(clampedPdl / MASTER_PLUS_PDL_DISCOUNT_STEP)
+  if (discountedGames <= 0) return basePrice
 
   const baseCents = moneyToCents(basePrice)
-  const winValueCents = moneyToCents(getWinBoostPrice(queue, currentTier))
-  const decrementCents = Math.round(winsNeeded * winValueCents * (MASTER_PLUS_PDL_WIN_VALUE_PCT / 100))
-  const cappedDecrementCents = Math.min(Math.max(0, decrementCents), baseCents)
-  return centsToMoney(baseCents - cappedDecrementCents)
+  const winValueCents = moneyToCents(getWinBoostPrice(queue, currentTier, 'solo'))
+  return centsToMoney(applyBankedWinDiscount(baseCents, discountedGames, winValueCents))
 }
 
 export function applyLpModifier(
@@ -441,6 +502,7 @@ export function applyLpModifier(
   avgLpPerGame: number,
   _avgLpLoss?: number,
   queueType: QueueType = 'solo_duo',
+  mode: 'solo' | 'duo' = 'solo',
 ): number {
   if (basePrice <= 0) return 0
   if (![currentLp, avgLpPerGame].every(Number.isFinite)
@@ -448,11 +510,19 @@ export function applyLpModifier(
     throw new RangeError('Invalid LP values')
   }
   const baseCents = moneyToCents(basePrice)
-  const divPriceCents = moneyToCents(getEloDivPrice(queueType, fTier))
-  const lpDiscountCents = Math.round(currentLp * divPriceCents / 100)
+  // Desconto por vitória já "banked" no LP atual -- não é mais proporcional
+  // ao preço da divisão inteira. Converte o LP atual em vitórias equivalentes
+  // usando o ganho médio de LP/vitória da própria conta (mesmo avgLpPerGame
+  // usado pra decidir o +10%): floor(currentLp / avgLpPerGame). Cada vitória
+  // já "adiantada" desconta BANKED_WIN_DISCOUNT_PCT do valor de uma Vitória
+  // Avulsa NO TIER ATUAL -- mesmo mecanismo do Master+, ver
+  // applyMasterPlusPdlDiscount.
+  const winsBanked = Math.floor(currentLp / avgLpPerGame)
+  const winValueCents = moneyToCents(getWinBoostPrice(queueType, fTier, mode))
+  const discountedCents = applyBankedWinDiscount(baseCents, winsBanked, winValueCents)
   const pct = lpModifierPct(avgLpPerGame)
   const efficiencyMod = 1 + pct / 100
-  return centsToMoney(Math.max(0, Math.round((baseCents - lpDiscountCents) * efficiencyMod)))
+  return centsToMoney(Math.max(0, Math.round(discountedCents * efficiencyMod)))
 }
 
 // ── Preço autoritativo do pedido ──────────────────────────────────────────────
@@ -556,11 +626,10 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
       if (!currentRank) break
 
       if (isMasterPlus(currentRank.tier)) {
-        // Master+ não aceita Duo — basePrice fica 0 (bloqueado) se boostMode
-        // vier 'duo' aqui; a rejeição explícita acontece antes disso, na
-        // validação de fluxo (getBoostFlow retorna null para essa combinação).
-        // O modificador de PDL nunca se aplica ao Master+ — pdlModifierPct
-        // permanece null.
+        // Duo Boost não existe mais no Master+ em nenhuma combinação — só
+        // Iron–Diamond aceita Duo agora. pdlModifierPct nunca se aplica ao
+        // Master+ -- permanece null.
+        pdlModifierPct = null
         if (boostMode === 'duo' || input.masterPlusPrice == null) break
         basePrice = centsToMoney(moneyToCents(input.masterPlusPrice))
         if (targetRank) {
@@ -584,19 +653,25 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
         }
       } else {
         if (!targetRank) break
+        // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger)
+        // como alvo, em nenhuma fila -- só dá pra chegar lá sozinho (solo).
+        // Duo Boost segue disponível normalmente Iron-Diamond.
+        if (boostMode === 'duo' && isMasterPlus(targetRank.tier)) break
         const { price } = calcEloPrice(
-          input.queueType,
+          input.queueType, boostMode,
           currentRank.tier, currentRank.division,
           targetRank.tier, targetRank.division,
         )
-        const withLp = applyLpModifier(price, currentRank.tier, currentLp, avgLpGain, avgLpLoss, input.queueType)
+        const withLp = applyLpModifier(price, currentRank.tier, currentLp, avgLpGain, avgLpLoss, input.queueType, boostMode)
         let combinedCents = moneyToCents(withLp)
 
         // Diamond- mirando Grão-Mestre/Challenger direto: calcEloPrice acima
         // já parou em Mestre (MASTER_STEP) -- o trecho Mestre->alvo soma o
         // preço por PDL de master_plus_pricing (sempre no PDL=0, quem vem do
-        // fluxo padrão entra em Mestre do zero). "master" como alvo exato
-        // não entra aqui: já está totalmente coberto pelo calcEloPrice acima.
+        // fluxo padrão entra em Mestre do zero). Só alcançável em modo solo
+        // (duo já bloqueado acima, pois o alvo é Master+). "master" como
+        // alvo exato não entra aqui: já está totalmente coberto pelo
+        // calcEloPrice acima.
         if (targetRank.tier === 'grandmaster' || targetRank.tier === 'challenger') {
           if (input.masterPlusPrice == null) { basePrice = 0; break }
           const discountedMasterPlusPrice = applyMasterPlusPdlDiscount(
@@ -610,9 +685,7 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
           combinedCents += moneyToCents(discountedMasterPlusPrice)
         }
 
-        basePrice = boostMode === 'duo'
-          ? centsToMoney(combinedCents + percentageOfCents(combinedCents, DUO_BOOST_PCT))
-          : centsToMoney(combinedCents)
+        basePrice = centsToMoney(combinedCents)
         estimatedHours = estimateEloBoostHours({
           currentRank,
           targetRank,
@@ -635,22 +708,16 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
     case 'win_boost': {
       if (!input.winsPurchased || !input.currentRank) break
       if (input.winsPurchased < 1 || input.winsPurchased > 5) break
-      const pricePerWin = getWinBoostPrice(input.queueType, input.currentRank.tier, input.currentRank.division)
-      const winsCents = input.winsPurchased * moneyToCents(pricePerWin)
-      basePrice = input.boostMode === 'duo'
-        ? centsToMoney(winsCents + percentageOfCents(winsCents, DUO_BOOST_PCT))
-        : centsToMoney(winsCents)
+      const pricePerWin = getWinBoostPrice(input.queueType, input.currentRank.tier, input.boostMode, input.currentRank.division)
+      basePrice = centsToMoney(input.winsPurchased * moneyToCents(pricePerWin))
       estimatedHours = expectedMatchesForWins(input.winsPurchased) * MATCH_DURATION_HOURS
       break
     }
     case 'md5': {
       if (!input.winsPurchased || !input.currentRank) break
       if (input.winsPurchased < 1 || input.winsPurchased > 5) break
-      const pricePerWin = getMd5WinPrice(input.queueType, input.currentRank.tier)
-      const winsCents = input.winsPurchased * moneyToCents(pricePerWin)
-      basePrice = input.boostMode === 'duo'
-        ? centsToMoney(winsCents + percentageOfCents(winsCents, DUO_BOOST_PCT))
-        : centsToMoney(winsCents)
+      const pricePerWin = getMd5WinPrice(input.queueType, input.currentRank.tier, input.boostMode)
+      basePrice = centsToMoney(input.winsPurchased * moneyToCents(pricePerWin))
       estimatedHours = expectedMatchesForWins(input.winsPurchased) * MATCH_DURATION_HOURS
       break
     }
@@ -681,7 +748,7 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
 
   let winPackagePrice = 0
   if (input.winPackage && input.currentRank) {
-    const pricePerWin = getWinBoostPrice(input.queueType, input.currentRank.tier, input.currentRank.division)
+    const pricePerWin = getWinBoostPrice(input.queueType, input.currentRank.tier, input.boostMode, input.currentRank.division)
     const discountPct = WIN_PACKAGE_DISCOUNTS[input.winPackage] ?? 0
     const undiscountedCents = moneyToCents(pricePerWin) * input.winPackage
     winPackagePrice = centsToMoney(undiscountedCents - percentageOfCents(undiscountedCents, discountPct))

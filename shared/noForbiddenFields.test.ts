@@ -51,11 +51,16 @@ describe('Ausência estrutural de PDL alvo no Master+', () => {
     expect(block).toMatch(/\.strict\(\)/)
   })
 
-  it('o schema Master+ não aceita boost_mode "duo" (literal "solo" apenas)', () => {
+  it('o schema Master+ ainda aceita boost_mode "duo" na forma (a rejeição acontece antes, na roteação de fluxo -- ver teste abaixo)', () => {
     const content = read('supabase/functions/_shared/orderPricing.ts')
     const start = content.indexOf('const masterPlusIntentSchema')
     const end = content.indexOf('\nconst ', start + 10)
     const block = content.slice(start, end === -1 ? undefined : end)
-    expect(block).toMatch(/boost_mode:\s*z\.literal\('solo'\)/)
+    expect(block).toMatch(/boost_mode:\s*z\.enum\(\['solo', 'duo'\]\)/)
+  })
+
+  it('a roteação de fluxo bloqueia Duo Boost incondicionalmente no Master+ (Elo Boost Duo é Iron-Diamond only)', () => {
+    const content = read('supabase/functions/_shared/orderPricing.ts')
+    expect(content).toMatch(/routed\.data\.boost_mode === 'duo'/)
   })
 })

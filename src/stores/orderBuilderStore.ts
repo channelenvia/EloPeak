@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { getBoostFlow, isMasterPlusCurrentTier, type BoostFlow, type BoostMode as BoostFlowMode } from '@/lib/boostDomain'
+import { getBoostFlow, isMasterPlusCurrentTier, isDuoBlockedAtTier, type BoostFlow, type BoostMode as BoostFlowMode } from '@/lib/boostDomain'
 import { DEFAULT_COUPON_CODE } from '@/lib/pricing'
 import type { GameSlug, ServiceType, QueueType, BoostMode, Rank, ClashTier, ClashDay } from '@/types'
 
@@ -262,12 +262,12 @@ const CLEARED_LOOKUP_STATE = {
 // inválida (ex.: rank ainda não escolhido). Clash nunca tem rank (não usa
 // currentRank) mas ainda tem fluxo — reaproveita solo_standard/duo_standard
 // direto da modalidade, mesma regra de StepExtras.tsx/StepPayment.tsx.
-function flowFor(serviceType: ServiceType | null, rank: Rank | null, mode: BoostMode): BoostFlow | null {
+function flowFor(serviceType: ServiceType | null, rank: Rank | null, mode: BoostMode, queueType: QueueType): BoostFlow | null {
   if (serviceType === 'clash' || serviceType === 'win_boost' || serviceType === 'md5') {
     return mode === 'duo' ? 'duo_standard' : 'solo_standard'
   }
   if (!rank) return null
-  return getBoostFlow(rank.tier, mode as BoostFlowMode)
+  return getBoostFlow(rank.tier, mode as BoostFlowMode, queueType)
 }
 
 // Persistido em sessionStorage -- sobrevive a reload e troca de aba dentro da
@@ -334,9 +334,17 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
 
   setCurrentRank: (currentRank) => set((state) => {
     const forcedMasterPlus = isMasterPlusCurrentTier(currentRank.tier)
-    const nextMode: BoostMode = forcedMasterPlus ? 'solo' : state.boostMode
-    const prevFlow = flowFor(state.serviceType, state.currentRank, state.boostMode)
-    const nextFlow = flowFor(state.serviceType, currentRank, nextMode)
+    // Elo Boost Duo é Iron-Diamond only agora, em qualquer fila -- bloqueado
+    // assim que o rank ATUAL já é Master+. Vitórias segue com a regra
+    // antiga (bloqueado só a partir de Grão-Mestre, isDuoBlockedAtTier, só
+    // na fila Solo/Duo -- na Flex a Riot não restringe duo por elo). MD5
+    // nunca bloqueia Duo por rank (ver orderPricing.ts).
+    const duoBlocked = state.serviceType === 'elo_boost'
+      ? forcedMasterPlus
+      : state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isDuoBlockedAtTier(currentRank.tier)
+    const nextMode: BoostMode = duoBlocked ? 'solo' : state.boostMode
+    const prevFlow = flowFor(state.serviceType, state.currentRank, state.boostMode, state.queueType)
+    const nextFlow = flowFor(state.serviceType, currentRank, nextMode, state.queueType)
     const flowChanged = prevFlow !== nextFlow
 
     return {
@@ -360,13 +368,31 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
   setQueueType: (queueType) => set({ ...CLEARED_LOOKUP_STATE, queueType }),
 
   setBoostMode: (boostMode) => set((state) => {
-    // Duo nunca é aceito com rank atual Master+ — defesa em profundidade,
-    // a UI não deve nem oferecer essa opção nesse caso.
-    if (boostMode === 'duo' && state.currentRank && isMasterPlusCurrentTier(state.currentRank.tier)) {
+    // Elo Boost Duo é Iron-Diamond only agora, em qualquer fila -- bloqueado
+    // assim que o rank ATUAL já é Master+. Vitórias segue a regra antiga
+    // (bloqueado só a partir de Grão-Mestre, isDuoBlockedAtTier, só na fila
+    // Solo/Duo). MD5 nunca bloqueia por rank. Defesa em profundidade -- a UI
+    // não deve nem oferecer essa opção nesse caso.
+    if (boostMode === 'duo' && state.currentRank) {
+      if (state.serviceType === 'elo_boost' && isMasterPlusCurrentTier(state.currentRank.tier)) {
+        return {}
+      }
+      if (state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isDuoBlockedAtTier(state.currentRank.tier)) {
+        return {}
+      }
+    }
+    // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger) como
+    // alvo, em nenhuma fila -- se o cliente já escolheu um desses alvos (em
+    // Solo), trocar pra Duo é rejeitado aqui, mesma defesa em profundidade
+    // acima. A UI trava o próprio botão (StepConfigure.tsx, eloDuoBlockedByTarget).
+    if (
+      boostMode === 'duo' && state.serviceType === 'elo_boost' && state.targetRank
+      && (isMasterPlusCurrentTier(state.targetRank.tier) || state.targetRank.tier === 'challenger')
+    ) {
       return {}
     }
-    const prevFlow = flowFor(state.serviceType, state.currentRank, state.boostMode)
-    const nextFlow = flowFor(state.serviceType, state.currentRank, boostMode)
+    const prevFlow = flowFor(state.serviceType, state.currentRank, state.boostMode, state.queueType)
+    const nextFlow = flowFor(state.serviceType, state.currentRank, boostMode, state.queueType)
     const flowChanged = prevFlow !== nextFlow
 
     return {

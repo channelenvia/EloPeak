@@ -24,7 +24,6 @@ import {
     Gamepad2,
     Hash,
     History, Lock,
-    PauseCircle,
     Undo2,
     Route,
     Shuffle,
@@ -51,20 +50,13 @@ function BoosterLink({ userId, booster }: { userId: string; booster: BoosterRef 
 // 'drop_requested' fica de fora porque já tem sua própria fila em /admin/drops.
 const DROPPABLE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 'awaiting_customer']
 
-// Únicos 5 status que o admin altera manualmente por aqui -- o resto do
-// ciclo de vida (atribuído, em andamento, aguardando cliente etc.) já
-// acontece sozinho via as ações normais do booster/cliente.
-const STATUS_ACTIONS: { value: OrderStatus; label: string; icon: typeof CheckCircle2; tone: 'success' | 'warning' | 'neutral' | 'danger' }[] = [
-  { value: 'completed',        label: 'Marcar como concluído',            icon: CheckCircle2, tone: 'success' },
-  { value: 'paused',           label: 'Marcar como pausado',              icon: PauseCircle,  tone: 'warning' },
-  { value: 'awaiting_payment', label: 'Marcar como aguardando pagamento', icon: Wallet,       tone: 'warning' },
-  { value: 'refunded',         label: 'Marcar como reembolsado',          icon: Undo2,        tone: 'neutral' },
-  { value: 'canceled',         label: 'Cancelar pedido',                  icon: XCircle,      tone: 'danger'  },
-]
-
+// Só 3 ações manuais: concluir/cancelar (admin_override_order_status, sem
+// efeito colateral) e reembolsar -- que é um link pro formulário de
+// reembolso manual (AdminRefundsPage/admin_create_manual_refund), não um
+// flip direto pra status='refunded' (isso deixava o pedido "reembolsado"
+// sem processar nada no Mercado Pago nem no saldo do booster).
 const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
   success: 'text-success hover:bg-success/10',
-  warning: 'text-warning hover:bg-warning/10',
   neutral: 'text-ink-secondary hover:bg-bg-elevated',
   danger:  'text-danger hover:bg-danger/10',
 }
@@ -107,13 +99,20 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
 
 // Mesmo padrão do menu de ações dos boosters (ver BoosterActionsMenu em
 // Boosters.tsx): botão "Ações" + Popover ancorado com a lista, em vez de um
-// modal central. Só os 5 status que o admin realmente precisa setar manualmente.
+// modal central. Só as 3 ações que o admin realmente precisa fazer
+// manualmente aqui -- ver comentário de STATUS_ACTION_TONE_CLASS acima pro
+// motivo de "reembolsar" ser um link em vez de um flip de status direto.
 function AdminStatusActionsMenu({ order }: { order: Order }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const updateStatus = useAdminOverrideOrderStatus(order.id)
 
   const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
+
+  function setStatus(value: OrderStatus) {
+    updateStatus.mutate({ orderId: order.id, newStatus: value })
+    setMenuOpen(false)
+  }
 
   return (
     <>
@@ -128,18 +127,38 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
       </Button>
 
       <Popover open={menuOpen} onClose={() => setMenuOpen(false)} anchorRef={triggerRef} className="w-64 p-2 space-y-1">
-        {STATUS_ACTIONS.filter(({ value }) => value !== order.status).map(({ value, label, icon: Icon, tone }) => (
+        {order.status !== 'completed' && (
           <button
-            key={value}
             type="button"
             disabled={updateStatus.isPending}
-            onClick={() => { updateStatus.mutate({ orderId: order.id, newStatus: value }); setMenuOpen(false) }}
-            className={cn(itemClass, STATUS_ACTION_TONE_CLASS[tone])}
+            onClick={() => setStatus('completed')}
+            className={cn(itemClass, STATUS_ACTION_TONE_CLASS.success)}
           >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            Marcar como concluído
           </button>
-        ))}
+        )}
+        {order.status !== 'refunded' && (
+          <Link
+            to={`/admin/refunds?order_id=${order.id}`}
+            onClick={() => setMenuOpen(false)}
+            className={cn(itemClass, STATUS_ACTION_TONE_CLASS.neutral)}
+          >
+            <Undo2 className="h-4 w-4 shrink-0" />
+            Marcar pra reembolsar
+          </Link>
+        )}
+        {order.status !== 'canceled' && (
+          <button
+            type="button"
+            disabled={updateStatus.isPending}
+            onClick={() => setStatus('canceled')}
+            className={cn(itemClass, STATUS_ACTION_TONE_CLASS.danger)}
+          >
+            <XCircle className="h-4 w-4 shrink-0" />
+            Cancelar pedido
+          </button>
+        )}
         {updateStatus.isError && (
           <p className="px-3 py-1.5 text-xs text-danger">{updateStatus.error instanceof Error ? updateStatus.error.message : 'Erro'}</p>
         )}

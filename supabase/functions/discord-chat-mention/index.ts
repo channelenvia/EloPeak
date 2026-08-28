@@ -4,7 +4,7 @@ import { jsonResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
-import { eloPeakFooter } from '../_shared/discordRankFormat.ts'
+import { eloPeakFooter, escapeDiscordMarkdown } from '../_shared/discordRankFormat.ts'
 
 const DISCORD_API   = 'https://discord.com/api/v10'
 const BOT_TOKEN      = Deno.env.get('DISCORD_BOT_TOKEN')      ?? ''
@@ -56,6 +56,15 @@ serve(async (req) => {
     if (!order) {
       return jsonResponse(req, { ok: false, reason: 'order not found' })
     }
+    // O payload vem autenticado só por segredo compartilhado (webhookAuth),
+    // não por sessão do usuário -- sem esta checagem, qualquer chamador com
+    // o segredo podia mandar DM (com texto/link arbitrário) pra um usuário
+    // Discord vinculado alegando falsamente uma menção num pedido que ele
+    // não participa. discord-order-channel já faz o equivalente re-checando
+    // o payload contra o banco; aqui replicamos pro mencionado.
+    if (order.customer_id !== userId && order.assigned_booster_id !== userId) {
+      return jsonResponse(req, { ok: false, reason: 'user is not a participant of this order' })
+    }
 
     const shortCode = orderId.slice(0, 8).toUpperCase()
 
@@ -80,7 +89,7 @@ serve(async (req) => {
         embeds: [{
           title: '💬 Você foi mencionado',
           url: orderDetailUrl(order, userId),
-          description: body,
+          description: escapeDiscordMarkdown(body),
           color: 0x5865F2,
           fields: [{ name: 'Pedido', value: `#${shortCode}`, inline: true }],
           footer: eloPeakFooter(APP_URL),

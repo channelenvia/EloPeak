@@ -56,8 +56,14 @@ export function OrderRankSummary({ order }: { order: Order }) {
   // partidas), então isso regride sozinho a cada sincronização, sem
   // precisar de nenhum estado extra aqui.
   const isWinsBased = order.service_type === 'win_boost' || order.service_type === 'md5'
+  // win_boost: garantia de saldo líquido -- toda derrota é compensada com
+  // uma vitória extra, então "restante" é contra (vitórias - derrotas), não
+  // vitórias cruas (mesmo cálculo de OrderProgress.tsx/orderCompletionGate.ts).
+  // md5 é garantia de win rate (80%+), continua olhando só vitórias cruas.
   const winsRemaining = isWinsBased && order.wins_purchased != null
-    ? Math.max(0, order.wins_purchased - order.wins_played)
+    ? order.service_type === 'win_boost'
+      ? Math.max(0, order.wins_purchased - (order.wins_played - order.losses_played))
+      : Math.max(0, order.wins_purchased - order.wins_played)
     : null
 
   // Badge cinza do mesmo tamanho do ícone de rank (RankBadge lg sem label) --

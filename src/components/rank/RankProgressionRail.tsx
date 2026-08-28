@@ -38,17 +38,11 @@ export interface RankProgressionRailProps {
   fillPercentOverride?: number | null
 }
 
-// Componente-assinatura do produto: a "trilha de ascensão" -- usada no hero
-// da home, no simulador de preço, no configurador de pedido, nos cards de
-// pedido e no dashboard de pedido ativo. Nunca decorativa: a posição do
-// preenchimento é sempre derivada do rank real (rankStep), nunca estética.
-//
-// No vocabulário da família de componentes de rank (RankIcon < RankLabel <
-// RankBadge, em ui/RankBadge.tsx), este componente já É o que
-// seria chamado de RankProgress/RankJourney -- badges atual/alvo + trilha +
-// corte ao vivo. Não foi renomeado/duplicado: já tem um único consumidor
-// (OrderProgress.tsx), nome descritivo e comportamento correto -- criar um
-// "RankJourney" paralelo só geraria confusão sem ganho real.
+// Componente-assinatura do produto: a "trilha de ascensão", usada no hero
+// da home, simulador de preço, configurador, cards de pedido e dashboard
+// ativo. Nunca decorativa -- a posição do preenchimento é sempre derivada
+// do rank real (rankStep). Já cobre badges atual/alvo + trilha + corte ao
+// vivo (o que seria um "RankProgress/RankJourney" separado).
 export function RankProgressionRail({
   currentTier, currentDivision, currentLp, targetTier, targetDivision, liveCutoffLp,
   size = 'full', className, locked = false, showBar = true, showBadges = true, showBadgeLabels = true, fillPercentOverride = null,

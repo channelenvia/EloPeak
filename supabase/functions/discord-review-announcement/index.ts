@@ -4,7 +4,7 @@ import { jsonResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
-import { coreServiceFields, rankIconTier, cardThumbnailUrl, eloPeakFooter } from '../_shared/discordRankFormat.ts'
+import { coreServiceFields, rankIconTier, cardThumbnailUrl, eloPeakFooter, escapeDiscordMarkdown } from '../_shared/discordRankFormat.ts'
 
 const DISCORD_API   = 'https://discord.com/api/v10'
 const BOT_TOKEN      = Deno.env.get('DISCORD_BOT_TOKEN')      ?? ''
@@ -107,7 +107,7 @@ serve(async (req) => {
         embeds: [{
           title: 'Nova Avaliação Disponível!',
           url: boosterProfileUrl,
-          description: review.content?.trim() ? `"${review.content.trim()}"` : '_Sem comentário_',
+          description: review.content?.trim() ? `"${escapeDiscordMarkdown(review.content.trim())}"` : '_Sem comentário_',
           color: 0xFACC15,
           fields: [
             ...coreFields,

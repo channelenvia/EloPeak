@@ -35,10 +35,19 @@ function ProgressBar({ percent, tone = 'brand', locked = false }: { percent: num
 function WinBoostProgress({ order }: { order: Order }) {
   const locked = isProgressLocked(order)
   const purchased = order.wins_purchased ?? 0
-  const completed = Math.min(order.wins_played, purchased)
-  const remaining = Math.max(0, purchased - order.wins_played)
+  // win_boost: garantia de saldo líquido -- toda derrota é compensada com
+  // uma vitória extra, então o progresso real é (vitórias - derrotas), não
+  // vitórias cruas (ver orderCompletionGate.ts, mesmo cálculo usado pra
+  // liberar "Finalizar pedido"). md5 é garantia de win rate (80%+), cálculo
+  // diferente -- continua olhando só vitórias cruas.
+  const netWins = order.service_type === 'win_boost'
+    ? order.wins_played - order.losses_played
+    : order.wins_played
+  const completed = Math.min(Math.max(0, netWins), purchased)
+  const remaining = Math.max(0, purchased - netWins)
   const percent = purchased > 0 ? (completed / purchased) * 100 : 0
   const done = remaining === 0
+  const compensating = order.service_type === 'win_boost' && order.losses_played > 0 && !done
 
   return (
     <div className="mb-4 pb-4 border-b border-border-subtle">
@@ -53,7 +62,9 @@ function WinBoostProgress({ order }: { order: Order }) {
           ? 'O progresso começa a contar assim que o booster iniciar o pedido.'
           : done
             ? 'Objetivo de vitórias atingido!'
-            : 'Progresso atualizado pelas partidas sincronizadas.'}
+            : compensating
+              ? `Progresso atualizado pelas partidas sincronizadas -- ${order.losses_played} derrota(s) sendo compensada(s) com vitórias extras.`
+              : 'Progresso atualizado pelas partidas sincronizadas.'}
       </p>
     </div>
   )

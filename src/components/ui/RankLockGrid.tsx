@@ -16,12 +16,20 @@ interface RankLockGridProps {
   /** When true, every tier/division button is disabled regardless of lock
    * state — used to lock the grid after a successful Riot auto-fill. */
   disabled?: boolean
+  /** Extra tiers locked for a reason other than "already reached" (ex.:
+   * Challenger como alvo quando a modalidade é Duo na fila Solo/Duo — Duo
+   * nunca chega em Challenger, ver isDuoBlockedAtTier/pricing.ts). ORed com
+   * o lock normal de isRankLocked, nunca substitui. */
+  additionalLockedTiers?: readonly RankTier[]
+  /** Tooltip mostrado nos tiers de additionalLockedTiers -- some texto
+   * específico da razão, em vez do genérico "já alcançado ou abaixo". */
+  additionalLockedTitle?: string
 }
 
 // Fallback de imagem (live -> local -> ícone) agora vem do RankIcon
 // compartilhado (RankBadge.tsx) — antes reimplementado aqui em paralelo.
-function TierButton({ tier, isSelected, isLocked, onClick }: {
-  tier: RankTier; isSelected: boolean; isLocked: boolean; onClick: () => void
+function TierButton({ tier, isSelected, isLocked, lockedTitle, onClick }: {
+  tier: RankTier; isSelected: boolean; isLocked: boolean; lockedTitle?: string; onClick: () => void
 }) {
   return (
     <SelectableTile
@@ -30,7 +38,7 @@ function TierButton({ tier, isSelected, isLocked, onClick }: {
       tinted
       locked={isLocked}
       onClick={onClick}
-      title={isLocked ? 'Rank já alcançado ou abaixo do atual' : undefined}
+      title={isLocked ? (lockedTitle ?? 'Rank já alcançado ou abaixo do atual') : undefined}
     >
       <RankIcon tier={tier} imgClass="w-8 h-8" iconClass="w-7 h-7" />
       <span className={cn('text-[8px] font-semibold text-center leading-none', isSelected ? 'text-brand' : 'text-ink-secondary')}>
@@ -40,9 +48,16 @@ function TierButton({ tier, isSelected, isLocked, onClick }: {
   )
 }
 
-export function RankLockGrid({ current, selectedTier, selectedDivision, onChange, tiers, disabled }: RankLockGridProps) {
+export function RankLockGrid({
+  current, selectedTier, selectedDivision, onChange, tiers, disabled,
+  additionalLockedTiers, additionalLockedTitle,
+}: RankLockGridProps) {
+  function isExtraLocked(tier: RankTier): boolean {
+    return additionalLockedTiers?.includes(tier) ?? false
+  }
+
   function handleTier(tier: RankTier) {
-    if (disabled) return
+    if (disabled || isExtraLocked(tier)) return
     if (tierHasDivisions(tier)) {
       // Pick the first unlocked division for this tier, defaulting to IV.
       const firstOpen = DIVISIONS.find((d) => !isRankLocked({ tier, division: d }, current)) ?? 'IV'
@@ -66,10 +81,11 @@ export function RankLockGrid({ current, selectedTier, selectedDivision, onChange
             // rankStep is monotonic within a tier (I is always the highest
             // division) — a tier is fully locked exactly when its highest
             // division is locked, no need to also check the lowest.
-            isLocked={disabled || isRankLocked(
+            isLocked={disabled || isExtraLocked(tier) || isRankLocked(
               { tier, division: tierHasDivisions(tier) ? 'I' : null },
               current,
             )}
+            lockedTitle={isExtraLocked(tier) ? additionalLockedTitle : undefined}
             onClick={() => handleTier(tier)}
           />
         ))}

@@ -1,8 +1,9 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { constantTimeEqual } from '../_shared/crypto.ts'
-import { jsonResponse } from '../_shared/responses.ts'
+import { jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
+import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { eloPeakFooter } from '../_shared/discordRankFormat.ts'
 
 const DISCORD_API = 'https://discord.com/api/v10'
@@ -42,6 +43,12 @@ serve(async (req) => {
   if (!constantTimeEqual(receivedSecret, CRON_SECRET)) {
     return new Response('Unauthorized', { status: 401 })
   }
+
+  // Defesa em profundidade contra vazamento do secret (mesmo padrão de
+  // discord-init-channels) -- não é a defesa principal (isso é o secret),
+  // só limita o dano de um secret comprometido.
+  const rateLimit = await consumeUserRateLimit('discord-top3-announcement', 'cron', 2, 300)
+  if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)
 
   try {
     const db = supabaseAdmin()

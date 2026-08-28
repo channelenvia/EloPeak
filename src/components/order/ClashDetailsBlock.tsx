@@ -1,17 +1,10 @@
 // src/components/order/ClashDetailsBlock.tsx
-// Bloco de detalhes do Clash -- reaproveitado (não copiado) nas 4 telas que
-// exibem um pedido de Clash: OrderDetail do cliente, JobDetail do booster,
-// OrderDetail do admin e StepReview (revisão pré-pagamento). As 4 PRECISAM
-// ficar visualmente idênticas, mesma regra documentada em OrderRankRow.
-//
-// Segue o MESMO padrão do eloboost (OrderRankRow): um lado "atual" (aqui,
-// o Tier de Clash -- não há rank+divisão exato pra virar o alvo de nada),
-// seta no meio (sem indicador central -- isso é só do eloboost, que tem
-// LP), e o outro lado com o "alvo" do Clash: o dia (dia/mês + Sábado ou
-// Domingo), no mesmo esquema visual de badge que vitórias-restantes usa
-// pro rank alvo de win_boost/md5. Tudo que não é rank (modo do pedido,
-// Riot ID, horário de fechamento, total pago) fica na OrderInfoGrid de
-// cada tela, igual eloboost -- não duplicado aqui.
+// Bloco de detalhes do Clash, reaproveitado nas 4 telas que exibem um
+// pedido de Clash (cliente/booster/admin OrderDetail + StepReview) -- as 4
+// PRECISAM ficar idênticas, mesma regra de OrderRankRow. Segue o mesmo
+// padrão do eloboost: lado "atual" (Tier), seta central, lado "alvo" (dia)
+// no esquema de badge de vitórias-restantes. Campos fora do rank (modo,
+// Riot ID, horário, total) ficam na OrderInfoGrid de cada tela.
 import { CLASH_DAY_LABEL, CLASH_TIER_BOUNDARY_RANKS, CLASH_TIER_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { RankBadge } from '@/components/ui/RankBadge'
 import { OrderRankRow } from './OrderRankRow'
