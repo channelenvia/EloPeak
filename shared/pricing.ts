@@ -434,9 +434,9 @@ export const PLACEMENT_PRICE: Record<string, number> = {
 // Mestre->Challenger direto (soma dos dois degraus), único caso sem "tier
 // atual == linha", mantido só como referência (não exibido hoje).
 export const MASTER_PLUS_TIER_PRICE_CENTS: Record<'master' | 'grandmaster' | 'challenger', number> = {
-  master: 111917,
-  grandmaster: 159887,
-  challenger: 271804,
+  master: 121917,
+  grandmaster: 169887,
+  challenger: 291804,
 } as const
 
 // ── Master+ — preço vem da tabela comercial `master_plus_pricing` ───────────

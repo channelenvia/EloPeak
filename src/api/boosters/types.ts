@@ -1,6 +1,21 @@
-import type { BoosterProfile, Rank } from '@/types'
+import type { BoosterProfile, BoosterStatus, Rank } from '@/types'
 
 export type { BoosterProfile }
+
+// Retorno de admin_list_boosters_with_slots (migration 20260829020000) --
+// usado só pelo picker de "Reatribuir booster" do admin, que precisa saber
+// a ocupação atual de cada um sem disparar N chamadas de
+// booster_active_slot_counts (uma por booster).
+export interface BoosterWithSlots {
+  id: string
+  user_id: string
+  display_name: string
+  status: BoosterStatus
+  is_top3: boolean
+  solo_count: number
+  duo_count: number
+  total_count: number
+}
 
 export type BoosterAccessState = 'no_application' | 'pending' | 'approved' | 'rejected' | 'suspended' | 'removed' | 'error'
 

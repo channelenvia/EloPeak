@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Trophy, XCircle, Clock, RefreshCw, Crown, Gamepad2, History, Swords, TrendingUp } from 'lucide-react'
+import { Trophy, XCircle, Clock, RefreshCw, Crown, Gamepad2, History, Swords, TrendingUp, Ban } from 'lucide-react'
 import { Card, Skeleton, ErrorAlert } from '@/components/ui'
 import { cn, timeAgo } from '@/lib/utils'
 import { useDdragonVersion, championIconUrl } from '@/lib/ddragon'
@@ -50,12 +50,18 @@ function SummaryStat({ icon: Icon, label, value, valueClassName }: { icon: Lucid
 // assists são por jogador, não por time). Extraído pra computar isso uma vez
 // só no cabeçalho compartilhado (ver OrderMatchHistory) em vez de duplicar
 // V/D e winrate nos dois painéis lado a lado.
+// Remake não conta pra V/D, winrate nem KDA médio -- é um registro
+// informativo (partida abortada, sem LP real em jogo), não uma partida
+// jogada de verdade. Filtrado ANTES de qualquer cálculo, não só do
+// numerador -- senão inflaria o denominador (total de partidas) sem nunca
+// contar como vitória, distorcendo o winrate pra baixo.
 function computeMatchSummary(matches: OrderMatch[] | undefined) {
-  const wins = matches?.filter((m) => m.result === 'win').length ?? 0
-  const losses = (matches?.length ?? 0) - wins
-  const winRate = matches?.length ? Math.round((wins / matches.length) * 100) : null
-  const avgKda = matches?.length
-    ? matches.reduce((sum, m) => sum + (m.deaths > 0 ? (m.kills + m.assists) / m.deaths : m.kills + m.assists), 0) / matches.length
+  const counted = matches?.filter((m) => m.result !== 'remake')
+  const wins = counted?.filter((m) => m.result === 'win').length ?? 0
+  const losses = (counted?.length ?? 0) - wins
+  const winRate = counted?.length ? Math.round((wins / counted.length) * 100) : null
+  const avgKda = counted?.length
+    ? counted.reduce((sum, m) => sum + (m.deaths > 0 ? (m.kills + m.assists) / m.deaths : m.kills + m.assists), 0) / counted.length
     : null
   return { wins, losses, winRate, avgKda }
 }
@@ -115,7 +121,8 @@ function MatchListPanel({
                 ? (match.minions_killed ?? 0) + (match.neutral_minions_killed ?? 0)
                 : null
               const csPerMin = cs != null && match.duration_seconds ? cs / (match.duration_seconds / 60) : null
-              const pdlValue = pdlEstimate
+              // Remake não tem LP em jogo -- sem estimativa de ganho/perda.
+              const pdlValue = pdlEstimate && match.result !== 'remake'
                 ? match.result === 'win' ? pdlEstimate.gain : pdlEstimate.loss
                 : null
               return (
@@ -123,7 +130,9 @@ function MatchListPanel({
                   key={match.id}
                   className={cn(
                     'flex items-center gap-3 rounded-xl px-3 py-2.5 border',
-                    match.result === 'win'
+                    match.result === 'remake'
+                      ? 'bg-bg-elevated border-border-subtle opacity-70'
+                      : match.result === 'win'
                       ? 'bg-success/5 border-success/15'
                       : 'bg-danger/5 border-danger/15',
                   )}
@@ -142,7 +151,9 @@ function MatchListPanel({
                         <Gamepad2 className="h-4 w-4 text-ink-muted" />
                       </div>
                     )}
-                    {match.result === 'win' ? (
+                    {match.result === 'remake' ? (
+                      <Ban className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-bg-surface p-0.5 text-ink-muted shadow" />
+                    ) : match.result === 'win' ? (
                       <Trophy className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-bg-surface p-0.5 text-success shadow" />
                     ) : (
                       <XCircle className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-bg-surface p-0.5 text-danger shadow" />
@@ -161,7 +172,9 @@ function MatchListPanel({
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    {pdlValue != null && (
+                    {match.result === 'remake' ? (
+                      <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide">Remake</p>
+                    ) : pdlValue != null && (
                       <p className={cn('text-xs font-bold', match.result === 'win' ? 'text-success' : 'text-danger')} data-tabular>
                         {match.result === 'win' ? '+' : '−'}{pdlValue} {pdlEstimate!.label}
                       </p>

@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
 import type { BoosterAdminNote, BoosterProfile } from '@/types'
-import type { BoosterAccessState, BoosterPerformanceSegment, ProfessionalProfileData, TopBoosterEntry } from './types'
+import type { BoosterAccessState, BoosterPerformanceSegment, BoosterWithSlots, ProfessionalProfileData, TopBoosterEntry } from './types'
 
 export interface BoosterAccessResult {
   state: BoosterAccessState
@@ -119,6 +119,16 @@ export async function listAdminBoosters(status?: string): Promise<BoosterProfile
   const { data, error } = await query
   if (error) throw normalizeApiError(error)
   return (data ?? []) as unknown as BoosterProfile[]
+}
+
+// Picker de "Reatribuir booster" (AdminOrderDetailPage) -- lista todos os
+// boosters já com a ocupação de slots atual num único round-trip (RPC
+// admin_list_boosters_with_slots, migration 20260829020000), em vez de N
+// chamadas de booster_active_slot_counts por linha.
+export async function listBoostersWithSlots(): Promise<BoosterWithSlots[]> {
+  const { data, error } = await supabase.rpc('admin_list_boosters_with_slots')
+  if (error) throw normalizeApiError(error)
+  return (data ?? []) as unknown as BoosterWithSlots[]
 }
 
 export async function getAdminBoosterDetail(boosterId: string): Promise<BoosterProfile> {

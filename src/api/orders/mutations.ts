@@ -81,6 +81,25 @@ export async function adminDropOrder(params: { orderId: string; reason: string }
   return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES)
 }
 
+const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
+  invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
+  order_not_found: 'Pedido não encontrado.',
+  order_not_assigned: 'Este pedido ainda não tem um booster atribuído.',
+  order_not_active: 'Este pedido não está mais em um status que aceita reatribuição.',
+  sync_required_before_reassign: 'Sincronize as partidas do pedido antes de reatribuir.',
+  already_assigned_to_target: 'Este booster já está atribuído ao pedido.',
+  target_booster_not_found: 'Booster não encontrado.',
+  target_booster_not_approved: 'Este booster não está com status aprovado -- não é possível atribuir o pedido a ele.',
+}
+
+export async function adminReassignBooster(params: { orderId: string; targetBoosterId: string; reason: string }) {
+  const { data, error } = await supabase.rpc('admin_reassign_booster', {
+    p_order_id: params.orderId, p_target_booster_id: params.targetBoosterId, p_reason: params.reason,
+  })
+  if (error) throw normalizeApiError(error)
+  return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_REASSIGN_BOOSTER_MESSAGES)
+}
+
 const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
   unauthorized: 'Você não tem permissão para essa ação.',
   invalid_reason: 'O motivo precisa ter pelo menos 10 caracteres.',
@@ -122,6 +141,7 @@ const REQUEST_CUSTOMER_ORDER_DROP_MESSAGES: Record<string, string> = {
   order_not_found: 'Pedido não encontrado.',
   order_not_assigned: 'Este pedido ainda não tem um booster atribuído.',
   order_not_active: 'Este pedido não está mais em um status que aceita drop.',
+  sync_required_before_drop: 'Sincronize as partidas do pedido antes de solicitar o drop.',
   drop_request_already_pending: 'Já existe uma solicitação de drop pendente para este pedido.',
   drop_limit_reached: 'Limite de drops atingido para este pedido.',
   rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.',

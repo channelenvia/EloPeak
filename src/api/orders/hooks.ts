@@ -10,7 +10,7 @@ import {
   listOrderMatches, listOrderStatusHistory,
 } from './queries'
 import {
-  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminOverrideOrderStatus, cancelPendingOrder,
+  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
   confirmOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
   revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
@@ -317,6 +317,18 @@ export function useAdminDropOrder(orderId: string) {
   return useMutation({
     mutationFn: (reason: string) => adminDropOrder({ orderId, reason }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
+  })
+}
+
+export function useAdminReassignBooster(orderId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { targetBoosterId: string; reason: string }) => adminReassignBooster({ orderId, ...params }),
+    onSuccess: () => {
+      invalidateOrder(queryClient, orderId)
+      void queryClient.invalidateQueries({ queryKey: ['booster-slots'] })
+      void queryClient.invalidateQueries({ queryKey: ['boosters', 'with-slots'] })
+    },
   })
 }
 

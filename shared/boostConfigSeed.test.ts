@@ -110,18 +110,18 @@ describe('Tabela master_plus_pricing — 12 combinações válidas, sem preço f
 // A migration 20260827120000 colapsou os múltiplos degraus de PDL pra 1
 // preço "cheio" por par -- o desconto contínuo de 5%/vitória
 // (applyMasterPlusPdlDiscount) já cuida sozinho da redução conforme o PDL
-// sobe, então não há mais degraus a testar aqui. Fila Flex agora tem o
-// mesmo preço da Solo/Duo (não há mais diferenciação comercial por fila no
-// Master+). O preço EXIBIDO na página pública vem do código
-// (MASTER_PLUS_TIER_PRICE_CENTS, chaveado pelo TIER ATUAL da linha exibida)
-// enquanto o preço COBRADO vem da tabela master_plus_pricing no banco (lida
-// em StepConfigure e revalidada em orderPricing.ts). São duas fontes de
-// verdade pro mesmo valor monetário: se divergirem, o cliente vê um preço e
-// é cobrado outro. Este teste amarra a seed da migration atual ao
-// constante do código.
-describe('master_plus_pricing (20260827120000) — seed do banco bate com o preço exibido na página pública', () => {
+// sobe, então não há mais degraus a testar aqui. A migration 20260829010000
+// reajustou os valores (Master->Grão-Mestre e Grão-Mestre->Challenger),
+// mesma estrutura. Fila Flex tem o mesmo preço da Solo/Duo. O preço EXIBIDO
+// na página pública vem do código (MASTER_PLUS_TIER_PRICE_CENTS, chaveado
+// pelo TIER ATUAL da linha exibida) enquanto o preço COBRADO vem da tabela
+// master_plus_pricing no banco (lida em StepConfigure e revalidada em
+// orderPricing.ts). São duas fontes de verdade pro mesmo valor monetário:
+// se divergirem, o cliente vê um preço e é cobrado outro. Este teste amarra
+// a seed da migration atual ao constante do código.
+describe('master_plus_pricing (20260829010000) — seed do banco bate com o preço exibido na página pública', () => {
   const migration = readFileSync(
-    join(__dirname, '..', 'supabase', 'migrations', '20260827120000_master_plus_pricing_new_rates.sql'),
+    join(__dirname, '..', 'supabase', 'migrations', '20260829010000_master_plus_pricing_rate_increase.sql'),
     'utf-8',
   )
 

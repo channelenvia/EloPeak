@@ -5,7 +5,7 @@ import { useRealtimeInvalidate } from '@/api/core/realtime'
 import {
   getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
   getOwnBoosterTop3Status, getOwnProfessionalProfile, getPublicBooster, getTopBoosters, listAdminBoosters,
-  listBoosterAdminNotes, listBoostersPerformance, listBoosterNames, listPublicBoosters,
+  listBoosterAdminNotes, listBoostersPerformance, listBoostersWithSlots, listBoosterNames, listPublicBoosters,
 } from './queries'
 import {
   adminApproveBooster, boosterHeartbeat, expelBooster, onboardBooster, setBoosterAdminNote,
@@ -137,6 +137,17 @@ export function useAdminBoosters(status?: string) {
     queryKeys: [queryKeys.boosters.adminList({ status })],
   })
   return query
+}
+
+// Picker de "Reatribuir booster" (AdminOrderDetailPage) -- só busca quando o
+// modal está aberto (enabled), pra não carregar todos os boosters toda vez
+// que a página de detalhes do pedido monta.
+export function useBoostersWithSlots(enabled: boolean) {
+  return useQuery({
+    queryKey: ['boosters', 'with-slots'] as const,
+    queryFn: listBoostersWithSlots,
+    enabled,
+  })
 }
 
 export function useAdminBoosterDetail(boosterId: string | undefined) {

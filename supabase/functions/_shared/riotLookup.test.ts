@@ -4,7 +4,7 @@
 // parseMatchDetail.
 //   deno test --allow-env supabase/functions/_shared/riotLookup.test.ts
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
-import { parseMatchDetail } from './riotLookup.ts'
+import { isRemakeMatch, parseMatchDetail } from './riotLookup.ts'
 
 const PUUID = 'booster-puuid'
 
@@ -86,6 +86,22 @@ Deno.test('parseMatchDetail — is_mvp false quando um aliado tem KDA maior', ()
   const result = parseMatchDetail(body, PUUID, 'MATCH_1')
   if (!result.ok) throw new Error('expected ok')
   assertEquals(result.detail.isMvp, false)
+})
+
+Deno.test('isRemakeMatch — true quando gameDuration abaixo do corte', () => {
+  assertEquals(isRemakeMatch({ info: { gameDuration: 150 } }), true)
+})
+
+Deno.test('isRemakeMatch — false pra partida normal', () => {
+  assertEquals(isRemakeMatch({ info: { gameDuration: 1800 } }), false)
+})
+
+Deno.test('isRemakeMatch — false exatamente no corte (300s não é remake)', () => {
+  assertEquals(isRemakeMatch({ info: { gameDuration: 300 } }), false)
+})
+
+Deno.test('isRemakeMatch — false quando gameDuration ausente', () => {
+  assertEquals(isRemakeMatch({ info: {} }), false)
 })
 
 Deno.test('parseMatchDetail — empate no topo conta como MVP (>=, não > estrito)', () => {

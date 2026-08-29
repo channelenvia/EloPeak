@@ -325,7 +325,7 @@ export interface OrderMatch {
   id: string
   order_id: string
   external_match_id: string
-  result: 'win' | 'loss'
+  result: 'win' | 'loss' | 'remake'
   champion: string | null
   kills: number
   deaths: number

@@ -1,5 +1,7 @@
 import { useBoosterServiceDetails } from '@/api/coaching'
-import { useAdminDropOrder, useAdminOverrideOrderStatus, useOrder, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
+import { useBoostersWithSlots } from '@/api/boosters'
+import type { BoosterWithSlots } from '@/api/boosters'
+import { useAdminDropOrder, useAdminOverrideOrderStatus, useAdminReassignBooster, useOrder, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
 import { AccessTokenSection } from '@/components/order/AccessTokenSection'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
 import { DuoAccountHistoryList } from '@/components/order/DuoAccountHistoryList'
@@ -9,7 +11,7 @@ import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
-import { Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover } from '@/components/ui'
+import { BoosterStatusBadge, Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
@@ -18,12 +20,14 @@ import { cn, formatDateTime, formatEstimatedDelivery, getOrderServiceName, order
 import type { Order, OrderStatus } from '@/types'
 import { useQuery } from '@tanstack/react-query'
 import {
+    ArrowLeftRight,
     CalendarDays,
     Check, CheckCircle2, ChevronDown, Clock,
     Copy,
     Gamepad2,
     Hash,
     History, Lock,
+    Search,
     Undo2,
     Route,
     Shuffle,
@@ -97,17 +101,126 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
   )
 }
 
+// Reatribuir booster: ação exclusiva do admin (não existe pro booster/
+// cliente) -- lista todos os boosters da aplicação via
+// admin_list_boosters_with_slots e ignora o limite de slots de propósito
+// (can_booster_accept_order continua valendo pro fluxo normal de
+// accept_boost_order; isso aqui é só a exceção administrativa pra casos bem
+// específicos). Só aparece pra pedidos com booster ativo, mesmo conjunto de
+// DROPPABLE_STATUSES.
+function AdminReassignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
+  const [search, setSearch] = useState('')
+  const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
+  const [reason, setReason] = useState('')
+  const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
+  const reassign = useAdminReassignBooster(order.id)
+
+  const filtered = (boosters ?? [])
+    .filter((b: BoosterWithSlots) => b.user_id !== order.assigned_booster_id)
+    .filter((b: BoosterWithSlots) => b.status === 'approved')
+    .filter((b: BoosterWithSlots) => b.display_name.toLowerCase().includes(search.trim().toLowerCase()))
+
+  function close() {
+    onClose()
+    setSearch('')
+    setSelectedBoosterId(null)
+    setReason('')
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(next) => { if (!next) close() }}
+      title="Reatribuir booster"
+      maxWidth="lg"
+      description="Atribui o pedido a qualquer booster, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos."
+    >
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar booster..."
+          className="input-base w-full pl-9 text-sm"
+        />
+      </div>
+
+      <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
+        {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
+        {!loadingBoosters && filtered.length === 0 && (
+          <p className="text-sm text-ink-secondary py-4 text-center">Nenhum booster encontrado.</p>
+        )}
+        {filtered.map((b: BoosterWithSlots) => (
+          <button
+            key={b.user_id}
+            type="button"
+            onClick={() => setSelectedBoosterId(b.user_id)}
+            className={cn(
+              'w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors border',
+              selectedBoosterId === b.user_id ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-bg-elevated',
+            )}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-medium truncate">{b.display_name}</span>
+              <BoosterStatusBadge status={b.status} />
+            </span>
+            <span className="shrink-0 text-xs text-ink-secondary">
+              {b.total_count} ativo{b.total_count === 1 ? '' : 's'} ({b.solo_count} solo / {b.duo_count} duo)
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Justificativa para a reatribuição..."
+          className="input-base w-full min-h-[80px] resize-none text-sm"
+          maxLength={500}
+        />
+      </div>
+
+      {reassign.isError && (
+        <ErrorAlert message={reassign.error instanceof Error ? reassign.error.message : 'Erro'} className="mt-2" />
+      )}
+
+      <div className="flex gap-3 justify-end pt-2">
+        <Button variant="ghost" onClick={close}>Cancelar</Button>
+        <Button
+          variant="primary"
+          loading={reassign.isPending}
+          disabled={!selectedBoosterId || reason.trim().length < 10}
+          onClick={() => {
+            if (!selectedBoosterId) return
+            reassign.mutate({ targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
+          }}
+        >
+          Reatribuir
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
 // Mesmo padrão do menu de ações dos boosters (ver BoosterActionsMenu em
 // Boosters.tsx): botão "Ações" + Popover ancorado com a lista, em vez de um
-// modal central. Só as 3 ações que o admin realmente precisa fazer
-// manualmente aqui -- ver comentário de STATUS_ACTION_TONE_CLASS acima pro
-// motivo de "reembolsar" ser um link em vez de um flip de status direto.
+// modal central. "Reatribuir booster" só aparece com booster ativo (mesmo
+// conjunto de DROPPABLE_STATUSES) -- ver comentário de AdminReassignModal.
+// Concluir/cancelar usam admin_override_order_status (sem efeito colateral);
+// reembolsar é um link pro formulário de reembolso manual
+// (AdminRefundsPage/admin_create_manual_refund), não um flip direto pra
+// status='refunded' (isso deixava o pedido "reembolsado" sem processar nada
+// no Mercado Pago nem no saldo do booster).
 function AdminStatusActionsMenu({ order }: { order: Order }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [reassignOpen, setReassignOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const updateStatus = useAdminOverrideOrderStatus(order.id)
 
   const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
+  const reassignVisible = DROPPABLE_STATUSES.includes(order.status)
 
   function setStatus(value: OrderStatus) {
     updateStatus.mutate({ orderId: order.id, newStatus: value })
@@ -123,10 +236,20 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
         onClick={() => setMenuOpen((v) => !v)}
         rightIcon={<ChevronDown className={cn('h-3.5 w-3.5 transition-transform', menuOpen && 'rotate-180')} />}
       >
-        Alterar status
+        Ações
       </Button>
 
       <Popover open={menuOpen} onClose={() => setMenuOpen(false)} anchorRef={triggerRef} className="w-64 p-2 space-y-1">
+        {reassignVisible && (
+          <button
+            type="button"
+            onClick={() => { setMenuOpen(false); setReassignOpen(true) }}
+            className={cn(itemClass, STATUS_ACTION_TONE_CLASS.neutral)}
+          >
+            <ArrowLeftRight className="h-4 w-4 shrink-0" />
+            Reatribuir booster
+          </button>
+        )}
         {order.status !== 'completed' && (
           <button
             type="button"
@@ -163,6 +286,10 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
           <p className="px-3 py-1.5 text-xs text-danger">{updateStatus.error instanceof Error ? updateStatus.error.message : 'Erro'}</p>
         )}
       </Popover>
+
+      {reassignVisible && (
+        <AdminReassignModal order={order} open={reassignOpen} onClose={() => setReassignOpen(false)} />
+      )}
     </>
   )
 }

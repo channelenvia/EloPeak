@@ -11,6 +11,7 @@ import {
   fetchMatchIdsSince,
   fetchMatchBody,
   parseMatchDetail,
+  isRemakeMatch,
   fetchLeagueEntries,
   RIOT_QUEUE_TYPE,
   RIOT_TIER_MAP,
@@ -82,10 +83,6 @@ serve(async (req) => {
       .maybeSingle()
     if (orderErr) return errorResponse(req, 'Failed to load order', 500)
     if (!order) return errorResponse(req, 'Order not found', 404)
-    // Capturado fora do closure de attributeDuoMatch abaixo -- o TS não
-    // preserva o narrowing de "order não é null" dentro de uma função
-    // aninhada definida bem depois do guard clause acima.
-    const assignedBoosterId = order.assigned_booster_id
 
     const serviceClient = supabaseAdmin()
 
@@ -230,14 +227,26 @@ serve(async (req) => {
     const newMatchIds = idsMostRecentFirst.filter((id) => !alreadyRecorded.has(id))
     newMatchIds.reverse()
 
-    const recorded: Array<{ external_match_id: string; result: 'win' | 'loss'; champion: string | null }> = []
+    const recorded: Array<{ external_match_id: string; result: 'win' | 'loss' | 'remake'; champion: string | null }> = []
     const duoCheckedIds = new Set<string>()
-    let duoRecordedCount = 0
+    // Booster(s) que de fato receberam alguma partida CONTABILIZÁVEL (não
+    // remake -- remake nunca entra nas agregações de refresh_booster_
+    // performance_segments, então adicioná-lo aqui só gastaria um refresh à
+    // toa) nesta chamada -- pode ser mais de um (ou nenhum "atual") se o
+    // pedido foi reatribuído e o sync só rodou depois: record_order_match/
+    // record_duo_match resolvem o booster pelo played_at (janela de
+    // atribuição), não pelo atribuído agora. refresh_booster_performance_
+    // segments roda por booster real, não só por order.assigned_booster_id
+    // -- senão o booster antigo que jogou a partida fica com o desempenho
+    // desatualizado.
+    const recordedBoosterIds = new Set<string>()
 
     // Retorna se a conta duo participou DESSA partida específica -- usado
     // pelo loop principal pra decidir se a partida conta como progresso do
     // pedido (ver countsTowardOrder abaixo), além de gravar booster_duo_matches.
-    async function attributeDuoMatch(body: RiotMatchV5Body, matchId: string): Promise<boolean> {
+    // remake=true força result='remake' em vez do resultado real (win/loss
+    // não fazem sentido pra uma partida abortada) -- ver isRemakeMatch abaixo.
+    async function attributeDuoMatch(body: RiotMatchV5Body, matchId: string, remake: boolean): Promise<boolean> {
       duoCheckedIds.add(matchId)
       if (!duoPuuid) return false
       const duoDetail = parseMatchDetail(body, duoPuuid, matchId)
@@ -245,34 +254,36 @@ serve(async (req) => {
       // específica (ex.: o cliente jogou uma sozinho) -- não é um erro.
       if (!duoDetail.ok) return false
       const d = duoDetail.detail
-      // .select() faz a diferença aqui: com ignoreDuplicates, um conflito
-      // vira um no-op que a Supabase reporta como sucesso (error: null) --
-      // sem checar se alguma linha voltou, duoRecordedCount subiria mesmo
-      // reprocessando uma partida já gravada (ex.: loop principal parou em
-      // 'invalid_status' e a mesma partida volta em newMatchIds na próxima
-      // chamada), disparando um refresh_booster_performance_segments à toa.
-      const { data: upserted, error } = await serviceClient
-        .from('booster_duo_matches')
-        .upsert({
-          order_id: orderId,
-          booster_id: assignedBoosterId,
-          external_match_id: d.externalMatchId,
-          result: d.result,
-          champion: d.champion,
-          kills: d.kills,
-          deaths: d.deaths,
-          assists: d.assists,
-          queue_id: d.queueId,
-          duration_seconds: d.durationSeconds,
-          played_at: d.playedAt,
-          minions_killed: d.minionsKilled,
-          neutral_minions_killed: d.neutralMinionsKilled,
-          is_mvp: d.isMvp,
-          vision_score: d.visionScore,
-        }, { onConflict: 'order_id,external_match_id', ignoreDuplicates: true })
-        .select('id')
-      if (error) console.error('booster_duo_matches upsert failed', matchId, error.message)
-      else if (upserted && upserted.length > 0) duoRecordedCount += 1
+      // record_duo_match resolve o booster_id certo por played_at (janela de
+      // atribuição, ver migration 20260829030000) em vez de "quem tá
+      // atribuído agora, no momento do sync" -- mesmo motivo do
+      // record_order_match ao lado. `inserted: false` cobre tanto conflito
+      // (partida já gravada) quanto pedido fora de status sincronizável --
+      // sem checar isso, disparariamos um refresh_booster_performance_segments
+      // sem necessidade reprocessando uma partida já gravada (ex.: loop
+      // principal parou em 'invalid_status' e a mesma partida volta em
+      // newMatchIds na próxima chamada).
+      const { data: recordResult, error } = await serviceClient.rpc('record_duo_match', {
+        p_order_id: orderId,
+        p_external_match_id: d.externalMatchId,
+        p_result: remake ? 'remake' : d.result,
+        p_champion: d.champion,
+        p_kills: d.kills,
+        p_deaths: d.deaths,
+        p_assists: d.assists,
+        p_queue_id: d.queueId,
+        p_duration_seconds: d.durationSeconds,
+        p_played_at: d.playedAt,
+        p_minions_killed: d.minionsKilled,
+        p_neutral_minions_killed: d.neutralMinionsKilled,
+        p_is_mvp: d.isMvp,
+        p_vision_score: d.visionScore,
+      })
+      const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; booster_id?: string } | null
+      if (error || !result?.success) console.error('record_duo_match failed', matchId, result?.error ?? error?.message)
+      else if (result.inserted && !remake && result.booster_id) {
+        recordedBoosterIds.add(result.booster_id)
+      }
       return true
     }
 
@@ -284,17 +295,25 @@ serve(async (req) => {
         continue
       }
 
+      // Remake ("deu kita"): partida abortada em ~3min por AFK/queda, sem LP
+      // real em jogo -- não conta pro progresso do pedido nem pro perfil do
+      // booster (record_order_match/record_duo_match e
+      // refresh_booster_performance_segments tratam result='remake' à parte),
+      // mas agora fica gravada e visível no histórico do pedido como registro
+      // informativo (cinza no frontend), em vez de simplesmente sumir.
+      const remake = isRemakeMatch(bodyResult.body)
+
       // Em Duo Boost checa a atribuição ANTES de chamar record_order_match --
       // o próprio banco decide se conta (p_duo_participated abaixo), mas
       // esse valor também alimenta o booster_duo_matches via attributeDuoMatch.
-      const duoParticipated = duoPuuid ? await attributeDuoMatch(bodyResult.body, matchId) : false
+      const duoParticipated = duoPuuid ? await attributeDuoMatch(bodyResult.body, matchId, remake) : false
 
       const clientDetail = parseMatchDetail(bodyResult.body, clientPuuid, matchId)
       if (clientDetail.ok) {
         const { data: recordResult, error: recordErr } = await serviceClient.rpc('record_order_match', {
           p_order_id: orderId,
           p_external_match_id: clientDetail.detail.externalMatchId,
-          p_result: clientDetail.detail.result,
+          p_result: remake ? 'remake' : clientDetail.detail.result,
           p_champion: clientDetail.detail.champion,
           p_kills: clientDetail.detail.kills,
           p_deaths: clientDetail.detail.deaths,
@@ -313,7 +332,7 @@ serve(async (req) => {
           // duo, então o parâmetro é irrelevante (null).
           p_duo_participated: order.boost_mode === 'duo' ? duoParticipated : null,
         })
-        const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; skipped_reason?: string } | null
+        const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; skipped_reason?: string; booster_id?: string } | null
         if (recordErr || !result?.success) {
           console.error('record_order_match failed', result?.error ?? recordErr?.message)
           // Pedido pode ter saído de in_progress/paused durante a
@@ -323,9 +342,10 @@ serve(async (req) => {
         } else if (result.inserted) {
           recorded.push({
             external_match_id: clientDetail.detail.externalMatchId,
-            result: clientDetail.detail.result,
+            result: remake ? 'remake' : clientDetail.detail.result,
             champion: clientDetail.detail.champion,
           })
+          if (!remake && result.booster_id) recordedBoosterIds.add(result.booster_id)
         } else {
           // Não inseriu mas também não é erro (ex.: duo não participou) --
           // cacheia como ignorada pra não re-buscar essa MESMA partida na
@@ -377,7 +397,8 @@ serve(async (req) => {
           console.error('Riot match-v5 detail error (duo backfill)', matchId, bodyResult.status)
           continue
         }
-        const duoParticipated = alreadyInDuoMatches.has(matchId) || await attributeDuoMatch(bodyResult.body, matchId)
+        const remake = isRemakeMatch(bodyResult.body)
+        const duoParticipated = alreadyInDuoMatches.has(matchId) || await attributeDuoMatch(bodyResult.body, matchId, remake)
 
         // Recupera pro progresso do pedido: essa partida foi ignorada na
         // primeira sincronização (duo_participated=false porque a conta duo
@@ -390,7 +411,7 @@ serve(async (req) => {
             const { data: recordResult, error: recordErr } = await serviceClient.rpc('record_order_match', {
               p_order_id: orderId,
               p_external_match_id: clientDetail.detail.externalMatchId,
-              p_result: clientDetail.detail.result,
+              p_result: remake ? 'remake' : clientDetail.detail.result,
               p_champion: clientDetail.detail.champion,
               p_kills: clientDetail.detail.kills,
               p_deaths: clientDetail.detail.deaths,
@@ -404,16 +425,17 @@ serve(async (req) => {
               p_vision_score: clientDetail.detail.visionScore,
               p_duo_participated: true,
             })
-            const result = recordResult as { success?: boolean; inserted?: boolean; error?: string } | null
+            const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; booster_id?: string } | null
             if (recordErr || !result?.success) {
               console.error('record_order_match failed (duo backfill)', matchId, result?.error ?? recordErr?.message)
             } else {
               if (result.inserted) {
                 recorded.push({
                   external_match_id: clientDetail.detail.externalMatchId,
-                  result: clientDetail.detail.result,
+                  result: remake ? 'remake' : clientDetail.detail.result,
                   champion: clientDetail.detail.champion,
                 })
+                if (!remake && result.booster_id) recordedBoosterIds.add(result.booster_id)
               }
               const { error: unignoreErr } = await serviceClient
                 .from('order_ignored_matches')
@@ -430,14 +452,15 @@ serve(async (req) => {
     const { error: markSyncError } = await serviceClient.rpc('mark_order_match_sync', { p_order_id: orderId })
     if (markSyncError) console.error('mark_order_match_sync failed', orderId, markSyncError.message)
 
-    // Um recálculo ao final do lote, não por partida — sync-order-matches
-    // pode registrar várias partidas numa única chamada. Usa o booster REAL
-    // do pedido (order.assigned_booster_id), não user.id — o chamador pode
-    // ser o cliente ou um admin disparando o sync manualmente, não só o
-    // próprio booster.
-    if (recorded.length > 0 || duoRecordedCount > 0) {
-      const { error: refreshError } = await serviceClient.rpc('refresh_booster_performance_segments', { p_booster_id: order.assigned_booster_id })
-      if (refreshError) console.error('refresh_booster_performance_segments failed', order.assigned_booster_id, refreshError.message)
+    // Um recálculo por booster que de fato recebeu alguma partida nesta
+    // chamada (recordedBoosterIds), não por order.assigned_booster_id --
+    // depois de um reassign, um sync atrasado pode gravar partidas pro
+    // booster ANTIGO (booster_assigned_at resolve pelo played_at, ver
+    // record_order_match/record_duo_match); refrescar só o atual deixaria o
+    // desempenho do antigo desatualizado até um refresh global acontecer.
+    for (const boosterId of recordedBoosterIds) {
+      const { error: refreshError } = await serviceClient.rpc('refresh_booster_performance_segments', { p_booster_id: boosterId })
+      if (refreshError) console.error('refresh_booster_performance_segments failed', boosterId, refreshError.message)
     }
 
     return jsonResponse(req, {

@@ -2403,12 +2403,29 @@ export type Database = {
         Args: { p_order_id: string; p_reason: string }
         Returns: Json
       }
+      admin_list_boosters_with_slots: {
+        Args: never
+        Returns: {
+          display_name: string
+          duo_count: number
+          id: string
+          is_top3: boolean
+          solo_count: number
+          status: Database["public"]["Enums"]["booster_status"]
+          total_count: number
+          user_id: string
+        }[]
+      }
       admin_mark_payout_paid: {
         Args: { p_proof_url: string; p_request_id: string }
         Returns: Json
       }
       admin_override_order_status: {
         Args: { p_new_status: string; p_order_id: string; p_reason?: string }
+        Returns: Json
+      }
+      admin_reassign_booster: {
+        Args: { p_order_id: string; p_reason: string; p_target_booster_id: string }
         Returns: Json
       }
       admin_release_duo_account: {

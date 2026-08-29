@@ -276,6 +276,20 @@ export interface MatchDetail {
   visionScore: number | null
 }
 
+// Remake ("deu kita"): a Riot encerra a votação de remake por volta dos 3min
+// quando alguém cai/fica AFK no início -- sem LP em jogo, sem gameplay real.
+// A API não expõe uma flag explícita, então usamos gameDuration como proxy
+// (mesma técnica usada por trackers como op.gg): nenhuma partida real termina
+// antes disso -- nem um FF, que só libera aos 15min. 300s dá folga
+// confortável acima dos ~3min reais do remake, sem risco de cortar uma
+// partida legítima.
+const REMAKE_MAX_DURATION_SECONDS = 300
+
+export function isRemakeMatch(body: RiotMatchV5Body): boolean {
+  const duration = body.info?.gameDuration
+  return typeof duration === 'number' && duration > 0 && duration < REMAKE_MAX_DURATION_SECONDS
+}
+
 export type MatchDetailResult =
   | { ok: true; detail: MatchDetail }
   | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'participant_not_found'; status: number }
