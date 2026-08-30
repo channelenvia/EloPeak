@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import {
-  getBoosterServiceById, listAllActiveCoachingPackages, listCoachBoosterInfo, listOwnCoachingPackages,
+  getBoosterServiceById, listAllActiveCoachingPackages, listBoosterServicesByIds, listCoachBoosterInfo, listOwnCoachingPackages,
   listPublicCoachingPackages,
 } from './queries'
 import { createCoachingPackage, deleteCoachingPackage, toggleCoachingPackageActive, updateCoachingPackage } from './mutations'
@@ -34,6 +34,16 @@ export function useBoosterServiceDetails(id: string | undefined) {
     queryKey: queryKeys.coaching.boosterService(id ?? ''),
     queryFn: () => getBoosterServiceById(id!),
     enabled: !!id,
+  })
+}
+
+// Versão em lote de useBoosterServiceDetails -- pra listas de cards (Jobs do
+// booster) que precisam dos dados de vários pacotes de uma vez.
+export function useBoosterServicesByIds(ids: string[]) {
+  return useQuery({
+    queryKey: queryKeys.coaching.boosterServicesByIds(ids),
+    queryFn: () => listBoosterServicesByIds(ids),
+    enabled: ids.length > 0,
   })
 }
 

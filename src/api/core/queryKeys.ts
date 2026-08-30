@@ -47,6 +47,7 @@ export const queryKeys = {
   coaching: {
     packages: (filters?: Record<string, unknown>) => ['coaching', 'packages', filters ?? {}] as const,
     boosterService: (id: string) => ['coaching', 'booster-service', id] as const,
+    boosterServicesByIds: (ids: string[]) => ['coaching', 'booster-services', [...ids].sort()] as const,
   },
   notifications: {
     list: (userId: string) => ['notifications', 'list', userId] as const,

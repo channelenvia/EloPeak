@@ -10,10 +10,12 @@ import type { Order } from '@/types'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAvailableJobs, useBoosterSlotInfo, useAcceptBoostOrder } from '@/api/orders'
+import { useBoosterServicesByIds } from '@/api/coaching'
 import { OrderSoundSettings } from '@/features/booster/components/OrderSoundSettings'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
+import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { CaptchaChallenge } from '@/components/captcha/CaptchaChallenge'
 
 
@@ -119,6 +121,16 @@ export function AvailableJobsPage() {
 
   const { data: jobs, isLoading } = useAvailableJobs()
 
+  // Pacotes de coaching referenciados pelos jobs da página -- 1 query em lote
+  // (não 1 por card) pra enriquecer o card com título/descrição/duração.
+  const coachingServiceIds = Array.from(new Set(
+    (jobs ?? [])
+      .filter((j) => j.service_type === 'coaching' && j.booster_service_id)
+      .map((j) => j.booster_service_id as string)
+  ))
+  const { data: coachingPackages } = useBoosterServicesByIds(coachingServiceIds)
+  const coachingPackageById = new Map((coachingPackages ?? []).map((p) => [p.id, p]))
+
   // Mensagens de erro já vêm traduzidas de src/api/orders/mutations.ts (ACCEPT_ORDER_MESSAGES).
   const acceptJobMutation = useAcceptBoostOrder()
   const acceptJob = {
@@ -152,11 +164,20 @@ export function AvailableJobsPage() {
     !search || j.id.toLowerCase().includes(search.toLowerCase())
   )
 
+  // Pedidos atribuídos a este booster (vínculo exclusivo, badge "Exclusivo")
+  // aparecem primeiro -- sort é estável, então a ordem original (created_at)
+  // se mantém dentro de cada grupo.
+  const sorted = [...filtered].sort((a, b) => {
+    const aMine = exclusiveBadge(a, profile?.id) ? 1 : 0
+    const bMine = exclusiveBadge(b, profile?.id) ? 1 : 0
+    return bMine - aMine
+  })
+
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
-  const pageJobs = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const hasNextPage = page * PAGE_SIZE < filtered.length
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageJobs = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const hasNextPage = page * PAGE_SIZE < sorted.length
+  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   useEffect(() => { if (page > maxPage) setPage(maxPage) }, [maxPage, page])
 
   if (boosterProfile && boosterProfile.status !== 'approved') {
@@ -242,16 +263,20 @@ export function AvailableJobsPage() {
             const isDuo = job.boost_mode === 'duo'
             const blocked = slotInfo && !canAcceptJob(job)
             const exclusiveLabel = exclusiveBadge(job, profile?.id)
+            const coachPackage = job.service_type === 'coaching' && job.booster_service_id
+              ? coachingPackageById.get(job.booster_service_id)
+              : undefined
 
             return (
               <Card
                 key={job.id}
-                className={`h-full flex flex-col hover:border-brand/20 hover:shadow-card-hover transition-all ${exclusiveLabel ? 'border-accent/40' : ''}`}
+                variant={exclusiveLabel ? 'achievement' : 'standard'}
+                className={`h-full flex flex-col hover:border-brand/20 hover:shadow-card-hover transition-all ${exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
                     <p className="text-xs font-mono text-ink-muted">#{job.id.slice(0, 8).toUpperCase()}</p>
-                    <p className="text-sm font-semibold text-ink truncate">{getOrderServiceName(job)}</p>
+                    <p className="text-sm font-semibold text-ink truncate">{coachPackage?.title ?? getOrderServiceName(job)}</p>
                   </div>
                   {job.service_type !== 'coaching' && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide shrink-0 ${
@@ -282,6 +307,18 @@ export function AvailableJobsPage() {
                         <History className="h-3 w-3" />
                         Dropado
                       </span>
+                    )}
+                  </div>
+                )}
+
+                {coachPackage && (
+                  <div className="mb-3 space-y-2">
+                    {coachPackage.description && (
+                      <p className="text-xs text-ink-secondary leading-relaxed line-clamp-2">{coachPackage.description}</p>
+                    )}
+                    <ServiceTagPills lanes={coachPackage.lanes} champions={coachPackage.champions} specialties={coachPackage.specialties} compact />
+                    {coachPackage.tempo && (
+                      <p className="text-[10px] text-ink-muted">Duração por sessão: <span className="font-semibold text-ink">{coachPackage.tempo}</span></p>
                     )}
                   </div>
                 )}

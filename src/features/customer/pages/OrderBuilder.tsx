@@ -106,7 +106,7 @@ export function OrderBuilderPage() {
   const {
     step, steps, nextStep, prevStep, basePrice, extrasPrice,
     selectedExtraIds, currentRank, targetRank, boostMode, gameSlug, gameId, serviceType, serviceId,
-    setGame, setService, setServiceId, setStep, reset, preferredBoosterName, setPreferredBooster, clearPreferredBooster,
+    setGame, setService, setServiceId, setStep, reset, preferredBoosterId, preferredBoosterName, setPreferredBooster, clearPreferredBooster,
     setSelectedCoachPackage, setBasePrice, couponCode,
     winsPurchased, riotId, isMd5, md5MatchesRemaining, riotLookupLoading, riotVerified,
     selectedCoachPackage, setStepAttempted, winPackage, queueType,
@@ -295,6 +295,24 @@ export function OrderBuilderPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Vínculo com um booster específico sobrevive a reload/troca de aba de
+  // propósito (ver comentário do persist acima), mas só deveria sobreviver
+  // ENQUANTO o pedido vinculado ainda está em aberto. O reset normal (linha
+  // ~150/189/221/379 em StepPayment.tsx) só roda se o cliente ainda estiver
+  // nesta aba quando a confirmação do pagamento chega -- se ele pagar o PIX
+  // por fora (app do banco) e só voltar depois, esse reset nunca dispara, e
+  // o vínculo antigo (já consumido) reaparecia sozinho no próximo pedido sem
+  // o cliente escolher de novo. `resumableOrder === null` (não `undefined`)
+  // confirma que a consulta já rodou e não há NENHUM pedido aguardando
+  // pagamento -- só então é seguro concluir que o vínculo é lixo de uma
+  // sessão anterior já paga/encerrada.
+  useEffect(() => {
+    if (resumableOrder !== null) return
+    if (pendingOrderId || explicitlyStartingNewOrder || hasCatalogEntryIntent) return
+    if (!preferredBoosterId) return
+    reset()
+  }, [resumableOrder, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, preferredBoosterId, reset])
 
   // Processa um link de entrada de catálogo (?service=/?booster=/?coach_package=)
   // -- reage a MUDANÇAS nesses parâmetros, não só ao mount. Antes rodava com

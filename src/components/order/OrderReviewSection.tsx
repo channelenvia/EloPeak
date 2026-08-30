@@ -19,7 +19,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           className="p-0.5"
           aria-label={`${i} estrela${i === 1 ? '' : 's'}`}
         >
-          <Star className={cn('h-7 w-7 transition-colors', (hover || value) >= i ? 'text-warning fill-warning' : 'text-bg-elevated')} />
+          <Star className={cn('h-7 w-7 transition-colors', (hover || value) >= i ? 'text-warning fill-warning' : 'text-ink-muted')} />
         </button>
       ))}
     </div>

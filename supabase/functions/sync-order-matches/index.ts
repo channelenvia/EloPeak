@@ -12,6 +12,7 @@ import {
   fetchMatchBody,
   parseMatchDetail,
   isRemakeMatch,
+  causedRemake,
   fetchLeagueEntries,
   RIOT_QUEUE_TYPE,
   RIOT_TIER_MAP,
@@ -254,6 +255,12 @@ serve(async (req) => {
       // específica (ex.: o cliente jogou uma sozinho) -- não é um erro.
       if (!duoDetail.ok) return false
       const d = duoDetail.detail
+      // Se foi a própria conta duo (booster) quem kitou, a culpa é dela --
+      // conta como loss de verdade nesse lado, não como remake protegido
+      // (ver causedRemake). Só fica 'remake' quando NENHum dos dois riotIds
+      // que rastreamos (cliente e duo) causou o abandono.
+      const duoCausedRemake = remake && duoPuuid ? causedRemake(body, duoPuuid) : false
+      const duoFinalResult = duoCausedRemake ? 'loss' : (remake ? 'remake' : d.result)
       // record_duo_match resolve o booster_id certo por played_at (janela de
       // atribuição, ver migration 20260829030000) em vez de "quem tá
       // atribuído agora, no momento do sync" -- mesmo motivo do
@@ -266,7 +273,7 @@ serve(async (req) => {
       const { data: recordResult, error } = await serviceClient.rpc('record_duo_match', {
         p_order_id: orderId,
         p_external_match_id: d.externalMatchId,
-        p_result: remake ? 'remake' : d.result,
+        p_result: duoFinalResult,
         p_champion: d.champion,
         p_kills: d.kills,
         p_deaths: d.deaths,
@@ -281,7 +288,7 @@ serve(async (req) => {
       })
       const result = recordResult as { success?: boolean; inserted?: boolean; error?: string; booster_id?: string } | null
       if (error || !result?.success) console.error('record_duo_match failed', matchId, result?.error ?? error?.message)
-      else if (result.inserted && !remake && result.booster_id) {
+      else if (result.inserted && duoFinalResult !== 'remake' && result.booster_id) {
         recordedBoosterIds.add(result.booster_id)
       }
       return true
@@ -310,10 +317,16 @@ serve(async (req) => {
 
       const clientDetail = parseMatchDetail(bodyResult.body, clientPuuid, matchId)
       if (clientDetail.ok) {
+        // Se foi a conta do cliente quem kitou (Solo Boost: o próprio
+        // booster jogando nela; Duo Boost: o cliente jogando a conta dele
+        // mesmo), a culpa é desse lado -- loss de verdade, não remake
+        // protegido (ver causedRemake em riotLookup.ts).
+        const clientCausedRemake = remake ? causedRemake(bodyResult.body, clientPuuid) : false
+        const clientFinalResult = clientCausedRemake ? 'loss' : (remake ? 'remake' : clientDetail.detail.result)
         const { data: recordResult, error: recordErr } = await serviceClient.rpc('record_order_match', {
           p_order_id: orderId,
           p_external_match_id: clientDetail.detail.externalMatchId,
-          p_result: remake ? 'remake' : clientDetail.detail.result,
+          p_result: clientFinalResult,
           p_champion: clientDetail.detail.champion,
           p_kills: clientDetail.detail.kills,
           p_deaths: clientDetail.detail.deaths,
@@ -342,10 +355,10 @@ serve(async (req) => {
         } else if (result.inserted) {
           recorded.push({
             external_match_id: clientDetail.detail.externalMatchId,
-            result: remake ? 'remake' : clientDetail.detail.result,
+            result: clientFinalResult,
             champion: clientDetail.detail.champion,
           })
-          if (!remake && result.booster_id) recordedBoosterIds.add(result.booster_id)
+          if (clientFinalResult !== 'remake' && result.booster_id) recordedBoosterIds.add(result.booster_id)
         } else {
           // Não inseriu mas também não é erro (ex.: duo não participou) --
           // cacheia como ignorada pra não re-buscar essa MESMA partida na
@@ -408,10 +421,12 @@ serve(async (req) => {
         if (duoParticipated && previouslyIgnored.has(matchId)) {
           const clientDetail = parseMatchDetail(bodyResult.body, clientPuuid, matchId)
           if (clientDetail.ok) {
+            const clientCausedRemake = remake ? causedRemake(bodyResult.body, clientPuuid) : false
+            const clientFinalResult = clientCausedRemake ? 'loss' : (remake ? 'remake' : clientDetail.detail.result)
             const { data: recordResult, error: recordErr } = await serviceClient.rpc('record_order_match', {
               p_order_id: orderId,
               p_external_match_id: clientDetail.detail.externalMatchId,
-              p_result: remake ? 'remake' : clientDetail.detail.result,
+              p_result: clientFinalResult,
               p_champion: clientDetail.detail.champion,
               p_kills: clientDetail.detail.kills,
               p_deaths: clientDetail.detail.deaths,
@@ -432,10 +447,10 @@ serve(async (req) => {
               if (result.inserted) {
                 recorded.push({
                   external_match_id: clientDetail.detail.externalMatchId,
-                  result: remake ? 'remake' : clientDetail.detail.result,
+                  result: clientFinalResult,
                   champion: clientDetail.detail.champion,
                 })
-                if (!remake && result.booster_id) recordedBoosterIds.add(result.booster_id)
+                if (clientFinalResult !== 'remake' && result.booster_id) recordedBoosterIds.add(result.booster_id)
               }
               const { error: unignoreErr } = await serviceClient
                 .from('order_ignored_matches')

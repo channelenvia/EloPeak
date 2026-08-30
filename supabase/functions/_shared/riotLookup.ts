@@ -290,6 +290,23 @@ export function isRemakeMatch(body: RiotMatchV5Body): boolean {
   return typeof duration === 'number' && duration > 0 && duration < REMAKE_MAX_DURATION_SECONDS
 }
 
+// Quem causou o remake: também sem flag explícita na API, mas
+// participants[].timePlayed (quanto tempo ESSE jogador ficou conectado,
+// distinto de gameDuration = duração total da partida) denuncia quem não
+// conectou/saiu -- quem ficou até o fim tem timePlayed ≈ gameDuration; quem
+// kitou fica bem abaixo disso (tipicamente perto de 0). Checa isRemakeMatch
+// internamente (não confia no chamador lembrar) -- fora desse contexto o
+// resultado não tem sentido (toda partida real tem timePlayed ≈ gameDuration
+// pra todo mundo, um jogador só ficando "menos tempo" no meio de uma partida
+// de verdade não significa que ele causou nada).
+export function causedRemake(body: RiotMatchV5Body, puuid: string): boolean {
+  if (!isRemakeMatch(body)) return false
+  const gameDuration = body.info!.gameDuration!
+  const participant = body.info?.participants?.find((candidate) => candidate.puuid === puuid)
+  if (!participant || typeof participant.timePlayed !== 'number') return false
+  return participant.timePlayed < gameDuration * 0.5
+}
+
 export type MatchDetailResult =
   | { ok: true; detail: MatchDetail }
   | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'participant_not_found'; status: number }
@@ -305,6 +322,7 @@ interface RiotParticipant {
   totalMinionsKilled?: number
   neutralMinionsKilled?: number
   visionScore?: number
+  timePlayed?: number
 }
 
 export interface RiotMatchV5Body {

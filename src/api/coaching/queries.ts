@@ -48,6 +48,18 @@ export async function getBoosterServiceById(id: string): Promise<BoosterService 
   return data as unknown as BoosterService | null
 }
 
+// Busca em lote pra cards de lista (ex.: Jobs do booster) -- evita 1 query por
+// card quando há vários pedidos de coaching na mesma página.
+export async function listBoosterServicesByIds(ids: string[]): Promise<BoosterService[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase
+    .from('booster_services')
+    .select('*')
+    .in('id', ids)
+  if (error) throw normalizeApiError(error)
+  return (data ?? []) as unknown as BoosterService[]
+}
+
 export async function listCoachBoosterInfo(boosterIds: string[]): Promise<CoachBoosterInfo[]> {
   if (boosterIds.length === 0) return []
   const { data, error } = await supabase

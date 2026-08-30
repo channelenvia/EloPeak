@@ -4,7 +4,7 @@
 // parseMatchDetail.
 //   deno test --allow-env supabase/functions/_shared/riotLookup.test.ts
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
-import { isRemakeMatch, parseMatchDetail } from './riotLookup.ts'
+import { isRemakeMatch, causedRemake, parseMatchDetail } from './riotLookup.ts'
 
 const PUUID = 'booster-puuid'
 
@@ -102,6 +102,54 @@ Deno.test('isRemakeMatch — false exatamente no corte (300s não é remake)', (
 
 Deno.test('isRemakeMatch — false quando gameDuration ausente', () => {
   assertEquals(isRemakeMatch({ info: {} }), false)
+})
+
+Deno.test('causedRemake — true quando o timePlayed do participante é bem menor que gameDuration', () => {
+  const body = {
+    info: {
+      gameDuration: 170,
+      participants: [
+        participant({ puuid: PUUID, timePlayed: 12 }),
+        participant({ puuid: 'ally-2', timePlayed: 168 }),
+      ],
+    },
+  }
+  assertEquals(causedRemake(body, PUUID), true)
+})
+
+Deno.test('causedRemake — false quando o participante ficou até o fim (timePlayed ≈ gameDuration)', () => {
+  const body = {
+    info: {
+      gameDuration: 170,
+      participants: [
+        participant({ puuid: PUUID, timePlayed: 165 }),
+        participant({ puuid: 'ally-2', timePlayed: 12 }),
+      ],
+    },
+  }
+  assertEquals(causedRemake(body, PUUID), false)
+})
+
+Deno.test('causedRemake — false quando a partida nem é remake (gameDuration normal)', () => {
+  const body = {
+    info: {
+      gameDuration: 1800,
+      participants: [participant({ puuid: PUUID, timePlayed: 30 })],
+    },
+  }
+  assertEquals(causedRemake(body, PUUID), false)
+})
+
+Deno.test('causedRemake — false quando timePlayed não vem na resposta (partidas antigas)', () => {
+  const body = { info: { gameDuration: 170, participants: [participant({ puuid: PUUID })] } }
+  assertEquals(causedRemake(body, PUUID), false)
+})
+
+Deno.test('causedRemake — false quando o puuid não está entre os participantes', () => {
+  const body = {
+    info: { gameDuration: 170, participants: [participant({ puuid: 'other', timePlayed: 10 })] },
+  }
+  assertEquals(causedRemake(body, PUUID), false)
 })
 
 Deno.test('parseMatchDetail — empate no topo conta como MVP (>=, não > estrito)', () => {
