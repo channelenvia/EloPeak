@@ -127,12 +127,12 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     expect(screen.getByText(/sua conta já possui rank nesta fila/)).toBeInTheDocument()
   })
 
-  it('Vitórias: Duo bloqueado a partir de Grão-Mestre (regra própria, diferente de Elo Boost que agora é Iron-Diamond only)', () => {
-    useOrderBuilderStore.getState().setCurrentRank({ tier: 'grandmaster', division: null })
+  it('Vitórias: Duo bloqueado a partir de Master (mesma regra de rank atual do Elo Boost)', () => {
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'master', division: null })
     renderStepConfigure()
 
     expect(screen.getByRole('button', { name: /^Duo Vitórias/ })).toBeDisabled()
-    expect(screen.getByText('Indisponível a partir de Grão-Mestre.')).toBeInTheDocument()
+    expect(screen.getByText('Indisponível a partir de Master.')).toBeInTheDocument()
   })
 
   it('MD5: Duo nunca é bloqueado por rank, mesmo em Grão-Mestre (rank é da temporada passada)', () => {

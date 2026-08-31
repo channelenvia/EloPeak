@@ -81,10 +81,12 @@ const ELO_DIV_PRICE_CENTS: Record<QueueType, Record<string, number>> = {
 
 // Duo Boost agora é uma tabela própria por divisão (não é mais um percentual
 // fixo sobre o preço solo — a proporção varia por tier, de ~1.17x a ~1.92x).
-// Só existe para o fluxo padrão Iron–Diamond: Duo Boost nunca chega em
-// Master+ (ver getBoostFlow em shared/boostDomain.ts e o bloqueio em
-// computeOrderPrice abaixo) — nenhuma linha "master"/"grandmaster"/
-// "challenger" é necessária aqui.
+// Só tem linhas Iron–Diamond: Duo Boost pode ter Master como ALVO (o degrau
+// final, de Diamante pra dentro de Mestre, usa a taxa de diamond via o
+// fallback de divPriceCentsForStep abaixo), mas nunca joga DENTRO do Master+
+// (Grão-Mestre/Challenger como alvo bloqueia Duo, ver isDuoBlockedAtTier em
+// shared/boostDomain.ts e o bloqueio em orderPricing.ts) — por isso nenhuma
+// linha "master"/"grandmaster"/"challenger" própria é necessária aqui.
 const ELO_DIV_PRICE_CENTS_DUO: Record<QueueType, Record<string, number>> = {
   solo_duo: {
     iron: 2090, bronze: 2390, silver: 2690, gold: 3290,
@@ -153,12 +155,13 @@ export function calcEloPrice(
 }
 
 // ── Vitória Avulsa (Win Boost) — preço por vitória, em CENTAVOS ─────────────
-// Duo tem tabela própria (não percentual fixo). Grão-Mestre/Challenger só
-// são alcançáveis de fato na fila Flex (isDuoBlockedAtTier bloqueia Duo a
-// partir de Grão-Mestre na Solo/Duo — a Riot não restringe duo por elo na
-// Flex); mesmo assim os dois queues carregam os mesmos valores (Flex espelha
-// Solo/Duo, igual ao resto da tabela) — a diferenciação por fila fica só na
-// checagem de bloqueio, nunca na tabela de preço.
+// Duo tem tabela própria (não percentual fixo). Master+ (Master/Grão-Mestre/
+// Challenger) só são alcançáveis de fato em Duo na fila Flex
+// (isMasterPlusCurrentTier bloqueia Duo a partir de Master na Solo/Duo — a
+// Riot não restringe duo por elo na Flex); mesmo assim os dois queues
+// carregam os mesmos valores (Flex espelha Solo/Duo, igual ao resto da
+// tabela) — a diferenciação por fila fica só na checagem de bloqueio, nunca
+// na tabela de preço.
 const WIN_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
   solo_duo: {
     solo: {
@@ -368,8 +371,10 @@ export function getWinBoostPrice(queue: QueueType, tier: RankTier, mode: 'solo' 
 // proporção). O pacote cheio de 5 partidas de placement é só 5× esse preço
 // por vitória; comprar menos vitórias (4, 3...) desconta proporcionalmente,
 // nunca cobra o pacote inteiro (a soma acontece em computeOrderPrice,
-// multiplicando por winsPurchased). Duo só cobre até Mestre (mesma razão do
-// Win Boost acima — bloqueado a partir de Grão-Mestre).
+// multiplicando por winsPurchased). Tabela duo só cobre até Mestre (sem
+// linha grandmaster/challenger própria) — acima disso cai no fallback
+// table.master de getMd5WinPrice logo abaixo; diferente do Win Boost, MD5
+// nunca bloqueia Duo por rank (ver comentário em StepConfigure.tsx).
 const MD5_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
   solo_duo: {
     solo: {
@@ -655,10 +660,10 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
         }
       } else {
         if (!targetRank) break
-        // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é
-        // aceito na fila Flex, mesma exceção do bloco acima -- na Solo/Duo
-        // segue só até Diamante.
-        if (boostMode === 'duo' && isMasterPlus(targetRank.tier) && input.queueType !== 'flex') break
+        // Duo Boost chega em Master como alvo normalmente na Solo/Duo --
+        // só Grão-Mestre/Challenger como alvo (jogar DENTRO do Master+)
+        // exige a fila Flex, mesma exceção do bloco acima.
+        if (boostMode === 'duo' && (targetRank.tier === 'grandmaster' || targetRank.tier === 'challenger') && input.queueType !== 'flex') break
         const { price } = calcEloPrice(
           input.queueType, boostMode,
           currentRank.tier, currentRank.division,

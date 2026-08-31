@@ -364,6 +364,18 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
     expect(priced.basePrice).toBe(0)
   })
 
+  it('Duo Boost com alvo Master (exato) a partir de Diamond é liberado também na Solo/Duo -- só Grão-Mestre/Challenger exige Flex', () => {
+    const { price: expected } = calcEloPrice('solo_duo', 'duo', 'diamond', 'I', 'master', null)
+    const priced = computeOrderPrice(baseInput({
+      currentRank: { tier: 'diamond', division: 'I' },
+      targetRank: { tier: 'master', division: null },
+      masterPlusPrice: null, // alvo "master" exato nunca consulta masterPlusPrice
+      boostMode: 'duo',
+    }))
+    expect(priced.basePrice).toBeCloseTo(expected, 2)
+    expect(priced.basePrice).toBeGreaterThan(0)
+  })
+
   it('na fila Flex, Duo Boost com alvo Master+ a partir de um rank padrão (Diamond) é liberado', () => {
     const { price: toMaster } = calcEloPrice('flex', 'duo', 'diamond', 'I', 'master', null)
     const priced = computeOrderPrice(baseInput({

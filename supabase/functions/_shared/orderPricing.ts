@@ -484,13 +484,16 @@ export async function validateAndPriceIntent(
     if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
-    // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é aceito
-    // na fila Flex -- na Solo/Duo segue disponível só até Diamante.
+    // Duo Boost chega em Master como alvo normalmente na Solo/Duo (a subida
+    // toda acontece abaixo de Master, terminando exatamente na promoção) --
+    // só Grão-Mestre/Challenger como alvo exige jogar DENTRO do Master+ (sem
+    // divisão, só PDL), trecho que a Riot restringe a solo. Flex não tem essa
+    // restrição em nenhum alvo.
     if (
       std.boost_mode === 'duo' && std.queue_type !== 'flex'
-      && (std.target_rank.tier === 'master' || std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger')
+      && isDuoBlockedAtTier(std.target_rank.tier)
     ) {
-      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Master+ na fila Solo/Duo — escolha Flex ou mire até Diamante') }
+      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Grão-Mestre/Challenger na fila Solo/Duo — escolha Flex ou mire até Mestre') }
     }
     normalized = {
       serviceType: 'elo_boost',
@@ -715,12 +718,11 @@ export async function validateAndPriceIntent(
     if (normalized.serviceType === 'elo_boost' && verifiedMasterPlus !== (flow === 'master_plus')) {
       return { ok: false, response: badRequest(req, 'Seu elo mudou desde a consulta. Verifique a conta novamente antes de pagar.') }
     }
-    // Duo tem regras diferentes por serviço, mas ambas liberam na fila Flex
-    // agora (a Riot não restringe duo por elo lá): Elo Boost Duo é
-    // Iron-Diamond only na Solo/Duo (bloqueado assim que o rank confirmado
-    // pela Riot já é Master+); Vitórias/MD5 aceitam Duo até Master na
-    // Solo/Duo, bloqueado só a partir de Grão-Mestre (isDuoBlockedAtTier).
-    // Pega tanto um elo que mudou de tier entre a cotação e o pagamento
+    // Duo Boost/Vitórias em Duo: mesma regra de rank ATUAL pras duas, na
+    // fila Solo/Duo -- bloqueia assim que o rank confirmado pela Riot já é
+    // Master+ (não sobra subida abaixo de Master pra fazer em duo). Ambas
+    // liberam normalmente na fila Flex (a Riot não restringe duo por elo
+    // lá). Pega tanto um elo que mudou de tier entre a cotação e o pagamento
     // quanto um current_rank adulterado que passou pela checagem inicial.
     if (
       normalized.serviceType === 'elo_boost' && normalized.boostMode === 'duo'
@@ -730,9 +732,9 @@ export async function validateAndPriceIntent(
     }
     if (
       normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo'
-      && normalized.queueType !== 'flex' && isDuoBlockedAtTier(verifiedTier)
+      && normalized.queueType !== 'flex' && isMasterPlusCurrentTier(verifiedTier)
     ) {
-      return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Grão-Mestre na fila Solo/Duo — escolha Flex') }
+      return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Master na fila Solo/Duo — escolha Flex') }
     }
 
     normalized.currentRank = { tier: verifiedTier, division: verifiedDivision }

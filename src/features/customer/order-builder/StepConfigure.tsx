@@ -60,21 +60,21 @@ export function StepConfigure() {
   } = useOrderBuilderStore()
 
   const currentIsMasterPlus = currentRank ? isMasterPlusCurrentTier(currentRank.tier) : false
-  // Duo bloqueado a partir de Grão-Mestre pra Vitórias/MD5, só na fila
-  // Solo/Duo -- MD5 nunca bloqueia por rank, e a Flex nunca bloqueia por elo
-  // (ver isDuoBlockedAtTier em shared/boostDomain.ts). Regra separada da de
-  // Elo Boost abaixo -- Vitórias/MD5 não mudaram.
-  const currentTierBlocksDuo = currentRank && queueType === 'solo_duo' ? isDuoBlockedAtTier(currentRank.tier) : false
+  // Duo bloqueado a partir de Master pra Vitórias (mesma regra de rank ATUAL
+  // do Elo Boost abaixo), só na fila Solo/Duo -- MD5 nunca bloqueia por
+  // rank, e a Flex nunca bloqueia por elo.
+  const currentTierBlocksDuo = currentRank && queueType === 'solo_duo' ? currentIsMasterPlus : false
   const winsMd5DuoBlocked = !isMd5 && currentTierBlocksDuo
-  // Elo Boost Duo é Iron-Diamond only só na fila Solo/Duo: bloqueado se o
-  // rank ATUAL já é Master+ ou se o rank ALVO é Master+ (Master, Grão-Mestre
-  // ou Challenger). Na Flex, Duo é aceito também em Master+ (a Riot não
-  // restringe duo por elo lá; master_plus_pricing tem preço próprio pra essa
-  // combinação). isMasterPlusCurrentTier só cobre master/grandmaster --
-  // Challenger como alvo precisa de checagem própria.
+  // Elo Boost Duo só na fila Solo/Duo: bloqueado se o rank ATUAL já é
+  // Master+ (não sobra subida abaixo de Master pra fazer em duo) ou se o
+  // rank ALVO é Grão-Mestre/Challenger (exige jogar DENTRO do Master+, trecho
+  // que a Riot restringe a solo) -- alvo Master em si é permitido (a subida
+  // toda até lá acontece abaixo de Master). Na Flex, Duo é aceito em
+  // qualquer alvo (a Riot não restringe duo por elo lá; master_plus_pricing
+  // tem preço próprio pra essa combinação).
   const eloDuoBlockedByCurrent = currentIsMasterPlus && queueType !== 'flex'
   const eloDuoBlockedByTarget = targetRank && queueType !== 'flex'
-    ? (isMasterPlusCurrentTier(targetRank.tier) || targetRank.tier === 'challenger')
+    ? isDuoBlockedAtTier(targetRank.tier)
     : false
   const eloDuoBlocked = eloDuoBlockedByCurrent || eloDuoBlockedByTarget
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
@@ -322,9 +322,9 @@ export function StepConfigure() {
       }
 
       if (!targetRank) return
-      // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é
-      // aceito na fila Flex.
-      if (boostMode === 'duo' && queueType !== 'flex' && (isMasterPlusCurrentTier(targetRank.tier) || targetRank.tier === 'challenger')) {
+      // Duo Boost com alvo Grão-Mestre/Challenger só é aceito na fila Flex
+      // -- alvo Master em si é permitido normalmente na Solo/Duo.
+      if (boostMode === 'duo' && queueType !== 'flex' && isDuoBlockedAtTier(targetRank.tier)) {
         setBasePrice(0)
         setEstimatedHours(null)
         setPdlModifierPct(null)
@@ -480,7 +480,7 @@ export function StepConfigure() {
 
         {/* Solo/Duo Vitórias — vale tanto pra Vitórias quanto MD5 (mesma
             escolha, mesmo padrão visual do Modalidade do Elo Boost acima).
-            Duo indisponível a partir de Grão-Mestre, igual Duo Boost -- exceto
+            Duo indisponível a partir de Master, igual Elo Boost -- exceto
             MD5, que nunca bloqueia Duo por rank (winsMd5DuoBlocked já
             considera isMd5). */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && (
@@ -514,7 +514,7 @@ export function StepConfigure() {
               >
                 <p className={cn('text-sm font-bold', boostMode === 'duo' ? 'text-brand' : 'text-ink')}>{isMd5 ? 'Duo MD5' : 'Duo Vitórias'}</p>
                 <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
-                  {winsMd5DuoBlocked ? 'Indisponível a partir de Grão-Mestre.' : 'Você joga junto com o booster na duo queue.'}
+                  {winsMd5DuoBlocked ? 'Indisponível a partir de Master.' : 'Você joga junto com o booster na duo queue.'}
                 </p>
                 {boostMode === 'duo' && <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />}
               </button>
@@ -845,7 +845,7 @@ export function StepConfigure() {
                     modalidade pra Duo -- ver o bloqueio do próprio botão Duo
                     Boost em "Modalidade" (eloDuoBlockedByTarget) mais acima. */}
                 {queueType === 'solo_duo' && boostMode === 'duo' && targetRank?.tier === 'challenger' && (
-                  <p className="text-[11px] text-warning">Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo — escolha Solo, mire Grão-Mestre, ou troque para a fila Flex.</p>
+                  <p className="text-[11px] text-warning">Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo — escolha Solo, mire até Master, ou troque para a fila Flex.</p>
                 )}
                 {stepAttempted && currentRank && !targetRank && (
                   <p className="text-xs text-danger">Selecione o rank alvo</p>

@@ -9,7 +9,7 @@ import {
   getWinBoostPrice, getMd5WinPrice, getEloDivPrice, ELO_TIERS, MASTER_PLUS_TIER_PRICE_CENTS, centsToMoney, getClashBasePrice,
   DEFAULT_COUPON_CODE, DEFAULT_COUPON_DISCOUNT_PCT, applyCoupon, type ServiceType,
 } from '@/lib/pricing'
-import { isDuoBlockedAtTier } from '@/lib/boostDomain'
+import { isDuoBlockedAtTier, isMasterPlusCurrentTier } from '@/lib/boostDomain'
 import { CLASH_TIER_LABEL, CLASH_TIER_RANGE_LABEL, CLASH_TIER_BOUNDARY_RANKS, CLASH_DAY_LABEL } from '@/lib/clashDomain'
 import { useCurrency } from '@/hooks/useCurrency'
 import type { ClashDay, ClashTier, RankTier } from '@/types'
@@ -293,7 +293,7 @@ export function PricingPage() {
           <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
             {WIN_TIERS.map((tier) => {
               const price = getWinBoostPrice('solo_duo', tier, 'solo', null)
-              const duoPrice = isDuoBlockedAtTier(tier) ? null : getWinBoostPrice('solo_duo', tier, 'duo', null)
+              const duoPrice = (isMasterPlusCurrentTier(tier) || tier === 'challenger') ? null : getWinBoostPrice('solo_duo', tier, 'duo', null)
               return (
                 <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
                   <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />

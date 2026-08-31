@@ -12,6 +12,7 @@ build/
 
 # Booster Launcher desktop app (built binary, not source)
 Booster Launcher/
+Booster Launcher.exe
 launcher
 
 # Environment - NEVER commit secrets

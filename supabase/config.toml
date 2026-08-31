@@ -72,6 +72,12 @@ verify_jwt = false
 [functions.discord-review-announcement]
 verify_jwt = false
 
+# Invocada só pelo Cron Job do Supabase (net.http_post), nunca por um usuário
+# logado -- gate próprio via x-webhook-secret (DISCORD_EXCLUSIVE_JOB_CRON_SECRET),
+# mesmo padrão dos outros webhooks de Discord acima.
+[functions.announce-expired-exclusive-jobs]
+verify_jwt = false
+
 # Endpoint público e somente leitura. As demais funções chamadas pelo navegador
 # mantêm a verificação JWT padrão do gateway em produção. Para desenvolvimento
 # com uma sessão do projeto remoto, use o script functions:serve, que passa
