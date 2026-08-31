@@ -932,6 +932,7 @@ export type Database = {
       }
       master_plus_pricing: {
         Row: {
+          boost_mode: string
           current_tier: string
           id: string
           pdl_from: number
@@ -942,6 +943,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          boost_mode: string
           current_tier: string
           id?: string
           pdl_from: number
@@ -952,6 +954,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          boost_mode?: string
           current_tier?: string
           id?: string
           pdl_from?: number

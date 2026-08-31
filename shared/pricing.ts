@@ -153,10 +153,12 @@ export function calcEloPrice(
 }
 
 // ── Vitória Avulsa (Win Boost) — preço por vitória, em CENTAVOS ─────────────
-// Duo é uma tabela própria (não percentual fixo) — só cobre até Mestre
-// porque Duo é bloqueado a partir de Grão-Mestre (isDuoBlockedAtTier); o
-// fallback pra 'master' abaixo nunca é exercitado em uso válido, é só defesa
-// contra chamada direta fora da validação normal.
+// Duo tem tabela própria (não percentual fixo). Grão-Mestre/Challenger só
+// são alcançáveis de fato na fila Flex (isDuoBlockedAtTier bloqueia Duo a
+// partir de Grão-Mestre na Solo/Duo — a Riot não restringe duo por elo na
+// Flex); mesmo assim os dois queues carregam os mesmos valores (Flex espelha
+// Solo/Duo, igual ao resto da tabela) — a diferenciação por fila fica só na
+// checagem de bloqueio, nunca na tabela de preço.
 const WIN_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
   solo_duo: {
     solo: {
@@ -165,7 +167,7 @@ const WIN_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Re
     },
     duo: {
       iron: 605, bronze: 605, silver: 795, gold: 929, platinum: 1085,
-      emerald: 2005, diamond: 2995, master: 8515,
+      emerald: 2005, diamond: 2995, master: 8515, grandmaster: 12590, challenger: 21090,
     },
   },
   flex: {
@@ -175,7 +177,7 @@ const WIN_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Re
     },
     duo: {
       iron: 605, bronze: 605, silver: 795, gold: 929, platinum: 1085,
-      emerald: 2005, diamond: 2995, master: 8515,
+      emerald: 2005, diamond: 2995, master: 8515, grandmaster: 12590, challenger: 21090,
     },
   },
 }
@@ -626,11 +628,11 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
       if (!currentRank) break
 
       if (isMasterPlus(currentRank.tier)) {
-        // Duo Boost não existe mais no Master+ em nenhuma combinação — só
-        // Iron–Diamond aceita Duo agora. pdlModifierPct nunca se aplica ao
-        // Master+ -- permanece null.
+        // Duo Boost no Master+ só é aceito na fila Flex (a Riot não
+        // restringe duo por elo lá) -- Solo/Duo continua Iron-Diamond only.
+        // pdlModifierPct nunca se aplica ao Master+ -- permanece null.
         pdlModifierPct = null
-        if (boostMode === 'duo' || input.masterPlusPrice == null) break
+        if ((boostMode === 'duo' && input.queueType !== 'flex') || input.masterPlusPrice == null) break
         basePrice = centsToMoney(moneyToCents(input.masterPlusPrice))
         if (targetRank) {
           basePrice = applyMasterPlusPdlDiscount(
@@ -653,10 +655,10 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
         }
       } else {
         if (!targetRank) break
-        // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger)
-        // como alvo, em nenhuma fila -- só dá pra chegar lá sozinho (solo).
-        // Duo Boost segue disponível normalmente Iron-Diamond.
-        if (boostMode === 'duo' && isMasterPlus(targetRank.tier)) break
+        // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é
+        // aceito na fila Flex, mesma exceção do bloco acima -- na Solo/Duo
+        // segue só até Diamante.
+        if (boostMode === 'duo' && isMasterPlus(targetRank.tier) && input.queueType !== 'flex') break
         const { price } = calcEloPrice(
           input.queueType, boostMode,
           currentRank.tier, currentRank.division,

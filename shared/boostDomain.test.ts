@@ -45,17 +45,20 @@ describe('getBoostFlow — resolução de fluxo a partir de rank atual + modalid
     expect(getBoostFlow('grandmaster', 'solo', 'solo_duo')).toBe('master_plus')
   })
 
-  it('Master + duo => rejeitado (null) em qualquer fila -- Duo Boost é Iron-Diamond only agora', () => {
+  it('Master + duo na fila Solo/Duo => rejeitado (null) -- Duo Boost é Iron-Diamond only nessa fila', () => {
     expect(getBoostFlow('master', 'duo', 'solo_duo')).toBeNull()
-    expect(getBoostFlow('master', 'duo', 'flex')).toBeNull()
+  })
+
+  it('Master + duo na fila Flex => master_plus -- a Riot não restringe duo por elo lá', () => {
+    expect(getBoostFlow('master', 'duo', 'flex')).toBe('master_plus')
   })
 
   it('Grão-Mestre + duo na fila Solo/Duo => rejeitado (null), nunca cai em outro fluxo', () => {
     expect(getBoostFlow('grandmaster', 'duo', 'solo_duo')).toBeNull()
   })
 
-  it('Grão-Mestre + duo na fila Flex => também rejeitado (null) -- a exceção de fila não existe mais para Elo Boost', () => {
-    expect(getBoostFlow('grandmaster', 'duo', 'flex')).toBeNull()
+  it('Grão-Mestre + duo na fila Flex => master_plus -- mesma exceção de fila do Mestre acima', () => {
+    expect(getBoostFlow('grandmaster', 'duo', 'flex')).toBe('master_plus')
   })
 
   it('Challenger como rank atual => sempre rejeitado, em qualquer modalidade/fila', () => {

@@ -138,11 +138,10 @@ const standardEloIntentSchema = z.object({
 }).strict()
 
 // Boost Master+ — rank atual Master ou Grão-Mestre. Sem PDL alvo: o preço
-// vem da tabela comercial (origem × destino × faixa de PDL atual). Duo é
-// aceito só quando current_rank.tier === 'master' (isDuoBlockedAtTier rejeita
-// Grão-Mestre/Challenger na roteação de fluxo, antes deste schema rodar).
-// Sem pacote de vitórias (o modelo de preço por vitória não se aplica ao
-// Master+).
+// vem da tabela comercial (origem × destino × faixa de PDL atual, e agora
+// também modalidade). Duo só é aceito na fila Flex (roteamento de fluxo,
+// antes deste schema rodar, rejeita duo + Solo/Duo). Sem pacote de vitórias
+// (o modelo de preço por vitória não se aplica ao Master+).
 const masterPlusIntentSchema = z.object({
   service_type: z.literal('elo_boost'),
   service_id: z.string().uuid(),
@@ -304,6 +303,7 @@ async function fetchMasterPlusPrice(
   targetTier: 'grandmaster' | 'challenger',
   queueType: 'solo_duo' | 'flex',
   currentPdl: number,
+  boostMode: 'solo' | 'duo',
 ): Promise<number | null> {
   const { data, error } = await serviceClient
     .from('master_plus_pricing')
@@ -311,6 +311,7 @@ async function fetchMasterPlusPrice(
     .eq('current_tier', currentTier)
     .eq('target_tier', targetTier)
     .eq('queue_type', queueType)
+    .eq('boost_mode', boostMode)
     .lte('pdl_from', Math.max(0, currentPdl))
     .order('pdl_from', { ascending: false })
     .limit(1)
@@ -370,10 +371,10 @@ export async function validateAndPriceIntent(
     if (tier === 'challenger') return { ok: false, response: badRequest(req, 'Challenger não pode ser selecionado como rank atual') }
 
     if (isMasterPlusCurrentTier(tier)) {
-      // Duo Boost não existe mais no Master+ em nenhuma combinação, em
-      // nenhuma fila -- só Iron-Diamond aceita Duo Boost agora.
-      if (routed.data.boost_mode === 'duo') {
-        return { ok: false, response: badRequest(req, 'Duo Boost não é aceito no Master+ — disponível apenas até Diamante') }
+      // Duo Boost no Master+ só é aceito na fila Flex -- a Riot não
+      // restringe duo por elo lá; Solo/Duo continua Iron-Diamond only.
+      if (routed.data.boost_mode === 'duo' && routed.data.queue_type !== 'flex') {
+        return { ok: false, response: badRequest(req, 'Duo Boost no Master+ só é aceito na fila Flex — na Solo/Duo é só até Diamante') }
       }
       flow = 'master_plus'
     } else if (isStandardTier(tier)) {
@@ -424,7 +425,7 @@ export async function validateAndPriceIntent(
     let masterPlusPriceValue: number | null
     try {
       masterPlusPriceValue = await fetchMasterPlusPrice(
-        serviceClient, mp.current_rank.tier, mp.target_rank.tier, mp.queue_type, mp.current_pdl,
+        serviceClient, mp.current_rank.tier, mp.target_rank.tier, mp.queue_type, mp.current_pdl, mp.boost_mode,
       )
     } catch {
       return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
@@ -483,11 +484,13 @@ export async function validateAndPriceIntent(
     if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
       return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
     }
-    // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger) como
-    // alvo, em nenhuma fila -- só dá pra chegar lá sozinho (solo). Duo Boost
-    // segue disponível normalmente Iron-Diamond.
-    if (std.boost_mode === 'duo' && (std.target_rank.tier === 'master' || std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger')) {
-      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Master+ — disponível apenas até Diamante') }
+    // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é aceito
+    // na fila Flex -- na Solo/Duo segue disponível só até Diamante.
+    if (
+      std.boost_mode === 'duo' && std.queue_type !== 'flex'
+      && (std.target_rank.tier === 'master' || std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger')
+    ) {
+      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Master+ na fila Solo/Duo — escolha Flex ou mire até Diamante') }
     }
     normalized = {
       serviceType: 'elo_boost',
@@ -525,7 +528,7 @@ export async function validateAndPriceIntent(
     if (std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger') {
       let priceValue: number | null
       try {
-        priceValue = await fetchMasterPlusPrice(serviceClient, 'master', std.target_rank.tier, std.queue_type, 0)
+        priceValue = await fetchMasterPlusPrice(serviceClient, 'master', std.target_rank.tier, std.queue_type, 0, std.boost_mode)
       } catch {
         return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
       }
@@ -712,18 +715,24 @@ export async function validateAndPriceIntent(
     if (normalized.serviceType === 'elo_boost' && verifiedMasterPlus !== (flow === 'master_plus')) {
       return { ok: false, response: badRequest(req, 'Seu elo mudou desde a consulta. Verifique a conta novamente antes de pagar.') }
     }
-    // Duo tem regras diferentes por serviço agora: Elo Boost Duo é
-    // Iron-Diamond only (bloqueado assim que o rank confirmado pela Riot já
-    // é Master+, em qualquer fila); Vitórias/MD5 seguem aceitando Duo até
-    // Master, bloqueado só a partir de Grão-Mestre (isDuoBlockedAtTier),
-    // também em qualquer fila agora. Pega tanto um elo que mudou de tier
-    // entre a cotação e o pagamento quanto um current_rank adulterado que
-    // passou pela checagem inicial.
-    if (normalized.serviceType === 'elo_boost' && normalized.boostMode === 'duo' && isMasterPlusCurrentTier(verifiedTier)) {
-      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito no Master+ — disponível apenas até Diamante') }
+    // Duo tem regras diferentes por serviço, mas ambas liberam na fila Flex
+    // agora (a Riot não restringe duo por elo lá): Elo Boost Duo é
+    // Iron-Diamond only na Solo/Duo (bloqueado assim que o rank confirmado
+    // pela Riot já é Master+); Vitórias/MD5 aceitam Duo até Master na
+    // Solo/Duo, bloqueado só a partir de Grão-Mestre (isDuoBlockedAtTier).
+    // Pega tanto um elo que mudou de tier entre a cotação e o pagamento
+    // quanto um current_rank adulterado que passou pela checagem inicial.
+    if (
+      normalized.serviceType === 'elo_boost' && normalized.boostMode === 'duo'
+      && normalized.queueType !== 'flex' && isMasterPlusCurrentTier(verifiedTier)
+    ) {
+      return { ok: false, response: badRequest(req, 'Duo Boost no Master+ só é aceito na fila Flex — na Solo/Duo é só até Diamante') }
     }
-    if (normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo' && isDuoBlockedAtTier(verifiedTier)) {
-      return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Grão-Mestre') }
+    if (
+      normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo'
+      && normalized.queueType !== 'flex' && isDuoBlockedAtTier(verifiedTier)
+    ) {
+      return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Grão-Mestre na fila Solo/Duo — escolha Flex') }
     }
 
     normalized.currentRank = { tier: verifiedTier, division: verifiedDivision }
@@ -767,7 +776,7 @@ export async function validateAndPriceIntent(
           let verifiedMasterPlusPrice: number | null
           try {
             verifiedMasterPlusPrice = await fetchMasterPlusPrice(
-              serviceClient, verifiedTier, normalized.targetRank.tier as 'grandmaster' | 'challenger', normalized.queueType, leaguePoints,
+              serviceClient, verifiedTier, normalized.targetRank.tier as 'grandmaster' | 'challenger', normalized.queueType, leaguePoints, normalized.boostMode,
             )
           } catch {
             return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }

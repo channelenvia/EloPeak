@@ -334,13 +334,13 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
 
   setCurrentRank: (currentRank) => set((state) => {
     const forcedMasterPlus = isMasterPlusCurrentTier(currentRank.tier)
-    // Elo Boost Duo é Iron-Diamond only agora, em qualquer fila -- bloqueado
-    // assim que o rank ATUAL já é Master+. Vitórias segue com a regra
-    // antiga (bloqueado só a partir de Grão-Mestre, isDuoBlockedAtTier, só
-    // na fila Solo/Duo -- na Flex a Riot não restringe duo por elo). MD5
+    // Elo Boost Duo é Iron-Diamond only só na fila Solo/Duo -- bloqueado
+    // assim que o rank ATUAL já é Master+, exceto na Flex (a Riot não
+    // restringe duo por elo lá). Vitórias segue a mesma regra (bloqueado só
+    // a partir de Grão-Mestre, isDuoBlockedAtTier, só na fila Solo/Duo). MD5
     // nunca bloqueia Duo por rank (ver orderPricing.ts).
     const duoBlocked = state.serviceType === 'elo_boost'
-      ? forcedMasterPlus
+      ? forcedMasterPlus && state.queueType !== 'flex'
       : state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isDuoBlockedAtTier(currentRank.tier)
     const nextMode: BoostMode = duoBlocked ? 'solo' : state.boostMode
     const prevFlow = flowFor(state.serviceType, state.currentRank, state.boostMode, state.queueType)
@@ -368,25 +368,26 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
   setQueueType: (queueType) => set({ ...CLEARED_LOOKUP_STATE, queueType }),
 
   setBoostMode: (boostMode) => set((state) => {
-    // Elo Boost Duo é Iron-Diamond only agora, em qualquer fila -- bloqueado
-    // assim que o rank ATUAL já é Master+. Vitórias segue a regra antiga
-    // (bloqueado só a partir de Grão-Mestre, isDuoBlockedAtTier, só na fila
-    // Solo/Duo). MD5 nunca bloqueia por rank. Defesa em profundidade -- a UI
-    // não deve nem oferecer essa opção nesse caso.
+    // Elo Boost Duo é Iron-Diamond only só na fila Solo/Duo -- bloqueado
+    // assim que o rank ATUAL já é Master+, exceto na Flex. Vitórias segue a
+    // mesma regra (bloqueado só a partir de Grão-Mestre, isDuoBlockedAtTier,
+    // só na fila Solo/Duo). MD5 nunca bloqueia por rank. Defesa em
+    // profundidade -- a UI não deve nem oferecer essa opção nesse caso.
     if (boostMode === 'duo' && state.currentRank) {
-      if (state.serviceType === 'elo_boost' && isMasterPlusCurrentTier(state.currentRank.tier)) {
+      if (state.serviceType === 'elo_boost' && state.queueType !== 'flex' && isMasterPlusCurrentTier(state.currentRank.tier)) {
         return {}
       }
       if (state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isDuoBlockedAtTier(state.currentRank.tier)) {
         return {}
       }
     }
-    // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger) como
-    // alvo, em nenhuma fila -- se o cliente já escolheu um desses alvos (em
-    // Solo), trocar pra Duo é rejeitado aqui, mesma defesa em profundidade
-    // acima. A UI trava o próprio botão (StepConfigure.tsx, eloDuoBlockedByTarget).
+    // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é aceito
+    // na fila Flex -- se o cliente já escolheu um desses alvos (em Solo) na
+    // fila Solo/Duo, trocar pra Duo é rejeitado aqui, mesma defesa em
+    // profundidade acima. A UI trava o próprio botão (StepConfigure.tsx,
+    // eloDuoBlockedByTarget).
     if (
-      boostMode === 'duo' && state.serviceType === 'elo_boost' && state.targetRank
+      boostMode === 'duo' && state.serviceType === 'elo_boost' && state.queueType !== 'flex' && state.targetRank
       && (isMasterPlusCurrentTier(state.targetRank.tier) || state.targetRank.tier === 'challenger')
     ) {
       return {}

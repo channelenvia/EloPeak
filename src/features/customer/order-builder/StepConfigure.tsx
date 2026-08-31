@@ -66,12 +66,14 @@ export function StepConfigure() {
   // Elo Boost abaixo -- Vitórias/MD5 não mudaram.
   const currentTierBlocksDuo = currentRank && queueType === 'solo_duo' ? isDuoBlockedAtTier(currentRank.tier) : false
   const winsMd5DuoBlocked = !isMd5 && currentTierBlocksDuo
-  // Elo Boost Duo agora é Iron-Diamond only, em qualquer fila: bloqueado se
-  // o rank ATUAL já é Master+ ou se o rank ALVO é Master+ (Master, Grão-
-  // Mestre ou Challenger). isMasterPlusCurrentTier só cobre master/
-  // grandmaster -- Challenger como alvo precisa de checagem própria.
-  const eloDuoBlockedByCurrent = currentIsMasterPlus
-  const eloDuoBlockedByTarget = targetRank
+  // Elo Boost Duo é Iron-Diamond only só na fila Solo/Duo: bloqueado se o
+  // rank ATUAL já é Master+ ou se o rank ALVO é Master+ (Master, Grão-Mestre
+  // ou Challenger). Na Flex, Duo é aceito também em Master+ (a Riot não
+  // restringe duo por elo lá; master_plus_pricing tem preço próprio pra essa
+  // combinação). isMasterPlusCurrentTier só cobre master/grandmaster --
+  // Challenger como alvo precisa de checagem própria.
+  const eloDuoBlockedByCurrent = currentIsMasterPlus && queueType !== 'flex'
+  const eloDuoBlockedByTarget = targetRank && queueType !== 'flex'
     ? (isMasterPlusCurrentTier(targetRank.tier) || targetRank.tier === 'challenger')
     : false
   const eloDuoBlocked = eloDuoBlockedByCurrent || eloDuoBlockedByTarget
@@ -243,7 +245,7 @@ export function StepConfigure() {
   const masterPlusPriceCurrentTier = currentIsMasterPlus ? currentRank?.tier : 'master'
   const masterPlusPricePdl = Math.max(0, currentIsMasterPlus ? currentPdl : 0)
   const { data: masterPlusPriceRow, isFetching: loadingMasterPlusPrice } = useQuery({
-    queryKey: ['master-plus-price', masterPlusPriceCurrentTier, targetRank?.tier, queueType, masterPlusPricePdl],
+    queryKey: ['master-plus-price', masterPlusPriceCurrentTier, targetRank?.tier, queueType, masterPlusPricePdl, boostMode],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('master_plus_pricing')
@@ -251,6 +253,7 @@ export function StepConfigure() {
         .eq('current_tier', masterPlusPriceCurrentTier!)
         .eq('target_tier', targetRank!.tier)
         .eq('queue_type', queueType)
+        .eq('boost_mode', boostMode)
         .lte('pdl_from', masterPlusPricePdl)
         .order('pdl_from', { ascending: false })
         .limit(1)
@@ -290,8 +293,8 @@ export function StepConfigure() {
         const price = masterPlusPriceRow?.price
         // Modificador de PDL nunca se aplica ao Master+ — sempre null aqui.
         setPdlModifierPct(null)
-        // Duo Boost não existe mais no Master+ em nenhuma combinação.
-        if (!targetRank || price == null || boostMode === 'duo') {
+        // Duo Boost no Master+ só é aceito na fila Flex.
+        if (!targetRank || price == null || (boostMode === 'duo' && queueType !== 'flex')) {
           setBasePrice(0)
           setEstimatedHours(null)
           return
@@ -319,9 +322,9 @@ export function StepConfigure() {
       }
 
       if (!targetRank) return
-      // Duo Boost nunca chega em Master+ (Master/Grão-Mestre/Challenger)
-      // como alvo, em nenhuma fila -- só dá pra chegar lá sozinho.
-      if (boostMode === 'duo' && (isMasterPlusCurrentTier(targetRank.tier) || targetRank.tier === 'challenger')) {
+      // Duo Boost com alvo Master+ (Master/Grão-Mestre/Challenger) só é
+      // aceito na fila Flex.
+      if (boostMode === 'duo' && queueType !== 'flex' && (isMasterPlusCurrentTier(targetRank.tier) || targetRank.tier === 'challenger')) {
         setBasePrice(0)
         setEstimatedHours(null)
         setPdlModifierPct(null)
@@ -801,15 +804,17 @@ export function StepConfigure() {
                   // o fluxo padrão mirando Master+ (Diamond → Master, por
                   // exemplo) quanto para quem já está em Master+. Challenger
                   // fica travado à parte (additionalLockedTiers) quando a
-                  // modalidade é Duo na fila Solo/Duo -- Duo nunca chega lá,
-                  // então nem deixa escolher em vez de só avisar depois.
+                  // modalidade é Duo na fila Solo/Duo -- nessa fila Duo nunca
+                  // chega lá, então nem deixa escolher em vez de só avisar
+                  // depois. Na Flex, Duo chega em Master+ normalmente (preço
+                  // próprio em master_plus_pricing), então a grade não trava.
                   <RankLockGrid
                     tiers={RANK_TIER_ORDER}
                     current={currentRank}
                     selectedTier={targetRank?.tier ?? null}
                     selectedDivision={targetRank?.division ?? null}
                     onChange={(tier, division) => setTargetRank({ tier, division })}
-                    additionalLockedTiers={boostMode === 'duo' ? ['master', 'grandmaster', 'challenger'] : []}
+                    additionalLockedTiers={boostMode === 'duo' && queueType !== 'flex' ? ['master', 'grandmaster', 'challenger'] : []}
                     additionalLockedTitle="Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo"
                   />
                 )}

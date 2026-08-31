@@ -57,12 +57,15 @@ export function tierHasDivisions(tier: RankTier): boolean {
 
 // Determina o fluxo aplicável a partir do rank atual, da modalidade pedida e
 // da fila. Retorna null quando a combinação é inválida (ex.: Duo pedido com
-// rank Master/Grão-Mestre — Elo Boost Duo só existe Iron–Diamond agora, em
-// qualquer fila — ou Challenger como rank atual) — quem chamar deve tratar
+// rank Master/Grão-Mestre na fila Solo/Duo — Elo Boost Duo é Iron-Diamond
+// only nessa fila — ou Challenger como rank atual) — quem chamar deve tratar
 // null como pedido rejeitado, nunca "cair" silenciosamente em outro fluxo.
-export function getBoostFlow(currentTier: RankTier, requestedMode: BoostMode, _queueType: QueueType): BoostFlow | null {
+// Exceção: na fila Flex, Duo é aceito também em Master/Grão-Mestre (a Riot
+// não restringe duo por elo lá) — master_plus_pricing tem preço próprio de
+// Duo só pra Flex (ver migration 20260830110000).
+export function getBoostFlow(currentTier: RankTier, requestedMode: BoostMode, queueType: QueueType): BoostFlow | null {
   if (isMasterPlusCurrentTier(currentTier)) {
-    if (requestedMode === 'duo') return null
+    if (requestedMode === 'duo' && queueType !== 'flex') return null
     return 'master_plus'
   }
   if (isStandardTier(currentTier)) {

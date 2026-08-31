@@ -149,7 +149,7 @@ describe('Master+ — preço vem exclusivamente da tabela comercial (seção 14)
     expect(priced.basePrice).toBe(0)
   })
 
-  it('na fila Flex, Duo Boost também é bloqueado no Master+ (a exceção de fila não existe mais para Elo Boost)', () => {
+  it('na fila Flex, Duo Boost é liberado no Master+ (a Riot não restringe duo por elo lá)', () => {
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'grandmaster', division: null },
       targetRank: { tier: 'challenger', division: null },
@@ -157,7 +157,9 @@ describe('Master+ — preço vem exclusivamente da tabela comercial (seção 14)
       boostMode: 'duo',
       queueType: 'flex',
     }))
-    expect(priced.basePrice).toBe(0)
+    const expected = applyMasterPlusPdlDiscount(250, 'challenger', 0, 'grandmaster', 'flex')
+    expect(priced.basePrice).toBe(expected)
+    expect(priced.basePrice).toBeGreaterThan(0)
   })
 
   it('estima Master até Challenger usando 30 PDL por partida, ultrapassando o alvo de 2200', () => {
@@ -362,7 +364,8 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
     expect(priced.basePrice).toBe(0)
   })
 
-  it('na fila Flex, Duo Boost também é bloqueado com alvo Master+ a partir de um rank padrão (Diamond) -- a exceção de fila não existe mais', () => {
+  it('na fila Flex, Duo Boost com alvo Master+ a partir de um rank padrão (Diamond) é liberado', () => {
+    const { price: toMaster } = calcEloPrice('flex', 'duo', 'diamond', 'I', 'master', null)
     const priced = computeOrderPrice(baseInput({
       currentRank: { tier: 'diamond', division: 'I' },
       targetRank: { tier: 'challenger', division: null },
@@ -370,7 +373,9 @@ describe('Fluxo padrão mirando Master+ (Diamond- -> Grão-Mestre/Challenger dir
       boostMode: 'duo',
       queueType: 'flex',
     }))
-    expect(priced.basePrice).toBe(0)
+    const discountedMasterPlus = applyMasterPlusPdlDiscount(2718.04, 'challenger', 0, 'diamond', 'flex')
+    expect(priced.basePrice).toBeCloseTo(toMaster + discountedMasterPlus, 2)
+    expect(priced.basePrice).toBeGreaterThan(0)
   })
 
   it('alvo "master" exato não soma masterPlusPrice -- já coberto pelo preço por divisão', () => {
@@ -555,7 +560,7 @@ describe('Preços por fila — Vitória Avulsa', () => {
   ]
   const duo: [RankTier, number][] = [
     ['iron', 605], ['bronze', 605], ['silver', 795], ['gold', 929], ['platinum', 1085],
-    ['emerald', 2005], ['diamond', 2995], ['master', 8515],
+    ['emerald', 2005], ['diamond', 2995], ['master', 8515], ['grandmaster', 12590], ['challenger', 21090],
   ]
   it.each(solo)('solo_duo solo %s = %i centavos', (tier, cents) => {
     expect(moneyToCents(getWinBoostPrice('solo_duo', tier, 'solo'))).toBe(cents)
