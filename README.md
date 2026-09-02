@@ -305,7 +305,7 @@ VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
 VITE_SUPABASE_ANON_KEY=<sua-anon-key>
 
 # Discord (link do servidor de suporte)
-VITE_DISCORD_TICKET_URL=https://discord.gg/xxMSSExG
+VITE_DISCORD_TICKET_URL=https://discord.gg/9rgKmpARHf
 ```
 
 ### Edge Functions (`supabase/functions/.env.local`)

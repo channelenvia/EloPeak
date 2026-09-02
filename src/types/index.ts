@@ -242,11 +242,6 @@ export interface Order {
   // estiver no futuro, o pedido só aparece para esse booster no pool.
   preferred_booster_id: string | null
   exclusive_until: string | null
-  // true enquanto o pedido está na janela de aceite criada por
-  // admin_reassign_booster -- mesmo mecanismo de preferred_booster_id/
-  // exclusive_until acima, mas não disputa o slot exclusivo real nem entra
-  // no limite normal de 3/4 (ver AvailableJobs.tsx: reassignedBadge/canAcceptJob).
-  reassigned_by_admin: boolean
   // Riot ID (nome#tag) usado pra verificar automaticamente se o rank alvo
   // foi atingido — só coletado em fluxos que têm target_rank (elo_boost).
   riot_id: string | null

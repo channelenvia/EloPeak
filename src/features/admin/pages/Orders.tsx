@@ -15,9 +15,9 @@ import { useAdminOrders } from '@/api/orders'
 // todo pedido "aguardando algo" (pagamento, booster, credenciais, drop) --
 // não é mais uma aba própria separada de "Aguardando Booster".
 const STATUS_OPTS: { label: string; value: Exclude<AdminOrdersTab, 'canceled'> }[] = [
-  { label: 'Todos',                              value: 'all' },
   { label: ORDER_STATUS_GROUP_LABEL.in_progress, value: 'in_progress' },
   { label: ORDER_STATUS_GROUP_LABEL.completed,   value: 'completed' },
+  { label: 'Todos',                              value: 'all' },
 ]
 
 export function AdminOrdersPage() {

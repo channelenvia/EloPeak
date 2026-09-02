@@ -18,9 +18,9 @@ import { useCustomerOrders } from '@/api/orders'
 type StatusFilter = 'all' | 'in_progress' | 'completed'
 
 const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
-  { label: 'Todos',                             value: 'all'        },
   { label: ORDER_STATUS_GROUP_LABEL.in_progress, value: 'in_progress' },
   { label: ORDER_STATUS_GROUP_LABEL.completed,   value: 'completed'  },
+  { label: 'Todos',                             value: 'all'        },
 ]
 
 export function OrderHistoryPage() {

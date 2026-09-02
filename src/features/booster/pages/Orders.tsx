@@ -16,9 +16,9 @@ import { useOwnBoosterTop3Status } from '@/api/boosters'
 // entram pedidos já atribuídos a este booster. canceled/refunded/disputed
 // nunca aparecem pro booster (não é tela de auditoria).
 const TABS: { key: BoosterOrdersTab; label: string }[] = [
-  { key: 'all',       label: 'Todos' },
   { key: 'active',    label: ORDER_STATUS_GROUP_LABEL.in_progress },
   { key: 'completed', label: ORDER_STATUS_GROUP_LABEL.completed   },
+  { key: 'all',       label: 'Todos' },
 ]
 
 type TabKey = BoosterOrdersTab

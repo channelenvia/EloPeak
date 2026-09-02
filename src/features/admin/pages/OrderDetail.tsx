@@ -103,20 +103,16 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
 
 // Reatribuir booster: ação exclusiva do admin (não existe pro booster/
 // cliente) -- lista todos os boosters da aplicação via
-// admin_list_boosters_with_slots, ignorando o limite de slots na escolha do
-// alvo (can_booster_accept_order continua valendo pro fluxo normal de
-// accept_boost_order). O pedido NÃO é atribuído na hora: volta pra
-// awaiting_assignment reservado só pro booster escolhido (mesma janela de
-// 12h/DM no Discord de um pedido exclusivo comum), que precisa aceitar pra
-// assumir -- progresso (matches, rank etc) é preservado, "tempo" fica parado
-// enquanto ninguém está com o pedido. Se não aceitar a tempo, cai no pool
-// geral pra qualquer booster, como um pedido normal (ver admin_reassign_booster).
-// Só aparece pra pedidos com booster ativo, mesmo conjunto de DROPPABLE_STATUSES.
+// admin_list_boosters_with_slots e ignora o limite de slots de propósito
+// (can_booster_accept_order continua valendo pro fluxo normal de
+// accept_boost_order; isso aqui é só a exceção administrativa pra casos bem
+// específicos). Só aparece pra pedidos com booster ativo, mesmo conjunto de
+// DROPPABLE_STATUSES.
 function AdminReassignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-  const { data: boosters, isLoading: loadingBoosters, isError: boostersError, error: boostersErrorObj } = useBoostersWithSlots(open)
+  const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const reassign = useAdminReassignBooster(order.id)
 
   const filtered = (boosters ?? [])
@@ -137,7 +133,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
       onOpenChange={(next) => { if (!next) close() }}
       title="Reatribuir booster"
       maxWidth="lg"
-      description="Reserva o pedido pra qualquer booster (ignorando o limite de slots), que tem 12h pra aceitar antes de voltar pro pool geral -- ação exclusiva do admin, use só em casos bem específicos."
+      description="Atribui o pedido a qualquer booster, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos."
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
@@ -151,10 +147,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
 
       <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
         {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
-        {boostersError && (
-          <ErrorAlert message={boostersErrorObj instanceof Error ? boostersErrorObj.message : 'Erro ao carregar boosters'} />
-        )}
-        {!loadingBoosters && !boostersError && filtered.length === 0 && (
+        {!loadingBoosters && filtered.length === 0 && (
           <p className="text-sm text-ink-secondary py-4 text-center">Nenhum booster encontrado.</p>
         )}
         {filtered.map((b: BoosterWithSlots) => (

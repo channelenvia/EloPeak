@@ -126,7 +126,6 @@ async function deleteOrderChannels(voiceChannelId: string | null, textChannelId:
 function buildExclusiveJobDM(order: any) {
   const shortCode = String(order.id).slice(0, 8).toUpperCase()
   const isCoaching = order.service_type === 'coaching'
-  const isReassigned = order.reassigned_by_admin === true
   const fields = buildOrderFields(order)
 
   // Campo sempre presente (mesmo padrão dos demais -- "—"/texto fixo em vez
@@ -141,20 +140,10 @@ function buildExclusiveJobDM(order: any) {
 
   return {
     embeds: [{
-      title: isCoaching
-        ? '🎓 Novo Pedido de Coaching Reservado pra Você!'
-        : isReassigned
-          ? '🔁 Pedido Reatribuído pra Você!'
-          : '🔒 Novo Pedido Reservado pra Você!',
+      title: isCoaching ? '🎓 Novo Pedido de Coaching Reservado pra Você!' : '🔒 Novo Pedido Reservado pra Você!',
       url: `${APP_URL}/booster/jobs`,
-      description: `Pedido #${shortCode} — ${
-        isCoaching
-          ? 'esse pacote é exclusivamente seu.'
-          : isReassigned
-            ? 'um administrador reatribuiu este pedido a você. Só você pode aceitá-lo por enquanto.'
-            : 'só você pode aceitar esse pedido por enquanto.'
-      }`,
-      color: isReassigned ? 0xEF4444 : 0x8B5CF6,
+      description: `Pedido #${shortCode} — ${isCoaching ? 'esse pacote é exclusivamente seu.' : 'só você pode aceitar esse pedido por enquanto.'}`,
+      color: 0x8B5CF6,
       fields,
       thumbnail: { url: cardThumbnailUrl(APP_URL, rankIconTier(order)) },
       footer: eloPeakFooter(APP_URL),

@@ -49,7 +49,7 @@ export async function fetchOrderProfiles(orderId: string) {
   const { data: order, error } = await db
     .from('orders')
     .select(`
-      id, status, customer_id, assigned_booster_id, preferred_booster_id, exclusive_until, reassigned_by_admin,
+      id, status, customer_id, assigned_booster_id, preferred_booster_id, exclusive_until,
       service_id, discord_voice_channel_id, discord_text_channel_id,
       service_type, boost_mode, queue_type, server, current_rank, target_rank,
       clash_tier, clash_day, wins_purchased, sessions_purchased, total_price, estimated_hours, extras,
