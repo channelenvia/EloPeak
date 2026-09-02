@@ -26,7 +26,7 @@ const PAGE_SIZE = 12
 
 export function BoosterOrdersPage() {
   const { profile } = useAuthStore()
-  const [tab, setTab] = useState<TabKey>('all')
+  const [tab, setTab] = useState<TabKey>('active')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 

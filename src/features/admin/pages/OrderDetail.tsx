@@ -32,6 +32,7 @@ import {
     Route,
     Shuffle,
     User,
+    UserPlus,
     Users,
     Wallet,
     XCircle,
@@ -53,6 +54,14 @@ function BoosterLink({ userId, booster }: { userId: string; booster: BoosterRef 
 // Mesmo conjunto de status aceitos por admin_drop_order (migration 071) —
 // 'drop_requested' fica de fora porque já tem sua própria fila em /admin/drops.
 const DROPPABLE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 'awaiting_customer']
+
+// Mesmo conjunto de DROPPABLE_STATUSES + 'awaiting_assignment' -- pedido no
+// pool (sem assigned_booster_id) também precisa poder receber um booster
+// direto do menu do admin, não só pedidos que já têm um booster ativo pra
+// trocar (ver migration 20260902160000_admin_assign_booster_from_awaiting_
+// assignment). Ação de drop continua restrita a DROPPABLE_STATUSES -- não
+// tem o que "dropar" num pedido que ainda não foi atribuído.
+const ASSIGN_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'awaiting_assignment']
 
 // Só 3 ações manuais: concluir/cancelar (admin_override_order_status, sem
 // efeito colateral) e reembolsar -- que é um link pro formulário de
@@ -101,19 +110,22 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
   )
 }
 
-// Reatribuir booster: ação exclusiva do admin (não existe pro booster/
-// cliente) -- lista todos os boosters da aplicação via
+// Atribuir/reatribuir booster: ação exclusiva do admin (não existe pro
+// booster/cliente) -- lista todos os boosters da aplicação via
 // admin_list_boosters_with_slots e ignora o limite de slots de propósito
 // (can_booster_accept_order continua valendo pro fluxo normal de
 // accept_boost_order; isso aqui é só a exceção administrativa pra casos bem
-// específicos). Só aparece pra pedidos com booster ativo, mesmo conjunto de
-// DROPPABLE_STATUSES.
+// específicos). Aparece pra pedidos com booster ativo (ASSIGN_BOOSTER_
+// STATUSES) e também pra pedidos 'awaiting_assignment' ainda sem booster --
+// nesse caso isNewAssignment ajusta o texto pra "Atribuir" em vez de
+// "Reatribuir".
 function AdminReassignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const reassign = useAdminReassignBooster(order.id)
+  const isNewAssignment = !order.assigned_booster_id
 
   const filtered = (boosters ?? [])
     .filter((b: BoosterWithSlots) => b.user_id !== order.assigned_booster_id)
@@ -131,9 +143,11 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
     <Modal
       open={open}
       onOpenChange={(next) => { if (!next) close() }}
-      title="Reatribuir booster"
+      title={isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
       maxWidth="lg"
-      description="Atribui o pedido a qualquer booster, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos."
+      description={isNewAssignment
+        ? 'Atribui o pedido a um booster específico, tirando-o do pool de pedidos disponíveis -- ele deixa de aparecer na aba Jobs dos outros boosters e passa a aparecer só pro selecionado.'
+        : 'Atribui o pedido a qualquer booster, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos.'}
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
@@ -176,7 +190,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Justificativa para a reatribuição..."
+          placeholder={isNewAssignment ? 'Justificativa para a atribuição...' : 'Justificativa para a reatribuição...'}
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -197,7 +211,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
             reassign.mutate({ targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
           }}
         >
-          Reatribuir
+          {isNewAssignment ? 'Atribuir' : 'Reatribuir'}
         </Button>
       </div>
     </Modal>
@@ -206,8 +220,9 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
 
 // Mesmo padrão do menu de ações dos boosters (ver BoosterActionsMenu em
 // Boosters.tsx): botão "Ações" + Popover ancorado com a lista, em vez de um
-// modal central. "Reatribuir booster" só aparece com booster ativo (mesmo
-// conjunto de DROPPABLE_STATUSES) -- ver comentário de AdminReassignModal.
+// modal central. "Atribuir/Reatribuir booster" aparece em ASSIGN_BOOSTER_
+// STATUSES (booster ativo OU 'awaiting_assignment') -- ver comentário de
+// AdminReassignModal.
 // Concluir/cancelar usam admin_override_order_status (sem efeito colateral);
 // reembolsar é um link pro formulário de reembolso manual
 // (AdminRefundsPage/admin_create_manual_refund), não um flip direto pra
@@ -220,7 +235,8 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
   const updateStatus = useAdminOverrideOrderStatus(order.id)
 
   const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
-  const reassignVisible = DROPPABLE_STATUSES.includes(order.status)
+  const reassignVisible = ASSIGN_BOOSTER_STATUSES.includes(order.status)
+  const isNewAssignment = !order.assigned_booster_id
 
   function setStatus(value: OrderStatus) {
     updateStatus.mutate({ orderId: order.id, newStatus: value })
@@ -246,8 +262,8 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
             onClick={() => { setMenuOpen(false); setReassignOpen(true) }}
             className={cn(itemClass, STATUS_ACTION_TONE_CLASS.neutral)}
           >
-            <ArrowLeftRight className="h-4 w-4 shrink-0" />
-            Reatribuir booster
+            {isNewAssignment ? <UserPlus className="h-4 w-4 shrink-0" /> : <ArrowLeftRight className="h-4 w-4 shrink-0" />}
+            {isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
           </button>
         )}
         {order.status !== 'completed' && (
@@ -347,7 +363,6 @@ export function AdminOrderDetailPage() {
   }
 
   const dropVisible = DROPPABLE_STATUSES.includes(order.status)
-  const dropLimitReached = order.drop_count >= 2
 
   const infoItems: OrderInfoGridItem[] = [
     { icon: Gamepad2, label: 'Serviço', value: getOrderServiceName(order) },
@@ -425,8 +440,7 @@ export function AdminOrderDetailPage() {
           </>
         )}
         onDrop={dropVisible ? () => setDropModalOpen(true) : undefined}
-        dropDisabled={dropLimitReached}
-        dropTooltip="Limite de drops atingido."
+        dropTooltip={order.drop_count >= 2 ? 'Limite de 2 drops atingido -- confirmar aqui cancela o pedido.' : undefined}
         primary={<AdminStatusActionsMenu order={order} />}
       />
 

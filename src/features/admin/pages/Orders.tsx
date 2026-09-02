@@ -21,7 +21,7 @@ const STATUS_OPTS: { label: string; value: Exclude<AdminOrdersTab, 'canceled'> }
 ]
 
 export function AdminOrdersPage() {
-  const [tab, setTab] = useState<AdminOrdersTab>('all')
+  const [tab, setTab] = useState<AdminOrdersTab>('in_progress')
   const [search, setSearch] = useState('')
   const { t } = useTranslation()
   const currency = useCurrency()

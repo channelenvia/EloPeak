@@ -28,7 +28,7 @@ export function OrderHistoryPage() {
   const { profile } = useAuthStore()
   const { t } = useTranslation()
   const currency = useCurrency()
-  const [filter, setFilter] = useState<StatusFilter>('all')
+  const [filter, setFilter] = useState<StatusFilter>('in_progress')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12

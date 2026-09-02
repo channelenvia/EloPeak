@@ -51,7 +51,7 @@ export function OrderPageHeader({
             leftIcon={<AlertTriangle className="h-4 w-4" />}
             onClick={onDrop}
             disabled={dropDisabled}
-            title={dropDisabled ? dropTooltip : undefined}
+            title={dropTooltip}
           >
             Dropar
           </Button>
