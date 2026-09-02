@@ -73,11 +73,22 @@ export async function adminMarkPayoutPaid(params: { requestId: string; proofUrl:
   assertRpcSuccess(data as { success: boolean; error?: string }, MARK_PAID_MESSAGES)
 }
 
+// Nome de arquivo é controlado pelo usuário (vem do <input type="file"> no
+// browser) -- sem isso, um nome como "../outroRequestId/x.png" ou contendo
+// "/" mudaria o path de verdade dentro do bucket (que só usa "/" como
+// separador de string, não é um filesystem de verdade), permitindo escrever
+// fora da "pasta" do requestId pretendido. Mantém só o último segmento e
+// troca qualquer caractere fora de um allowlist seguro.
+function sanitizeFileName(name: string): string {
+  const base = name.split(/[\\/]/).pop() || 'arquivo'
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
 // Upload do comprovante para o bucket privado `payout-proofs` (migration
 // 082) -- só admins têm policy de INSERT nele. Retorna o path do objeto,
 // que é o valor gravado em payout_requests.proof_url.
 export async function uploadPayoutProof(params: { requestId: string; file: File }): Promise<string> {
-  const path = `${params.requestId}/${Date.now()}-${params.file.name}`
+  const path = `${params.requestId}/${Date.now()}-${sanitizeFileName(params.file.name)}`
   const { error } = await supabase.storage.from('payout-proofs').upload(path, params.file, { upsert: false })
   if (error) throw normalizeApiError(error, 'Falha ao enviar o comprovante.')
   return path

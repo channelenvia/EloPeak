@@ -258,7 +258,7 @@ export function AdminDuoAccountsPage() {
         </Button>
       </div>
 
-      <div className="card p-0">
+      <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
         {isLoading ? <div className="p-4"><Skeleton className="h-48 w-full" /></div> :
           isError ? <div className="p-4"><ErrorAlert message={accountsError instanceof Error ? accountsError.message : 'Não foi possível carregar as contas Duo.'} /></div> :
           !accounts?.length ? <EmptyState icon={Landmark} title="Nenhuma conta cadastrada" description="Adicione contas para que boosters possam usá-las em Duo Boost." /> : (

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useOrderBuilderStore, type OrderBuilderStep } from '@/stores/orderBuilderStore'
 import { Stepper, Button, Card, Modal } from '@/components/ui'
+import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { applyCoupon, getWinBoostPrice } from '@/lib/pricing'
 import { getBoostFlow, resolveAddonLabel } from '@/lib/boostDomain'
-import { ChevronRight, ChevronLeft, Shield, Clock, Star, UserCheck, Tag, X } from 'lucide-react'
+import { ChevronRight, ChevronLeft, RotateCcw, Shield, Clock, Star, UserCheck, Tag, X } from 'lucide-react'
 import type { ServiceType, Rank } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -236,6 +238,20 @@ export function OrderBuilderPage() {
     setSearchParams({ new: '1' }, { replace: true })
   }
 
+  // "Reiniciar" na aside da Revisão -- mesmo destino final de
+  // confirmExitPixModal (reset completo + volta pro step 'service'), só que
+  // disparado direto do botão em vez de fechar o popup do PIX. Com um pedido
+  // já persistido (?order= setado), pede confirmação primeiro (reaproveita o
+  // mesmo modal "Sair sem pagar?"); sem pedido persistido ainda, não há nada
+  // a perder e reinicia direto.
+  function handleReiniciarClick() {
+    if (pendingOrderId) {
+      setShowExitConfirm(true)
+      return
+    }
+    confirmExitPixModal()
+  }
+
   // Mesma regra de StepExtras.tsx/StepPayment.tsx — Clash reaproveita
   // solo_standard/duo_standard pela modalidade, sem currentRank envolvido.
   const flow = serviceType === 'elo_boost' && currentRank
@@ -413,6 +429,14 @@ export function OrderBuilderPage() {
   const discountPrice = coupon?.couponApplied ? coupon.discountPrice : 0
   const totalPrice = subtotal - discountPrice
   const canGoBack = currentIdx > 0 && step !== 'payment'
+  const isLastStep = currentIdx === steps.length - 1
+  // A aside de valores só existe a partir do step 2 (configure em diante) --
+  // no step 'service' o cliente pode clicar em qualquer card pra ver o
+  // destaque de seleção sem que a tela já encolha; a transição só acontece
+  // ao clicar em "Continuar" e o step de fato mudar. Depende do step, não
+  // de serviceType, senão o widget encolheria assim que a service escolhida
+  // vira serviceType (antes de "Continuar"), no meio do próprio step 1.
+  const showSummary = step !== 'service'
   const stepComplete = isStepComplete(step, {
     serviceType, selectedCoachPackage, currentRank, targetRank,
     winsPurchased, riotId, isMd5, riotVerified, riotLookupLoading, md5MatchesRemaining,
@@ -453,19 +477,29 @@ export function OrderBuilderPage() {
         />
       </div>
 
-      {/* Grid (não flex) pra travar a proporção 70/30 (col-span 7/3 de 10). */}
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 lg:items-start">
+      {/* Grid (não flex) pra travar a proporção 70/30 (col-span 7/3 de 10) --
+          só depois que a aside de valores existe (showSummary). Antes
+          disso, uma única coluna: o step 'service' vira um widget cheio,
+          sem a aside. motion.div/layout no conteúdo principal anima o
+          encolhimento pra 7/10 quando a aside aparece (AnimatePresence
+          abaixo), em vez de um salto seco de largura. */}
+      <div className={cn('grid grid-cols-1 gap-6 lg:items-start', showSummary ? 'lg:grid-cols-10' : 'lg:grid-cols-1')}>
         {/* Main step content */}
-        <div className="lg:col-span-7 min-w-0">
+        <motion.div layout transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
           <Card padding="lg" className="animate-fade-in">
-            <StepContent />
+            {step === 'service' ? <StepService fullWidth={!showSummary} /> : <StepContent />}
 
-            {/* Navigation */}
-            {step !== 'payment' && step !== 'review' && (
+            {/* Navigation — Voltar/Continuar sempre no widget da esquerda,
+                em todo o configurador (inclusive na Revisão, onde antes
+                sumiam e viravam um par diferente lá na aside). Na Revisão,
+                "Continuar" fica bloqueado (não há próximo step -- pagar
+                acontece pelo par Reiniciar/Pagar na aside), mesmo padrão
+                visual do "Voltar" já bloqueado no primeiro step. */}
+            {step !== 'payment' && (
               <div className="flex items-center justify-between mt-8 pt-5 border-t border-border-subtle">
                 <Button
                   variant="ghost"
-                  onClick={prevStep}
+                  onClick={() => (step === 'review' ? goBackFromReview() : prevStep())}
                   disabled={!canGoBack}
                   leftIcon={<ChevronLeft className="h-4 w-4" />}
                 >
@@ -477,7 +511,7 @@ export function OrderBuilderPage() {
                     setStepAttempted(false)
                     nextStep()
                   }}
-                  disabled={riotLookupLoading || !stepComplete}
+                  disabled={riotLookupLoading || !stepComplete || isLastStep}
                   rightIcon={<ChevronRight className="h-4 w-4" />}
                 >
                   Continuar
@@ -503,12 +537,24 @@ export function OrderBuilderPage() {
               <Button variant="danger" onClick={confirmExitPixModal}>Sair e reiniciar</Button>
             </div>
           </Modal>
-        </div>
+        </motion.div>
 
-        {/* Summary panel — acompanha o pedido em todas as etapas, não só na
-            revisão final, pra o cliente ver quanto está pagando desde o
-            início. Flui normalmente com a página, igual à coluna principal. */}
-        <aside className="lg:col-span-3">
+        {/* Summary panel — só existe a partir do step 2 (ver showSummary
+            acima); acompanha o pedido dali em diante, não só na revisão
+            final. AnimatePresence anima a entrada (desliza da direita) em
+            sincronia com o encolhimento do conteúdo principal ao lado, os
+            dois disparados juntos pela troca de step ao clicar Continuar. */}
+        <AnimatePresence>
+          {showSummary && (
+            <motion.aside
+              key="summary"
+              layout
+              initial={{ opacity: 0, x: 32 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 32 }}
+              transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
+              className="lg:col-span-3"
+            >
           <div className="space-y-5">
             {/* variant flat (sem blur/sombra/transparência) -- o card
                 "vidro" padrão, isolado nessa coluna estreita, lia como um
@@ -543,8 +589,11 @@ export function OrderBuilderPage() {
                     precisar digitar nada. Só aparece quando de fato se aplica
                     (elo boost/vitórias/md5/clash — Coaching fica fora porque
                     o preço é o pacote do próprio booster, ver
-                    COUPON_ELIGIBLE_SERVICE_TYPES em shared/pricing.ts). */}
-                {coupon?.couponApplied && (
+                    COUPON_ELIGIBLE_SERVICE_TYPES em shared/pricing.ts) E já
+                    existe um valor calculado -- caso contrário mostraria
+                    "cupom aplicado" sobre um subtotal ainda zerado, antes do
+                    cliente configurar qualquer coisa. */}
+                {coupon?.couponApplied && subtotal > 0 && (
                   <div className="flex items-center gap-1.5 py-2 text-xs text-success font-medium">
                     <Tag className="h-3.5 w-3.5 shrink-0" />
                     Cupom {couponCode} aplicado · -{coupon.discountPct}%
@@ -569,13 +618,23 @@ export function OrderBuilderPage() {
                   )}
                 </div>
 
+                {/* Reiniciar/Pagar -- só na Revisão, na aside (Voltar/Continuar
+                    já vivem no widget da esquerda, ver nav acima). Reiniciar
+                    descarta a configuração inteira (ícone de "desfazer",
+                    espelhando o ChevronLeft do Voltar); Pagar abre o popup do
+                    PIX (mesmo ChevronRight do Continuar, indicando avanço). */}
                 {step === 'review' && (
                   <div className="flex gap-2.5 pt-4">
-                    <Button variant="ghost" onClick={goBackFromReview} className="shrink-0">
-                      Voltar
+                    <Button
+                      variant="ghost"
+                      onClick={handleReiniciarClick}
+                      className="shrink-0"
+                      leftIcon={<RotateCcw className="h-4 w-4" />}
+                    >
+                      Reiniciar
                     </Button>
                     <Button onClick={() => setPixModalOpen(true)} className="flex-1" rightIcon={<ChevronRight className="h-4 w-4" />}>
-                      {serviceType === 'coaching' ? 'Confirmar' : 'Ir para Pagamento'}
+                      {serviceType === 'coaching' ? 'Confirmar' : 'Pagar'}
                     </Button>
                   </div>
                 )}
@@ -598,7 +657,9 @@ export function OrderBuilderPage() {
               </div>
             </Card>
           </div>
-        </aside>
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

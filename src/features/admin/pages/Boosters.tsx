@@ -223,7 +223,7 @@ export function AdminBoostersPage() {
         <ErrorAlert message={(expelBoosterMutation.error as Error).message} />
       )}
 
-      <div className="card p-0">
+      <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
         {isLoading ? <div className="p-4"><Skeleton className="h-48 w-full" /></div> :
           !filtered.length ? <EmptyState icon={Shield} title={t('admin.boosters.empty')} /> : (
           <Table>

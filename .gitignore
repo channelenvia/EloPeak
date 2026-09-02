@@ -10,10 +10,20 @@ dist_new/
 dist_v2/
 build/
 
-# Booster Launcher desktop app (built binary, not source)
+# Booster Launcher desktop app — only its generated output is build output;
+# src/, scripts/, package.json etc. are real source and stay tracked. (The
+# bare `launcher` entry this replaced accidentally excluded the whole app,
+# including its source, from git — see launcher/scripts/ negation below for
+# the fallout from the repo-wide `scripts/` rule above.)
+launcher/node_modules/
+launcher/dist/
+launcher/release/
+launcher/build/
+launcher/config.json
+launcher/*.log
+!launcher/scripts/
 Booster Launcher/
 Booster Launcher.exe
-launcher
 
 # Environment - NEVER commit secrets
 .env

@@ -59,7 +59,7 @@ export function AdminPaymentsPage() {
         <StatCard label="Pedidos realizados" value={String(paymentSummary?.paidOrderCount ?? 0)} icon={ReceiptText} tone="bg-brand/10 text-brand" />
       </div>
 
-      <Card padding="none">
+      <Card variant="operational" padding="none">
         {isLoading ? (
           <div className="p-4"><Skeleton className="h-48 w-full" /></div>
         ) : !payments?.length ? (

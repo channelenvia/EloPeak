@@ -210,9 +210,9 @@ export function PricingPage() {
           </p>
         </ScrollReveal>
 
-        {/* ── Solo Boost / Duo Boost ── */}
+        {/* ── Elo Boost ── */}
         <section>
-          <h2 className="text-xl font-bold text-ink mb-1">Solo Boost / Duo Boost</h2>
+          <h2 className="text-xl font-bold text-ink mb-1">Elo Boost</h2>
           <p className="text-sm text-ink-secondary mb-4">
             Até Diamante, o preço é por divisão. Mestre e Grão-mestre pelo tiers completos, sem Duo.
           </p>
@@ -286,9 +286,9 @@ export function PricingPage() {
           <p className="text-xs text-ink-muted mt-2">Abaixo de Mestre: média menor que 20 LP/partida aplica +10%; 20 LP/partida ou mais mantém o preço base.</p>
         </section>
 
-        {/* ── Vitórias / MD5 ── */}
+        {/* ── Win Boost ── */}
         <section>
-          <h2 className="text-xl font-bold text-ink mb-1">Vitórias / MD5</h2>
+          <h2 className="text-xl font-bold text-ink mb-1">Win Boost</h2>
           <p className="text-sm text-ink-secondary mb-4">Preço por vitória de acordo com o seu rank atual.</p>
           <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-3">
             {WIN_TIERS.map((tier) => {

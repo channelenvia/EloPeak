@@ -101,9 +101,9 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     useOrderBuilderStore.getState().setService('win_boost', 'win_boost')
   })
 
-  it('antes de verificar o Riot ID, mostra a dica de detecção automática (sem botões clicáveis)', () => {
+  it('antes de verificar o Riot ID, não mostra nenhum aviso de detecção (a explicação genérica vive no card do step 1)', () => {
     renderStepConfigure()
-    expect(screen.getByText('Detectamos automaticamente se é Vitórias ou MD5 pelo rank da sua conta, ao verificar o Riot ID abaixo.')).toBeInTheDocument()
+    expect(screen.queryByText(/Vitórias ou MD5/)).not.toBeInTheDocument()
     // Não é mais um par de botões -- nunca foi uma escolha manual livre, e o
     // botão "simulando" a escolha virou só uma linha de texto.
     expect(screen.queryByRole('button', { name: /^Vitórias/ })).not.toBeInTheDocument()
@@ -111,20 +111,22 @@ describe('StepConfigure — Vitórias ou MD5 (nunca escolha livre, só o Riot ID
     expect(useOrderBuilderStore.getState().isMd5).toBe(false)
   })
 
-  it('depois de verificado com isMd5=true, mostra a mensagem de MD5 ativado automaticamente', () => {
+  it('depois de verificado com isMd5=true, o modo MD5 fica implícito nos rótulos de Modalidade (sem linha própria repetindo)', () => {
     useOrderBuilderStore.getState().setRiotVerified(true)
     useOrderBuilderStore.getState().setIsMd5(true)
     renderStepConfigure()
 
-    expect(screen.getByText(/garantia de 80%\+ de win rate/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solo MD5/ })).toBeInTheDocument()
+    expect(screen.queryByText(/garantia de 80%\+ win rate/)).not.toBeInTheDocument()
   })
 
-  it('depois de verificado com isMd5=false (conta já rankeada), mostra o modo Vitórias detectado', () => {
+  it('depois de verificado com isMd5=false (conta já rankeada), o modo Vitórias fica implícito nos rótulos de Modalidade', () => {
     useOrderBuilderStore.getState().setRiotVerified(true)
     useOrderBuilderStore.getState().setIsMd5(false)
     renderStepConfigure()
 
-    expect(screen.getByText(/sua conta já possui rank nesta fila/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solo Vitórias/ })).toBeInTheDocument()
+    expect(screen.queryByText(/conta já rankeada nesta fila/)).not.toBeInTheDocument()
   })
 
   it('Vitórias: Duo bloqueado a partir de Master (mesma regra de rank atual do Elo Boost)', () => {

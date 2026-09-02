@@ -10,7 +10,7 @@ const SERVICES = [
   {
     icon: TrendingUp,
     slug: 'elo_boost',
-    title: 'Solo Boost / Duo Boost',
+    title: 'Elo Boost',
     tagline: 'Suba divisão por divisão até o rank desejado.',
     description:
       'Nossos boosters jogam na sua conta (Solo Boost) ou ao seu lado em duo queue (Duo Boost) e sobem do seu rank atual até o rank desejado. Você escolhe o tipo de fila, preferências de campeão e extras.',
@@ -29,7 +29,7 @@ const SERVICES = [
   {
     icon: Zap,
     slug: 'win_boost',
-    title: 'Vitórias / MD5',
+    title: 'Win Boost',
     tagline: 'Compre vitórias avulsas ou ative a garantia MD5.',
     description:
       'Perfeito para ganhar LP rápido, completar missões ou subir antes de uma virada de temporada. Escolha quantas vitórias precisa — e se ainda não jogou o posicionamento, ative a garantia MD5 automaticamente no mesmo fluxo.',

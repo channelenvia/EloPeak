@@ -4,7 +4,7 @@ import { Check, Search } from 'lucide-react'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
-import { RankBadge, ErrorAlert } from '@/components/ui'
+import { RankBadge, ErrorAlert, InlineFieldSelect } from '@/components/ui'
 import { FormField } from '@/components/ui/FormField'
 import { LaneSelectField } from '@/components/order/LaneSelectField'
 import { getClashBasePrice, CLASH_ESTIMATED_HOURS } from '@/lib/pricing'
@@ -21,7 +21,7 @@ import type { ClashDay, BoostMode } from '@/types'
 // em StepConfigure.tsx para elo_boost/win_boost/md5.
 const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
-const CLASH_DAYS: ClashDay[] = ['saturday', 'sunday']
+const CLASH_DAY_OPTIONS: readonly [ClashDay, ClashDay] = ['saturday', 'sunday']
 const CLASH_MODES: { mode: BoostMode; title: string; desc: string }[] = [
   { mode: 'solo', title: 'Solo Clash', desc: 'O booster joga na sua conta e monta o time dentro do jogo.' },
   { mode: 'duo', title: 'Duo Clash', desc: 'Você joga junto com o booster, que monta o restante do time.' },
@@ -50,6 +50,14 @@ export function ClashConfigPicker() {
     setBasePrice(getClashBasePrice(boostMode, clashTier))
     setEstimatedHours(CLASH_ESTIMATED_HOURS)
   }, [boostMode, clashTier, setBasePrice, setEstimatedHours, setPdlModifierPct])
+
+  // O dia agora vive num seletor embutido no campo Riot ID (sempre mostra
+  // um valor, igual o Tipo de Fila em StepConfigure.tsx) em vez de dois
+  // botões lado a lado sem seleção prévia -- por isso precisa de um
+  // padrão assim que a tela abre, em vez de ficar null até o clique.
+  useEffect(() => {
+    if (!clashDay) setClashDay('saturday')
+  }, [clashDay, setClashDay])
 
   // Riot ID obrigatório nos dois modos: no Solo é referência do booster
   // antes de logar via credenciais; no Duo é o identificador que o booster
@@ -89,7 +97,7 @@ export function ClashConfigPicker() {
       setClashCurrentRank({ tier: result.tier, division: result.division ?? null }, result.league_points ?? 0)
       setRiotAutoFilled(true)
       setRiotVerified(true)
-      setRiotLookupMessage('Tier preenchido automaticamente a partir do seu rank atual.')
+      setRiotLookupMessage('Tier detectado automaticamente pelo seu rank atual.')
     } catch (error) {
       setRiotLookupError(error instanceof Error ? error.message : 'Não foi possível consultar a Riot agora.')
     } finally {
@@ -122,42 +130,20 @@ export function ClashConfigPicker() {
         </div>
       </div>
 
-      {/* Dia + Riot ID na mesma linha, mesmo esquema do Elo Boost/Vitórias
-          em StepConfigure.tsx (fila/dia à esquerda, Riot ID + verificação à
-          direita). Riot ID obrigatório nos dois modos — no Solo é
-          referência do booster (que loga via credenciais), no Duo é o
-          identificador que o booster usa pra te convidar pro time dentro do
-          jogo. A busca preenche o tier sozinho a partir do rank atual na
-          fila solo/duo. */}
-      <div className="grid sm:grid-cols-[2fr_3fr] gap-4 items-start">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Dia</p>
-          <div className="grid grid-cols-2 gap-3">
-            {CLASH_DAYS.map((day) => (
-              <button
-                key={day}
-                type="button"
-                onClick={() => setClashDay(day)}
-                className={cn(
-                  'py-3 rounded-xl text-sm font-bold border-2 transition-all',
-                  clashDay === day
-                    ? 'border-brand bg-brand/10 text-brand'
-                    : 'border-border-subtle bg-bg-card text-ink-secondary hover:border-brand/30',
-                )}
-              >
-                {CLASH_DAY_LABEL[day]}
-              </button>
-            ))}
-          </div>
-          {stepAttempted && !clashDay && <p className="text-xs text-danger mt-2">Selecione um dia</p>}
-        </div>
-
-        <FormField
-          label="Riot ID"
-          required
-          error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
-        >
-          <div className="flex flex-col sm:flex-row gap-2">
+      {/* Riot ID com largura máxima na linha -- o dia do Clash (antes um
+          FormField à parte, ao lado) fica embutido no fim do próprio
+          campo, mesmo padrão do Tipo de Fila em StepConfigure.tsx. Riot ID
+          obrigatório nos dois modos — no Solo é referência do booster (que
+          loga via credenciais), no Duo é o identificador que o booster usa
+          pra te convidar pro time dentro do jogo. A busca preenche o tier
+          sozinho a partir do rank atual na fila solo/duo. */}
+      <FormField
+        label="Riot ID"
+        required
+        error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
+      >
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
             <input
               type="text"
               value={riotId}
@@ -174,32 +160,39 @@ export function ClashConfigPicker() {
                 }
               }}
               placeholder="NomeDoInvocador#TAG"
-              className="input-base flex-1"
+              className="input-base w-full pr-[8.5rem]"
               maxLength={32}
             />
-            <button
-              type="button"
-              onClick={() => void lookupRiotRank()}
-              disabled={riotLookupLoading}
-              className={cn(
-                'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
-                'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
-              )}
-            >
-              <Search className="h-4 w-4" />
-              {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
-            </button>
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+              <InlineFieldSelect
+                value={clashDay ?? 'saturday'}
+                options={CLASH_DAY_OPTIONS}
+                label={day => CLASH_DAY_LABEL[day]}
+                onChange={setClashDay}
+                fieldLabel="dia do Clash"
+              />
+            </div>
           </div>
-          {riotLookupMessage && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
-          {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
-        </FormField>
-      </div>
+          <button
+            type="button"
+            onClick={() => void lookupRiotRank()}
+            disabled={riotLookupLoading}
+            className={cn(
+              'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
+              'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
+            )}
+          >
+            <Search className="h-4 w-4" />
+            {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
+          </button>
+        </div>
+        {riotLookupMessage && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
+        {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
+      </FormField>
 
       {riotVerified && riotAutoFilled && clashTier && detectedTierRanks && (
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">
-            Tier <span className="font-normal normal-case text-ink-muted">(detectado automaticamente via Riot ID)</span>
-          </p>
+          <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Tier</p>
           <div className="relative flex items-center gap-3 p-4 rounded-2xl border-2 border-brand bg-brand/10 shadow-brand">
             <div className="flex items-center shrink-0">
               <RankBadge tier={detectedTierRanks.low} size="xs" showLabel={false} />

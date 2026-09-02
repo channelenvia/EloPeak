@@ -119,26 +119,33 @@ export function BoosterDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">
-            {t('booster.dashboard.welcome')}, {profile?.username}
-            <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
-          </h1>
-          <p className="text-sm text-ink-secondary mt-1">
-            {activeOrdersError
-              ? 'Não foi possível carregar seus pedidos ativos.'
-              : activeOrders?.length
-                ? t('booster.dashboard.activeCount', { count: activeOrders.length })
-                : t('booster.dashboard.noActive')}
-          </p>
+      {/* Mesmo tratamento do header em customer/pages/Dashboard.tsx (glow +
+          nome em gradiente) -- os dois "welcome" de dashboard eram idênticos
+          em estrutura, então ficavam inconsistentes se só um ganhasse o
+          glamour. */}
+      <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-bg-surface/60 px-6 py-5">
+        <div className="absolute inset-0 bg-hero-glow opacity-70 pointer-events-none" />
+        <div className="relative flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t('booster.dashboard.welcome')}, <span className="text-gradient-brand">{profile?.username}</span>
+              <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
+            </h1>
+            <p className="text-sm text-ink-secondary mt-1">
+              {activeOrdersError
+                ? 'Não foi possível carregar seus pedidos ativos.'
+                : activeOrders?.length
+                  ? t('booster.dashboard.activeCount', { count: activeOrders.length })
+                  : t('booster.dashboard.noActive')}
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/booster/jobs">
+              <Briefcase className="h-4 w-4" />
+              {t('booster.dashboard.browseJobs')}
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link to="/booster/jobs">
-            <Briefcase className="h-4 w-4" />
-            {t('booster.dashboard.browseJobs')}
-          </Link>
-        </Button>
       </div>
 
       <RankPerformanceBreakdown boosterUserId={profile?.id} />

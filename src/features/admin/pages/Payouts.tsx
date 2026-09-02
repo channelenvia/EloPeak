@@ -193,7 +193,7 @@ export function AdminPayoutsPage() {
         <StatCard label="Pago" value={currency(paidTotal)} icon={CheckCircle2} tone="bg-success/10 text-success" />
       </div>
 
-      <Card padding="none">
+      <Card variant="operational" padding="none">
         {isLoading ? (
           <div className="p-4"><Skeleton className="h-56 w-full" /></div>
         ) : !requests?.length ? (

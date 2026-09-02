@@ -34,9 +34,9 @@ export function AdminOverview() {
   , [stats?.daily_orders])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-ink">{t('admin.overview.title')}</h1>
+        <h1 className="text-2xl font-bold text-ink">{t('admin.overview.title')}</h1>
         <div className="flex items-center gap-2 text-xs text-ink-muted">
           <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
           {t('admin.overview.live')}

@@ -45,7 +45,7 @@ export function AdminDropsPage() {
       {/* Pending */}
       <section>
         <h3 className="text-base font-semibold text-ink mb-3">Pendentes</h3>
-        <div className="card p-0">
+        <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
           {isLoading ? (
             <div className="p-4"><Skeleton className="h-48 w-full" /></div>
           ) : !pendingRequests.length ? (
@@ -140,7 +140,7 @@ export function AdminDropsPage() {
       {pastRequests.length > 0 && (
         <section>
           <h3 className="text-base font-semibold text-ink mb-3">Histórico</h3>
-          <div className="card p-0">
+          <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
             <Table>
               <TableHeader>
                 <TableRow>

@@ -493,4 +493,3 @@ supabase functions deploy
 ## Licença
 
 Este projeto é proprietário e de uso interno. Todos os direitos reservados.
-a

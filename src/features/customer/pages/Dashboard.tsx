@@ -53,20 +53,26 @@ export function CustomerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">
-            {t('customer.dashboard.welcome')}, {profile?.username}
-            <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
-          </h1>
-          <p className="text-sm text-ink-secondary mt-1">{activeMsg}</p>
+      {/* Mesmo glow sutil de fundo do herói da home (bg-hero-glow) + destaque
+          em gradiente no nome -- antes era um header liso, sem nenhum dos
+          tokens de "glamour" (glow/gradient) já usados alhures no app. */}
+      <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-bg-surface/60 px-6 py-5">
+        <div className="absolute inset-0 bg-hero-glow opacity-70 pointer-events-none" />
+        <div className="relative flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t('customer.dashboard.welcome')}, <span className="text-gradient-brand">{profile?.username}</span>
+              <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
+            </h1>
+            <p className="text-sm text-ink-secondary mt-1">{activeMsg}</p>
+          </div>
+          <Button asChild>
+            <Link to="/orders/new">
+              <Plus className="h-4 w-4" />
+              {t('customer.dashboard.newOrder')}
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link to="/orders/new">
-            <Plus className="h-4 w-4" />
-            {t('customer.dashboard.newOrder')}
-          </Link>
-        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -121,7 +121,7 @@ describe('Tabela master_plus_pricing — 12 combinações válidas, sem preço f
 // a seed da migration atual ao constante do código.
 describe('master_plus_pricing (20260829010000) — seed do banco bate com o preço exibido na página pública', () => {
   const migration = readFileSync(
-    join(__dirname, '..', 'supabase', 'migrations', '20260829010000_master_plus_pricing_rate_increase.sql'),
+    join(__dirname, '..', 'supabase', 'migrations_archive', '20260829010000_master_plus_pricing_rate_increase.sql'),
     'utf-8',
   )
 

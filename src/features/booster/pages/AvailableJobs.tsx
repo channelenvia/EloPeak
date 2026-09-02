@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, History, Lock, Search, Sparkles, Swords, Users } from 'lucide-react'
+import { ArrowLeftRight, Briefcase, History, Lock, Search, Sparkles, Swords, Users } from 'lucide-react'
 import { Button, Card, EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -79,12 +79,24 @@ function exclusiveTimeLeft(job: Order, myUserId?: string): string | null {
 // Texto completo do badge "Exclusivo" -- coaching é sempre exclusivo do
 // booster dono do pacote, permanentemente (nunca cai no pool geral, ver
 // available_boost_orders), então não tem contagem regressiva nenhuma. Pedido
-// vinculado normal ainda mostra o tempo restante da janela de 12h.
+// vinculado normal ainda mostra o tempo restante da janela de 12h. Pedido
+// reatribuído por admin usa o badge próprio (reassignedBadge) em vez deste,
+// mesmo usando o mesmo preferred_booster_id/exclusive_until por baixo.
 function exclusiveBadge(job: Order, myUserId?: string): string | null {
-  if (!myUserId || job.preferred_booster_id !== myUserId) return null
+  if (!myUserId || job.preferred_booster_id !== myUserId || job.reassigned_by_admin) return null
   if (job.service_type === 'coaching') return 'Exclusivo'
   const timeLeft = exclusiveTimeLeft(job, myUserId)
   return timeLeft ? `Exclusivo · ${timeLeft}` : null
+}
+
+// Badge "Reatribuído" -- pedido que um admin tirou de outro booster e
+// reservou pra mim (admin_reassign_booster). Mesma janela/contagem regressiva
+// de um exclusivo normal, mas nunca disputa o slot exclusivo bônus nem o
+// limite normal de 3/4 (ver canAcceptJob e booster_active_slot_counts).
+function reassignedBadge(job: Order, myUserId?: string): string | null {
+  if (!myUserId || job.preferred_booster_id !== myUserId || !job.reassigned_by_admin) return null
+  const timeLeft = exclusiveTimeLeft(job, myUserId)
+  return timeLeft ? `Reatribuído · ${timeLeft}` : 'Reatribuído'
 }
 
 export function AvailableJobsPage() {
@@ -149,6 +161,11 @@ export function AvailableJobsPage() {
 
   const canAcceptJob = (job: Order): boolean => {
     if (!slotInfo) return false
+    // Reatribuído por admin: ilimitado, igual coaching -- não disputa o slot
+    // exclusivo bônus nem o limite normal (ver accept_boost_order/
+    // booster_active_slot_counts). Checa antes do exclusivo "de verdade" já
+    // que os dois usam o mesmo preferred_booster_id/exclusive_until por baixo.
+    if (job.reassigned_by_admin && exclusiveTimeLeft(job, profile?.id)) return true
     // Pedido exclusivo pra mim, ainda dentro da janela: usa o slot bônus
     // (máx 1), independente dos 3 slots normais estarem cheios ou não.
     if (exclusiveTimeLeft(job, profile?.id)) return !slotInfo.exclusive_slot_used
@@ -164,12 +181,12 @@ export function AvailableJobsPage() {
     !search || j.id.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Pedidos atribuídos a este booster (vínculo exclusivo, badge "Exclusivo")
-  // aparecem primeiro -- sort é estável, então a ordem original (created_at)
-  // se mantém dentro de cada grupo.
+  // Pedidos atribuídos a este booster (vínculo exclusivo ou reatribuído,
+  // badge "Exclusivo"/"Reatribuído") aparecem primeiro -- sort é estável,
+  // então a ordem original (created_at) se mantém dentro de cada grupo.
   const sorted = [...filtered].sort((a, b) => {
-    const aMine = exclusiveBadge(a, profile?.id) ? 1 : 0
-    const bMine = exclusiveBadge(b, profile?.id) ? 1 : 0
+    const aMine = (exclusiveBadge(a, profile?.id) || reassignedBadge(a, profile?.id)) ? 1 : 0
+    const bMine = (exclusiveBadge(b, profile?.id) || reassignedBadge(b, profile?.id)) ? 1 : 0
     return bMine - aMine
   })
 
@@ -263,6 +280,7 @@ export function AvailableJobsPage() {
             const isDuo = job.boost_mode === 'duo'
             const blocked = slotInfo && !canAcceptJob(job)
             const exclusiveLabel = exclusiveBadge(job, profile?.id)
+            const reassignedLabel = reassignedBadge(job, profile?.id)
             const coachPackage = job.service_type === 'coaching' && job.booster_service_id
               ? coachingPackageById.get(job.booster_service_id)
               : undefined
@@ -270,7 +288,7 @@ export function AvailableJobsPage() {
             return (
               <Card
                 key={job.id}
-                variant={exclusiveLabel ? 'achievement' : 'standard'}
+                variant={reassignedLabel ? 'attention' : exclusiveLabel ? 'achievement' : 'standard'}
                 className={`h-full flex flex-col hover:border-brand/20 hover:shadow-card-hover transition-all ${exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -289,11 +307,17 @@ export function AvailableJobsPage() {
                   )}
                 </div>
 
-                {(exclusiveLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
+                {(exclusiveLabel || reassignedLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
                   <div className="flex flex-wrap gap-1.5 mb-3">
                     {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
                       <span className="text-[10px] font-bold bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">
                         {job.queue_type === 'solo_duo' ? t('booster.jobs.soloQueue') : t('booster.jobs.flexQueue')}
+                      </span>
+                    )}
+                    {reassignedLabel && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-danger/15 text-danger border border-danger/30">
+                        <ArrowLeftRight className="h-3 w-3" />
+                        {reassignedLabel}
                       </span>
                     )}
                     {exclusiveLabel && (

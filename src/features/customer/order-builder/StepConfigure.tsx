@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { FormField } from '@/components/ui/FormField'
-import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert } from '@/components/ui'
+import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert, InlineFieldSelect } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { cn, RANK_TIER_ORDER } from '@/lib/utils'
@@ -37,6 +37,99 @@ function fetchRiotRank(riotId: string, queue: QueueType) {
     body: { riot_id: riotId, queue },
     requireAuth: true,
   })
+}
+
+const QUEUE_TYPE_OPTIONS: readonly [QueueType, QueueType] = ['solo_duo', 'flex']
+const queueTypeLabel = (q: QueueType) => (q === 'solo_duo' ? 'Solo/Duo' : 'Flex')
+
+// Campo Riot ID compartilhado entre elo_boost e win_boost/md5 (mesma
+// estrutura nos dois fluxos, só troca o handler de verificação e as
+// mensagens de baixo) -- card com glow reagindo ao estado (neutro / erro /
+// verificado) em vez de um input solto, consistente com os outros cards
+// desta página.
+function RiotIdField({
+  queueType, onQueueTypeChange,
+  riotId, onRiotIdChange,
+  onVerify, loading, verified, error,
+  children,
+}: {
+  queueType: QueueType
+  onQueueTypeChange: (queue: QueueType) => void
+  riotId: string
+  onRiotIdChange: (value: string) => void
+  onVerify: () => void
+  loading: boolean
+  verified: boolean
+  error?: string
+  children?: React.ReactNode
+}) {
+  return (
+    <FormField error={error}>
+      <div
+        className={cn(
+          'rounded-2xl border p-4 transition-colors duration-200',
+          error
+            ? 'border-danger/40 bg-danger/5'
+            : verified
+              ? 'border-brand/40 bg-brand/5 shadow-brand'
+              : 'border-border-subtle bg-bg-surface/60',
+        )}
+      >
+        {/* Rótulo dentro do card, no mesmo padrão dos cabeçalhos de coluna
+            de Rank/Vitórias mais abaixo (uppercase, micro, top-left) --
+            antes vinha de fora via FormField, deslocado do conteúdo que
+            rotula. */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+            Riot ID<span className="text-danger ml-0.5">*</span>
+          </p>
+          {verified && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-success">
+              <Check className="h-3 w-3" />
+              Verificado
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={riotId}
+              onChange={e => onRiotIdChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  onVerify()
+                }
+              }}
+              placeholder="NomeDoInvocador#TAG"
+              className="input-base w-full pr-[8.5rem]"
+              maxLength={32}
+            />
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+              <InlineFieldSelect
+                value={queueType}
+                options={QUEUE_TYPE_OPTIONS}
+                label={queueTypeLabel}
+                onChange={onQueueTypeChange}
+                fieldLabel="tipo de fila"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onVerify}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-brand transition-all hover:shadow-brand disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Search className="h-4 w-4" />
+            {loading ? 'Consultando...' : 'Verificar elo'}
+          </button>
+        </div>
+        {children}
+      </div>
+    </FormField>
+  )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -149,7 +242,7 @@ export function StepConfigure() {
 
     setRiotAutoFilled(true)
     setRiotVerified(true)
-    setRiotLookupMessage(result.message ?? 'Rank atual preenchido automaticamente. Você ainda pode alterar os dados.')
+    setRiotLookupMessage(result.message ?? 'Rank atual preenchido automaticamente — você pode ajustar se quiser.')
   }
 
   // Migra o pedido de eloboost unranked pra uma MD5 na mesma fila, já
@@ -461,22 +554,13 @@ export function StepConfigure() {
         {/* Vitórias ou MD5 — NUNCA é escolha livre, o próprio Riot ID abaixo
             decide: conta sem rank nesta fila vira MD5 automaticamente, conta
             já rankeada trava em Vitórias (anti-fraude, o backend rejeita MD5
-            de conta que já saiu do posicionamento de qualquer jeito). Antes
-            era um par de botões desabilitados "simulando" a escolha; virou
-            só uma linha de aviso -- o modo detectado já aparece nos rótulos
-            abaixo (Modalidade, rank/vitórias) e na mensagem pós-verificação. */}
-        {(serviceType === 'win_boost' || serviceType === 'md5') && (
-          <div className="flex items-start gap-2 text-xs text-ink-secondary">
-            <Info className="h-3.5 w-3.5 text-brand shrink-0 mt-0.5" />
-            {!riotVerified ? (
-              <span>Detectamos automaticamente se é Vitórias ou MD5 pelo rank da sua conta, ao verificar o Riot ID abaixo.</span>
-            ) : isMd5 ? (
-              <span><span className="font-semibold text-ink">MD5</span> — sua conta está no posicionamento nesta fila, garantia de 80%+ de win rate.</span>
-            ) : (
-              <span><span className="font-semibold text-ink">Vitórias</span> — sua conta já possui rank nesta fila.</span>
-            )}
-          </div>
-        )}
+            de conta que já saiu do posicionamento de qualquer jeito). Não
+            tem mais uma linha própria anunciando "Vitórias"/"MD5" aqui --
+            fica implícito nos rótulos "Solo Vitórias"/"Solo MD5"/"Duo
+            Vitórias"/"Duo MD5" da Modalidade logo abaixo, sem repetir a
+            mesma informação duas vezes. A explicação genérica de "como
+            funciona a detecção" também saiu daqui, virou um item na
+            descrição do card de WinBoost no step 1 (StepService.tsx). */}
 
         {/* Solo/Duo Vitórias — vale tanto pra Vitórias quanto MD5 (mesma
             escolha, mesmo padrão visual do Modalidade do Elo Boost acima).
@@ -522,74 +606,29 @@ export function StepConfigure() {
           </FormField>
         )}
 
-        {/* Tipo de Fila + Riot ID na mesma linha (fila à esquerda, Riot ID +
-            verificação à direita) -- a fila precisa estar definida antes da
-            busca (decide qual fila a Riot consulta), então fica ao lado do
-            campo que dispara essa busca em vez de numa linha própria acima. */}
+        {/* Riot ID com largura máxima na linha -- o tipo de fila (que
+            precisa estar definido antes da busca, pois decide qual fila a
+            Riot consulta) fica embutido no fim do próprio campo em vez de
+            num FormField à esquerda. */}
         {serviceType === 'elo_boost' && (
-          <div className="grid sm:grid-cols-[2fr_3fr] gap-4 items-start">
-            <FormField label="Tipo de Fila" required>
-              <div className="flex gap-3">
-                {(['solo_duo', 'flex'] as QueueType[]).map(q => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => setQueueType(q)}
-                    className={cn(
-                      'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
-                      queueType === q
-                        ? 'border-brand bg-brand/10 text-brand'
-                        : 'border-border-subtle bg-bg-surface text-ink-secondary hover:border-brand/30',
-                    )}
-                  >
-                    {q === 'solo_duo' ? 'Solo/Duo' : 'Flex'}
-                  </button>
-                ))}
-              </div>
-            </FormField>
-
-            <FormField
-              label="Riot ID"
-              required
-              error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
-            >
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={riotId}
-                  onChange={e => {
-                    setRiotId(e.target.value)
-                    resetLookupMessages()
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      void lookupRiotRank()
-                    }
-                  }}
-                  placeholder="NomeDoInvocador#TAG"
-                  className="input-base flex-1"
-                  maxLength={32}
-                />
-                <button
-                  type="button"
-                  onClick={() => void lookupRiotRank()}
-                  disabled={riotLookupLoading}
-                  className={cn(
-                    'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
-                    'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
-                  )}
-                >
-                  <Search className="h-4 w-4" />
-                  {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
-                </button>
-              </div>
-              {riotLookupMessage && (
-                <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>
-              )}
-              {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
-            </FormField>
-          </div>
+          <RiotIdField
+            queueType={queueType}
+            onQueueTypeChange={setQueueType}
+            riotId={riotId}
+            onRiotIdChange={value => {
+              setRiotId(value)
+              resetLookupMessages()
+            }}
+            onVerify={() => void lookupRiotRank()}
+            loading={riotLookupLoading}
+            verified={riotVerified}
+            error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
+          >
+            {riotLookupMessage && (
+              <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>
+            )}
+            {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
+          </RiotIdField>
         )}
 
         {/* Eloboost sem rank na fila — oferta de migrar o pedido pra MD5 na
@@ -618,73 +657,28 @@ export function StepConfigure() {
           </div>
         )}
 
-        {/* Tipo de Fila + Riot ID na mesma linha, igual ao fluxo de Elo
-            Boost acima -- a consulta usa a fila marcada aqui do lado, e a
-            checagem de elegibilidade MD5 precisa acontecer antes de
-            qualquer outro campo. */}
+        {/* Riot ID com largura máxima na linha, igual ao fluxo de Elo Boost
+            acima -- a consulta usa a fila marcada no seletor embutido no
+            campo, e a checagem de elegibilidade MD5 precisa acontecer antes
+            de qualquer outro campo. */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && (
-          <div className="grid sm:grid-cols-[2fr_3fr] gap-4 items-start">
-            <FormField label="Tipo de Fila" required>
-              <div className="flex gap-3">
-                {(['solo_duo', 'flex'] as QueueType[]).map(q => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => setQueueType(q)}
-                    className={cn(
-                      'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
-                      queueType === q
-                        ? 'border-brand bg-brand/10 text-brand'
-                        : 'border-border-subtle bg-bg-surface text-ink-secondary hover:border-brand/30',
-                    )}
-                  >
-                    {q === 'solo_duo' ? 'Solo/Duo' : 'Flex'}
-                  </button>
-                ))}
-              </div>
-            </FormField>
-
-            <FormField
-              label="Riot ID"
-              required
-              error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
-            >
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={riotId}
-                  onChange={e => {
-                    setRiotId(e.target.value)
-                    resetLookupMessages()
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      void lookupForWinBoost()
-                    }
-                  }}
-                  placeholder="NomeDoInvocador#TAG"
-                  className="input-base flex-1"
-                  maxLength={32}
-                />
-                <button
-                  type="button"
-                  onClick={() => void lookupForWinBoost()}
-                  disabled={riotLookupLoading}
-                  className={cn(
-                    'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
-                    'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
-                  )}
-                >
-                  <Search className="h-4 w-4" />
-                  {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
-                </button>
-              </div>
-              {md5Message && <p className="mt-2 text-xs text-success">{md5Message}</p>}
-              {riotLookupMessage && !md5Message && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
-              {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
-            </FormField>
-          </div>
+          <RiotIdField
+            queueType={queueType}
+            onQueueTypeChange={setQueueType}
+            riotId={riotId}
+            onRiotIdChange={value => {
+              setRiotId(value)
+              resetLookupMessages()
+            }}
+            onVerify={() => void lookupForWinBoost()}
+            loading={riotLookupLoading}
+            verified={riotVerified}
+            error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
+          >
+            {md5Message && <p className="mt-2 text-xs text-success">{md5Message}</p>}
+            {riotLookupMessage && !md5Message && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}
+            {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
+          </RiotIdField>
         )}
 
         {/* Rank + Vitórias/Partidas — win boost / MD5, seção única dividida ao
@@ -698,7 +692,7 @@ export function StepConfigure() {
               {/* ── Rank column ── */}
               <div className="p-4 space-y-4 border-b border-border-subtle md:border-b-0 md:border-r">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
-                  {isMd5 ? 'Rank da Última Temporada' : 'Rank Atual'}
+                  {isMd5 ? 'Rank Anterior' : 'Rank Atual'}
                 </p>
                 <RankLockGrid
                   tiers={RANK_TIER_ORDER}
@@ -711,14 +705,14 @@ export function StepConfigure() {
                 {stepAttempted && !currentRank ? (
                   <p className="text-xs text-danger">Selecione um rank</p>
                 ) : isMd5 ? (
-                  <p className="text-xs text-ink-muted">Sem LP - apenas o rank final da temporada passada.</p>
+                  <p className="text-xs text-ink-muted">Sem LP — apenas o rank da temporada anterior.</p>
                 ) : null}
               </div>
 
               {/* ── Vitórias/Partidas column ── */}
               <div className="p-4 space-y-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
-                  {isMd5 ? 'Número de Partidas' : 'Número de Vitórias'}
+                  {isMd5 ? 'Partidas' : 'Vitórias'}
                 </p>
                 <WinCountButtons
                   value={winsPurchased}
@@ -727,7 +721,7 @@ export function StepConfigure() {
                 />
                 <p className="text-xs text-ink-muted">
                   {isMd5
-                    ? `Máximo ${Math.max(1, md5MatchesRemaining ?? 5)} (partidas restantes detectadas pela Riot)`
+                    ? `Máximo ${Math.max(1, md5MatchesRemaining ?? 5)} (restantes detectadas pela Riot)`
                     : 'Máximo 5'}
                 </p>
               </div>

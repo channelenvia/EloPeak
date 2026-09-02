@@ -53,7 +53,7 @@ serve(async (req) => {
     const [{ data: customerProfile }, { data: boosterProfile }, { data: boosterRow }, { data: orderRow }] = await Promise.all([
       db.from('profiles').select('username, discord_id').eq('id', review.customer_id).maybeSingle(),
       review.booster_id
-        ? db.from('profiles').select('discord_id').eq('id', review.booster_id).maybeSingle()
+        ? db.from('profiles').select('username').eq('id', review.booster_id).maybeSingle()
         : Promise.resolve({ data: null }),
       review.booster_id
         ? db.from('booster_profiles').select('display_name').eq('user_id', review.booster_id).maybeSingle()
@@ -73,13 +73,11 @@ serve(async (req) => {
       : { data: null as { title: string } | null }
     const order = orderRow ? { ...orderRow, coach_package_title: coachPackage?.title ?? null } : null
 
-    // Cliente nunca é @mencionado (marcado) na review -- só o booster, que é
-    // quem a mensagem existe pra divulgar/creditar. Sempre texto puro em vez
-    // de <@discord_id>, mesmo quando o cliente tem discord_id vinculado.
+    // Nem cliente nem booster são @mencionados (marcados) na review --
+    // sempre texto puro com o username de profiles, mesmo quando têm
+    // discord_id vinculado.
     const customerLabel = `**${customerProfile?.username ?? 'Cliente'}**`
-    const boosterLabel = boosterProfile?.discord_id
-      ? `<@${boosterProfile.discord_id}>`
-      : `**${boosterRow?.display_name ?? 'Booster EloPeak'}**`
+    const boosterLabel = `**${boosterProfile?.username ?? 'Booster EloPeak'}**`
     const reviewerName = customerProfile?.username ?? 'Cliente'
     // Link de destino do embed (título clicável) vai pro perfil público do
     // booster (/boosters/:displayName, mesma rota usada em Services.tsx/
