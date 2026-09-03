@@ -13,6 +13,7 @@ const ORDER_STATUS_ICON: Record<OrderStatus, LucideIcon> = {
   draft: FileText,
   awaiting_payment: CreditCard,
   paid: BadgeCheck,
+  pending_review: Clock,
   awaiting_assignment: Search,
   assigned: UserCheck,
   in_progress: Swords,
@@ -21,6 +22,7 @@ const ORDER_STATUS_ICON: Record<OrderStatus, LucideIcon> = {
   awaiting_customer: MessageCircleQuestion,
   completed: CheckCircle2,
   disputed: ShieldAlert,
+  under_review: ShieldAlert,
   refunded: RotateCcw,
   canceled: XCircle,
 }
@@ -35,6 +37,7 @@ const ORDER_STATUS_ACCENT: Record<OrderStatus, string> = {
   draft: 'border-ink-muted bg-ink-muted',
   awaiting_payment: 'border-warning bg-warning',
   paid: 'border-info bg-info',
+  pending_review: 'border-warning bg-warning',
   awaiting_assignment: 'border-info bg-info',
   assigned: 'border-brand bg-brand',
   in_progress: 'border-success bg-success',
@@ -43,6 +46,7 @@ const ORDER_STATUS_ACCENT: Record<OrderStatus, string> = {
   awaiting_customer: 'border-accent bg-accent',
   completed: 'border-success bg-success',
   disputed: 'border-danger bg-danger',
+  under_review: 'border-danger bg-danger',
   refunded: 'border-ink-muted bg-ink-muted',
   canceled: 'border-ink-muted bg-ink-muted',
 }

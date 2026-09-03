@@ -202,7 +202,7 @@
       "boosters": "Boosters",
       "customers": "Clientes",
       "payments": "Pagamentos",
-      "refunds": "Reembolsos",
+      "refunds": "A analisar",
       "role": "Admin",
       "panel": "Painel Admin"
     },
@@ -264,7 +264,7 @@
       "empty": "Nenhum cliente com pedidos nos últimos 30 dias"
     },
     "refunds": {
-      "title": "Reembolsos",
+      "title": "A analisar",
       "table": {
         "id": "ID Reembolso",
         "order": "Pedido",

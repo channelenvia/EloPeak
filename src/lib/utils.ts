@@ -83,6 +83,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   draft: 'Rascunho',
   awaiting_payment: 'Aguardando Pagamento',
   paid: 'Pagamento Confirmado',
+  pending_review: 'Esperando Booster',
   awaiting_assignment: 'Esperando Booster',
   assigned: 'Booster Atribuído',
   in_progress: 'Em Andamento',
@@ -91,6 +92,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   awaiting_customer: 'Aguardando Cliente',
   completed: 'Concluído',
   disputed: 'Disputado',
+  under_review: 'Em análise',
   refunded: 'Reembolsado',
   canceled: 'Cancelado',
 }
@@ -99,6 +101,7 @@ export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   draft: 'text-ink-secondary bg-bg-elevated',
   awaiting_payment: 'text-warning bg-warning/10',
   paid: 'text-info bg-info/10',
+  pending_review: 'text-info bg-info/10',
   awaiting_assignment: 'text-info bg-info/10',
   assigned: 'text-brand bg-brand/10',
   in_progress: 'text-success bg-success/10',
@@ -107,6 +110,7 @@ export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   awaiting_customer: 'text-accent bg-accent/10',
   completed: 'text-success bg-success/10',
   disputed: 'text-danger bg-danger/10',
+  under_review: 'text-danger bg-danger/10',
   refunded: 'text-ink-secondary bg-bg-elevated',
   canceled: 'text-ink-muted bg-bg-elevated',
 }
@@ -136,6 +140,7 @@ export function getOrderStatusGroup(order: Pick<Order, 'status' | 'assigned_boos
     case 'awaiting_payment':
       return 'awaiting_payment'
     case 'paid':
+    case 'pending_review':
     case 'awaiting_assignment':
       return 'awaiting_booster'
     case 'awaiting_customer':
@@ -149,6 +154,7 @@ export function getOrderStatusGroup(order: Pick<Order, 'status' | 'assigned_boos
     case 'completed':
       return 'completed'
     case 'disputed':
+    case 'under_review':
     case 'refunded':
     case 'canceled':
       return 'hidden'

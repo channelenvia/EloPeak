@@ -63,6 +63,8 @@ export const queryKeys = {
     refunds: (filters?: Record<string, unknown>) => ['admin', 'refunds', filters ?? {}] as const,
     drops: (filters?: Record<string, unknown>) => ['admin', 'drops', filters ?? {}] as const,
     payments: () => ['admin', 'payments'] as const,
+    pendingReview: () => ['admin', 'pending-review'] as const,
+    reviewCases: () => ['admin', 'review-cases'] as const,
   },
   reviews: {
     public: (limit: number) => ['reviews', 'public', limit] as const,

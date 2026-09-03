@@ -1507,6 +1507,7 @@ export type Database = {
           access_token_consumed_at: string | null
           access_token_expires_at: string | null
           access_token_id: string | null
+          admin_review_locked: boolean
           assigned_booster_id: string | null
           avg_pdl_gain: number | null
           avg_pdl_loss: number | null
@@ -1554,6 +1555,7 @@ export type Database = {
           pricing_version: string
           queue_type: Database["public"]["Enums"]["queue_type"]
           rank_before_last_drop: Json | null
+          review_release_at: string | null
           riot_id: string | null
           server: string
           service_id: string
@@ -1572,6 +1574,7 @@ export type Database = {
           access_token_consumed_at?: string | null
           access_token_expires_at?: string | null
           access_token_id?: string | null
+          admin_review_locked?: boolean
           assigned_booster_id?: string | null
           avg_pdl_gain?: number | null
           avg_pdl_loss?: number | null
@@ -1619,6 +1622,7 @@ export type Database = {
           pricing_version?: string
           queue_type?: Database["public"]["Enums"]["queue_type"]
           rank_before_last_drop?: Json | null
+          review_release_at?: string | null
           riot_id?: string | null
           server: string
           service_id: string
@@ -1637,6 +1641,7 @@ export type Database = {
           access_token_consumed_at?: string | null
           access_token_expires_at?: string | null
           access_token_id?: string | null
+          admin_review_locked?: boolean
           assigned_booster_id?: string | null
           avg_pdl_gain?: number | null
           avg_pdl_loss?: number | null
@@ -1684,6 +1689,7 @@ export type Database = {
           pricing_version?: string
           queue_type?: Database["public"]["Enums"]["queue_type"]
           rank_before_last_drop?: Json | null
+          review_release_at?: string | null
           riot_id?: string | null
           server?: string
           service_id?: string
@@ -2397,6 +2403,14 @@ export type Database = {
         Args: { p_content: string; p_order_id: string }
         Returns: Json
       }
+      admin_assign_pending_review_order: {
+        Args: { p_order_id: string; p_reason: string; p_target_booster_id: string }
+        Returns: Json
+      }
+      admin_cancel_pending_review_order: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: Json
+      }
       admin_create_manual_refund: {
         Args: { p_amount: number; p_order_id: string; p_reason: string }
         Returns: Json
@@ -2435,6 +2449,10 @@ export type Database = {
         Args: { p_account_id: string }
         Returns: Json
       }
+      admin_set_pending_review_lock: {
+        Args: { p_locked: boolean; p_order_id: string }
+        Returns: Json
+      }
       admin_resolve_order_support: {
         Args: { p_escalation_id: string }
         Returns: Json
@@ -2447,26 +2465,33 @@ export type Database = {
         Args: { p_locked: boolean; p_order_id: string }
         Returns: Json
       }
-      apply_order_drop:
-        | {
-            Args: {
-              p_actor_id: string
-              p_from_status: string
-              p_order_id: string
-              p_reason: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_actor_id: string
-              p_from_status: string
-              p_order_id: string
-              p_reason: string
-              p_target_status?: string
-            }
-            Returns: Json
-          }
+      apply_order_drop: {
+        Args: {
+          p_actor_id: string
+          p_from_status: string
+          p_order_id: string
+          p_reason: string
+          p_requester_role: Database["public"]["Enums"]["drop_requester_role"]
+        }
+        Returns: Json
+      }
+      admin_adjust_booster_balance: {
+        Args: { p_amount: number; p_booster_id: string; p_reason: string }
+        Returns: Json
+      }
+      admin_list_review_cases: {
+        Args: never
+        Returns: {
+          order_id: string
+          order_status: Database["public"]["Enums"]["order_status"]
+          total_price: number
+          customer_id: string | null
+          last_assigned_booster_id: string | null
+          drop_count: number
+          refunded_amount: number
+          updated_at: string
+        }[]
+      }
       approve_booster: {
         Args: { p_booster_id: string; p_new_status: string }
         Returns: Json
@@ -2844,6 +2869,7 @@ export type Database = {
         | "draft"
         | "awaiting_payment"
         | "paid"
+        | "pending_review"
         | "awaiting_assignment"
         | "assigned"
         | "in_progress"
@@ -2852,6 +2878,7 @@ export type Database = {
         | "awaiting_customer"
         | "completed"
         | "disputed"
+        | "under_review"
         | "refunded"
         | "canceled"
       payment_status:
@@ -3030,6 +3057,7 @@ export const Constants = {
         "draft",
         "awaiting_payment",
         "paid",
+        "pending_review",
         "awaiting_assignment",
         "assigned",
         "in_progress",
@@ -3038,6 +3066,7 @@ export const Constants = {
         "awaiting_customer",
         "completed",
         "disputed",
+        "under_review",
         "refunded",
         "canceled",
       ],

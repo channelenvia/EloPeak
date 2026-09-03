@@ -1,8 +1,75 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
-import { getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds } from './queries'
-import { resolveDropRequest } from './mutations'
+import { adminAssignPendingReviewOrder, adminCancelPendingReviewOrder, adminSetPendingReviewLock } from '@/api/orders/mutations'
+import { getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases, listPendingReviewOrders } from './queries'
+import { adminAdjustBoosterBalance, resolveDropRequest } from './mutations'
+
+export function useAdminReviewCases() {
+  const query = useQuery({
+    queryKey: queryKeys.admin.reviewCases(),
+    queryFn: listAdminReviewCases,
+    refetchInterval: 30_000,
+  })
+  useRealtimeInvalidate({
+    channel: 'admin-review-cases',
+    table: 'order_status_events',
+    event: 'INSERT',
+    queryKeys: [queryKeys.admin.reviewCases()],
+  })
+  return query
+}
+
+export function useAdminAdjustBoosterBalance() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminAdjustBoosterBalance,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() }),
+  })
+}
+
+export function usePendingReviewOrders() {
+  const query = useQuery({
+    queryKey: queryKeys.admin.pendingReview(),
+    queryFn: listPendingReviewOrders,
+    refetchInterval: 10_000,
+  })
+  useRealtimeInvalidate({
+    channel: 'admin-pending-review',
+    table: 'order_status_events',
+    event: 'INSERT',
+    queryKeys: [queryKeys.admin.pendingReview()],
+  })
+  return query
+}
+
+export function useAdminSetPendingReviewLock() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminSetPendingReviewLock,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() }),
+  })
+}
+
+export function useAdminCancelPendingReviewOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminCancelPendingReviewOrder,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() }),
+  })
+}
+
+export function useAdminAssignPendingReviewOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminAssignPendingReviewOrder,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() })
+      void queryClient.invalidateQueries({ queryKey: ['booster-slots'] })
+      void queryClient.invalidateQueries({ queryKey: ['boosters', 'with-slots'] })
+    },
+  })
+}
 
 export function useAdminDashboardStats() {
   const query = useQuery({

@@ -63,9 +63,9 @@ supabase/functions/.env
 supabase/functions/.env.local
 !supabase/functions/.env.example
 
-# Old migrations kept locally for reference only — not pushed, to stop
-# bloating commits. New migrations in supabase/migrations/ still get committed.
-supabase/migrations_archive/
+# Historical migrations are versioned because the active migrations depend on
+# objects introduced before the current baseline. Keeping the archive in Git
+# makes fresh database reconstruction and schema-regression tests reproducible.
 
 # Deploy tooling
 .vercel/

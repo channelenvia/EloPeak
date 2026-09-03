@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
-import type { OrderDropRequest, Payment, Refund } from '@/types'
-import type { AdminDashboardStats } from './types'
+import type { Order, OrderDropRequest, Payment, Refund } from '@/types'
+import type { AdminDashboardStats, AdminReviewCase } from './types'
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   const { data, error } = await supabase.rpc('admin_dashboard_stats')
@@ -41,6 +41,22 @@ export async function listAdminPayments(limit = 150): Promise<{
     paidOrderCount: count ?? 0,
     totalReceived: stats.total_revenue,
   }
+}
+
+export async function listPendingReviewOrders(): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('status', 'pending_review')
+    .order('created_at', { ascending: true })
+  if (error) throw normalizeApiError(error)
+  return (data ?? []) as unknown as Order[]
+}
+
+export async function listAdminReviewCases(): Promise<AdminReviewCase[]> {
+  const { data, error } = await supabase.rpc('admin_list_review_cases')
+  if (error) throw normalizeApiError(error)
+  return (data ?? []) as unknown as AdminReviewCase[]
 }
 
 export async function listAdminDropRequests(limit = 100): Promise<OrderDropRequest[]> {

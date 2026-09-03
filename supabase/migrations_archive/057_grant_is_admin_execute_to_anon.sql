@@ -1,0 +1,23 @@
+-- Bug pré-existente encontrado durante QA visual da página pública de
+-- booster: reviews públicas e pacotes de coaching (booster_services) nunca
+-- carregavam para visitantes não autenticados — a Edge/PostgREST retornava
+-- 401 com "permission denied for function is_admin".
+--
+-- Causa raiz: is_admin() nunca teve EXECUTE liberado para o role `anon`.
+-- Isso não é um problema de RLS em si (a policy `(is_public = true) OR
+-- is_admin()` está correta) — é que o Postgres exige permissão de EXECUTE
+-- na função sempre que ela aparece numa expressão de RLS avaliada pelo
+-- role atual, mesmo quando o resultado seria `false` e a outra metade do OR
+-- já bastaria. O mesmo vale transitivamente: qualquer policy que faça um
+-- EXISTS(select ... from tabela_com_rls_referenciando_is_admin) também quebra
+-- para anon, mesmo que a própria policy externa nunca chame is_admin()
+-- diretamente — foi assim que a leitura pública de booster_services
+-- (via subquery em booster_profiles) quebrou também.
+--
+-- is_admin()/current_user_role() são SECURITY DEFINER e stable, e resolvem
+-- por auth.uid() — para uma sessão anônima (auth.uid() is null) sempre
+-- retornam false/null. Liberar EXECUTE para anon não expõe nada: só permite
+-- que a expressão OR seja avaliada até o fim em vez de abortar com erro de
+-- permissão.
+grant execute on function public.is_admin() to anon;
+grant execute on function public.current_user_role() to anon;

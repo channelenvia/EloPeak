@@ -59,7 +59,7 @@ export function AdminDropsPage() {
                   <TableHead>Booster</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead>Vitórias / Derrotas</TableHead>
-                  <TableHead>Conclusão / Pagamento</TableHead>
+                  <TableHead>Valor líquido</TableHead>
                   <TableHead>Há quanto tempo</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
@@ -103,9 +103,18 @@ export function AdminDropsPage() {
                       <span className="text-danger font-semibold">{r.losses_at_request}L</span>
                     </TableCell>
                     <TableCell>
-                      <span className={`font-bold ${r.penalty_amount > 0 ? 'text-success' : 'text-ink-muted'}`}>
-                        {r.penalty_pct}% ({currency(r.penalty_amount)})
-                      </span>
+                      {r.status === 'pending' ? (
+                        <span className="text-[10px] text-ink-muted">Calculado na aprovação</span>
+                      ) : (
+                        <>
+                          <span className={`font-bold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`}>
+                            {currency(r.penalty_amount)}
+                          </span>
+                          <p className="text-[10px] text-ink-muted">
+                            {r.penalty_amount > 0 ? 'recebe' : r.penalty_amount < 0 ? 'deve' : 'neutro'}
+                          </p>
+                        </>
+                      )}
                     </TableCell>
                     <TableCell>{timeAgo(r.created_at)}</TableCell>
                     <TableCell>
@@ -147,7 +156,7 @@ export function AdminDropsPage() {
                   <TableHead>Pedido</TableHead>
                   <TableHead>Origem</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Conclusão / Pagamento</TableHead>
+                  <TableHead>Valor líquido</TableHead>
                   <TableHead>Resolvido</TableHead>
                   <TableHead>Nota admin</TableHead>
                 </TableRow>
@@ -170,7 +179,9 @@ export function AdminDropsPage() {
                         {r.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs">{r.penalty_pct}% ({currency(r.penalty_amount)})</TableCell>
+                    <TableCell className={`text-xs font-semibold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`}>
+                      {currency(r.penalty_amount)}
+                    </TableCell>
                     <TableCell className="text-xs">{r.resolved_at ? timeAgo(r.resolved_at) : '—'}</TableCell>
                     <TableCell><p className="text-xs text-ink-secondary max-w-xs truncate">{r.admin_note ?? '—'}</p></TableCell>
                   </TableRow>

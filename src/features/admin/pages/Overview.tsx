@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDashboardStats } from '@/api/admin'
+import { PendingReviewPanel } from '../components/PendingReviewPanel'
 
 // Cores do gráfico lidas dos mesmos tokens usados no resto do app (ver
 // globals.css) em vez de hex cravado -- Recharts não consegue ler classes
@@ -46,6 +47,8 @@ export function AdminOverview() {
       {isError && (
         <ErrorAlert message="Não foi possível carregar as estatísticas. Valores podem estar desatualizados." />
       )}
+
+      <PendingReviewPanel />
 
       {/* KPIs -- mesmo widget (StatCard) usado no dashboard do cliente, pra
           manter a formatação consistente entre papéis. Boosters pendentes

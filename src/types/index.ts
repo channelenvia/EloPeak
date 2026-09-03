@@ -20,6 +20,7 @@ export type OrderStatus =
   | 'draft'
   | 'awaiting_payment'
   | 'paid'
+  | 'pending_review'
   | 'awaiting_assignment'
   | 'assigned'
   | 'in_progress'
@@ -28,6 +29,7 @@ export type OrderStatus =
   | 'awaiting_customer'
   | 'completed'
   | 'disputed'
+  | 'under_review'
   | 'refunded'
   | 'canceled'
 
@@ -242,6 +244,10 @@ export interface Order {
   // estiver no futuro, o pedido só aparece para esse booster no pool.
   preferred_booster_id: string | null
   exclusive_until: string | null
+  // Janela de revisão de 1 minuto do admin logo após o pagamento (ou envio
+  // de credenciais) -- só preenchido enquanto status === 'pending_review'.
+  review_release_at: string | null
+  admin_review_locked: boolean
   // Riot ID (nome#tag) usado pra verificar automaticamente se o rank alvo
   // foi atingido — só coletado em fluxos que têm target_rank (elo_boost).
   riot_id: string | null
