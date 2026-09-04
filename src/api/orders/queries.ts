@@ -198,6 +198,21 @@ export async function getOrderCustomerNickname(orderId: string): Promise<string 
   return (data as string | null) ?? null
 }
 
+// payments.amount é o valor gravado na hora do pagamento, nunca mutado
+// depois (record_pix_payment) -- diferente de orders.total_price, que muda
+// a cada drop/reatribuição pra refletir o valor pro PRÓXIMO booster (pode
+// crescer num drop negativo), não o que o cliente de fato pagou. "Total
+// pago" no admin tem que vir daqui, não de orders.total_price.
+export async function getOrderPaidAmount(orderId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('order_id', orderId)
+    .eq('status', 'paid')
+  if (error) throw normalizeApiError(error)
+  return (data ?? []).reduce((sum, p) => sum + Number(p.amount), 0)
+}
+
 export async function getBoosterSlotInfo(boosterId: string): Promise<SlotInfo & { allowed: boolean }> {
   const { data, error } = await supabase.rpc('can_booster_accept_order', {
     p_booster_user_id: boosterId,

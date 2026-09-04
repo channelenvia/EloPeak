@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = '2026-08-14'
+export const LEGAL_VERSION = '2026-09-03'
 
 export function hasAcceptedLegal(profile: {
   terms_accepted_at?: string | null

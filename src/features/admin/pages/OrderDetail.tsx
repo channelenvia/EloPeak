@@ -1,7 +1,7 @@
 import { useBoosterServiceDetails } from '@/api/coaching'
 import { useBoostersWithSlots } from '@/api/boosters'
 import type { BoosterWithSlots } from '@/api/boosters'
-import { useAdminDropOrder, useAdminOverrideOrderStatus, useAdminReassignBooster, useOrder, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
+import { useAdminDropOrder, useAdminOverrideOrderStatus, useAdminReassignBooster, useOrder, useOrderPaidAmount, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
 import { AccessTokenSection } from '@/components/order/AccessTokenSection'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
 import { DuoAccountHistoryList } from '@/components/order/DuoAccountHistoryList'
@@ -317,6 +317,7 @@ export function AdminOrderDetailPage() {
   const [dropModalOpen, setDropModalOpen] = useState(false)
 
   const { data: order, isLoading: loadingOrder, isError: orderError, refetch: refetchOrder } = useOrder(id)
+  const { data: paidAmount } = useOrderPaidAmount(id)
   const { data: history } = useOrderStatusHistory(id)
   const { data: coachPackage } = useBoosterServiceDetails(order?.booster_service_id ?? undefined)
 
@@ -405,7 +406,7 @@ export function AdminOrderDetailPage() {
       })(),
     },
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
-    { icon: Wallet, label: 'Total pago', value: currency(order.total_price) },
+    { icon: Wallet, label: 'Total pago', value: currency(paidAmount ?? order.total_price) },
   ]
 
   return (

@@ -16,6 +16,7 @@ export const queryKeys = {
     duoPartnerRiotId: (orderId: string) => ['orders', 'duo-partner-riot-id', orderId] as const,
     duoAccountHistory: (orderId: string) => ['orders', 'duo-account-history', orderId] as const,
     customerNickname: (orderId: string) => ['orders', 'customer-nickname', orderId] as const,
+    paidAmount: (orderId: string) => ['orders', 'paid-amount', orderId] as const,
     availableJobs: () => ['orders', 'available-jobs'] as const,
     chat: (orderId: string) => ['orders', 'chat', orderId] as const,
     chatMentionTargets: (orderId: string) => ['orders', 'chat-mention-targets', orderId] as const,

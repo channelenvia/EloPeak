@@ -5,7 +5,7 @@ import { useRealtimeInvalidate } from '@/api/core/realtime'
 import type { OrderStatus, ServiceType } from '@/types'
 import { secondsRemaining } from './cooldown'
 import {
-  getBoosterOrder, getBoosterSlotInfo, getCustomerOrderState, getOrder, getOrderCustomerNickname, getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getPendingDropRequest,
+  getBoosterOrder, getBoosterSlotInfo, getCustomerOrderState, getOrder, getOrderCustomerNickname, getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderBoosterDuoMatches, listOrderCoachingTopics,
   listOrderMatches, listOrderStatusHistory,
 } from './queries'
@@ -61,6 +61,14 @@ export function useOrderCustomerNickname(orderId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.orders.customerNickname(orderId ?? ''),
     queryFn: () => getOrderCustomerNickname(orderId!),
+    enabled: !!orderId,
+  })
+}
+
+export function useOrderPaidAmount(orderId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.orders.paidAmount(orderId ?? ''),
+    queryFn: () => getOrderPaidAmount(orderId!),
     enabled: !!orderId,
   })
 }
