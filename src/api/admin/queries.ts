@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
+import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
 import type { Order, OrderDropRequest, Payment, Refund } from '@/types'
 import type { AdminDashboardStats, AdminReviewCase } from './types'
 
@@ -46,7 +47,7 @@ export async function listAdminPayments(limit = 150): Promise<{
 export async function listPendingReviewOrders(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select(ORDER_SAFE_COLUMNS)
     .eq('status', 'pending_review')
     .order('created_at', { ascending: true })
   if (error) throw normalizeApiError(error)

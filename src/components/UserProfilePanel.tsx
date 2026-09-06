@@ -172,7 +172,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="p-1.5 rounded-lg hover:bg-bg-elevated text-ink-muted hover:text-ink transition-colors"
+            className="p-1.5 rounded-lg hover:bg-bg-raised text-ink-muted hover:text-ink transition-colors"
           >
             <X className="h-4 w-4" />
           </button>

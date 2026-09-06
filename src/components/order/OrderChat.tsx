@@ -101,7 +101,7 @@ function MentionPopover({
           onMouseDown={(event) => { event.preventDefault(); onSelect(t) }}
           className={cn(
             'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
-            i === highlight ? 'bg-brand/10' : 'hover:bg-bg-elevated',
+            i === highlight ? 'bg-brand/10' : 'hover:bg-bg-raised',
           )}
         >
           <Avatar src={t.avatar_url} name={t.name} size="sm" />
@@ -292,7 +292,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
               type="button"
               onClick={onClose}
               aria-label="Fechar chat"
-              className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-elevated transition-colors"
+              className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -302,7 +302,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
 
       {!available ? (
         <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 text-center">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-elevated">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-raised">
             <Lock className="h-5 w-5 text-ink-muted" />
           </div>
           <p className="text-sm font-semibold text-ink">Chat ainda indisponível</p>
@@ -356,7 +356,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
                         className={cn(
                           'min-w-0 whitespace-pre-wrap break-words rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                           isMe && !isAdmin && 'rounded-tr-sm bg-brand text-white',
-                          !isMe && !isAdmin && 'rounded-tl-sm bg-bg-elevated text-ink',
+                          !isMe && !isAdmin && 'rounded-tl-sm bg-bg-raised text-ink',
                           isAdmin && 'border border-accent/30 bg-accent/10 text-ink',
                         )}
                       >

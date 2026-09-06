@@ -30,7 +30,7 @@ export function PixWaitingPanel({
   return (
     <div className="space-y-5">
       {/* Amount + timer */}
-      <div className="flex items-center justify-between bg-bg-elevated rounded-2xl px-5 py-4">
+      <div className="flex items-center justify-between bg-bg-raised rounded-2xl px-5 py-4">
         <div>
           <p className="text-xs text-ink-muted">Total a pagar</p>
           <p className="text-2xl font-extrabold text-brand mt-0.5">{currency(totalPrice)}</p>
@@ -52,7 +52,7 @@ export function PixWaitingPanel({
             />
           </div>
         ) : (
-          <div className="w-64 h-64 bg-bg-elevated rounded-2xl flex flex-col items-center justify-center gap-2 text-center px-4">
+          <div className="w-64 h-64 bg-bg-raised rounded-2xl flex flex-col items-center justify-center gap-2 text-center px-4">
             <QrCode className="h-12 w-12 text-ink-muted animate-pulse" />
             <p className="text-[11px] text-ink-muted">Gerando imagem do QR code… use o código copia-e-cola abaixo enquanto isso.</p>
           </div>
@@ -65,7 +65,7 @@ export function PixWaitingPanel({
         <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wide">
           Ou copie o código PIX Copia e Cola
         </p>
-        <div className="bg-bg-elevated rounded-xl px-3 py-2.5 text-xs font-mono text-ink-secondary truncate">
+        <div className="bg-bg-raised rounded-xl px-3 py-2.5 text-xs font-mono text-ink-secondary truncate">
           {qrCode.slice(0, 60)}…
         </div>
         {copyError && <p className="text-xs text-danger">{copyError}</p>}

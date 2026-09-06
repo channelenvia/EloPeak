@@ -45,7 +45,7 @@ function SlotIndicator({ slots }: { slots: SlotInfo }) {
         <span className="text-ink-muted">Slots:</span>
         <span className={`font-bold ${color}`}>{total_count}/{max_total}</span>
       </div>
-      <div className="h-3 w-px bg-bg-elevated" />
+      <div className="h-3 w-px bg-bg-raised" />
       <div className="flex items-center gap-2 text-[11px] text-ink-secondary">
         <span className="flex items-center gap-1">
           <Swords className="h-3 w-3" />
@@ -56,7 +56,7 @@ function SlotIndicator({ slots }: { slots: SlotInfo }) {
           Duo: {duo_count}
         </span>
       </div>
-      <div className="h-3 w-px bg-bg-elevated" />
+      <div className="h-3 w-px bg-bg-raised" />
       <span className={`flex items-center gap-1 text-[11px] font-medium ${exclusive_slot_used ? 'text-ink-muted' : 'text-accent'}`}>
         <Sparkles className="h-3 w-3" />
         Exclusivo: {exclusive_slot_used ? 1 : 0}/1
@@ -79,12 +79,35 @@ function exclusiveTimeLeft(job: Order, myUserId?: string): string | null {
 // Texto completo do badge "Exclusivo" -- coaching é sempre exclusivo do
 // booster dono do pacote, permanentemente (nunca cai no pool geral, ver
 // available_boost_orders), então não tem contagem regressiva nenhuma. Pedido
-// vinculado normal ainda mostra o tempo restante da janela de 12h.
+// vinculado normal ainda mostra o tempo restante da janela de 12h. Pedido
+// reatribuído pelo admin usa o badge roxo próprio (reassignedBadge) em vez
+// deste -- excluído aqui pra não duplicar badge no mesmo card.
 function exclusiveBadge(job: Order, myUserId?: string): string | null {
-  if (!myUserId || job.preferred_booster_id !== myUserId) return null
+  if (!myUserId || job.preferred_booster_id !== myUserId || job.reassigned_by_admin) return null
   if (job.service_type === 'coaching') return 'Exclusivo'
   const timeLeft = exclusiveTimeLeft(job, myUserId)
   return timeLeft ? `Exclusivo · ${timeLeft}` : null
+}
+
+// Coaching reatribuído nunca expira (exclusive_until fica null pra sempre,
+// ver admin_reassign_booster) -- pra qualquer outro serviço, passada a
+// janela de 12h o backend (accept_boost_order) para de tratar como
+// exclusivo e cai nas regras normais de slot, então o front tem que parar
+// de bypassar o limite também, senão o botão "Aceitar" fica habilitado pro
+// backend rejeitar em seguida.
+function isReassignedToMe(job: Order, myUserId?: string): boolean {
+  if (!myUserId || job.preferred_booster_id !== myUserId || !job.reassigned_by_admin) return false
+  return !job.exclusive_until || new Date(job.exclusive_until).getTime() > Date.now()
+}
+
+// Roxo em vez do amarelo de "Exclusivo" -- visualmente distingue "o admin me
+// entregou esse pedido" de "eu escolhi/comprei esse pedido exclusivo". Ainda
+// usa a mesma janela de 12h (accept_boost_order trata os dois com a mesma
+// regra de prazo), só o rótulo e a cor mudam.
+function reassignedBadge(job: Order, myUserId?: string): string | null {
+  if (!isReassignedToMe(job, myUserId)) return null
+  const timeLeft = exclusiveTimeLeft(job, myUserId)
+  return timeLeft ? `Reatribuído · ${timeLeft}` : 'Reatribuído'
 }
 
 export function AvailableJobsPage() {
@@ -149,6 +172,10 @@ export function AvailableJobsPage() {
 
   const canAcceptJob = (job: Order): boolean => {
     if (!slotInfo) return false
+    // Reatribuído pelo admin: accept_boost_order ignora tanto o limite de 3
+    // slots normais quanto o slot exclusivo bônus pra esse caso (não foi o
+    // booster que escolheu, é uma entrega direta) -- sempre aceitável.
+    if (isReassignedToMe(job, profile?.id)) return true
     // Pedido exclusivo pra mim, ainda dentro da janela: usa o slot bônus
     // (máx 1), independente dos 3 slots normais estarem cheios ou não.
     if (exclusiveTimeLeft(job, profile?.id)) return !slotInfo.exclusive_slot_used
@@ -168,8 +195,8 @@ export function AvailableJobsPage() {
   // aparecem primeiro -- sort é estável, então a ordem original (created_at)
   // se mantém dentro de cada grupo.
   const sorted = [...filtered].sort((a, b) => {
-    const aMine = exclusiveBadge(a, profile?.id) ? 1 : 0
-    const bMine = exclusiveBadge(b, profile?.id) ? 1 : 0
+    const aMine = (exclusiveBadge(a, profile?.id) || reassignedBadge(a, profile?.id)) ? 1 : 0
+    const bMine = (exclusiveBadge(b, profile?.id) || reassignedBadge(b, profile?.id)) ? 1 : 0
     return bMine - aMine
   })
 
@@ -240,12 +267,16 @@ export function AvailableJobsPage() {
           counts={serviceFilters.counts}
           queue={serviceFilters.queue}
           onQueueChange={serviceFilters.setQueue}
+          queueCounts={serviceFilters.queueCounts}
           mode={serviceFilters.mode}
           onModeChange={serviceFilters.setMode}
+          modeCounts={serviceFilters.modeCounts}
           clashTier={serviceFilters.clashTier}
           onClashTierChange={serviceFilters.setClashTier}
+          clashTierCounts={serviceFilters.clashTierCounts}
           clashDay={serviceFilters.clashDay}
           onClashDayChange={serviceFilters.setClashDay}
+          clashDayCounts={serviceFilters.clashDayCounts}
         />
       </div>
 
@@ -263,6 +294,7 @@ export function AvailableJobsPage() {
             const isDuo = job.boost_mode === 'duo'
             const blocked = slotInfo && !canAcceptJob(job)
             const exclusiveLabel = exclusiveBadge(job, profile?.id)
+            const reassignedLabel = reassignedBadge(job, profile?.id)
             const coachPackage = job.service_type === 'coaching' && job.booster_service_id
               ? coachingPackageById.get(job.booster_service_id)
               : undefined
@@ -270,8 +302,15 @@ export function AvailableJobsPage() {
             return (
               <Card
                 key={job.id}
-                variant={exclusiveLabel ? 'achievement' : 'standard'}
-                className={`h-full flex flex-col hover:border-brand/20 hover:shadow-card-hover transition-all ${exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
+                variant={exclusiveLabel || reassignedLabel ? 'achievement' : 'standard'}
+                // Mesmo hover "glamour" do Card variant="interactive" (ver
+                // Card.tsx) -- borda + sombra + leve elevação -- só sem o wash
+                // de fundo, pra não brigar com o wash do card exclusivo/
+                // reatribuído. Sem cursor-pointer: o card em si não navega,
+                // só o botão "Aceitar" lá dentro. Reatribuído usa o mesmo
+                // tom de roxo do rank Mestre (rank-master) já existente no
+                // design system, em vez do amarelo accent do exclusivo.
+                className={`h-full flex flex-col hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out ${reassignedLabel ? 'bg-rank-master/[0.05] border-t-rank-master/40' : exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
@@ -282,21 +321,26 @@ export function AvailableJobsPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide shrink-0 ${
                       isDuo
                         ? 'bg-brand/10 text-brand border border-brand/20'
-                        : 'bg-bg-elevated text-ink-muted'
+                        : 'bg-bg-raised text-ink-muted'
                     }`}>
                       {getOrderModeType(job)}
                     </span>
                   )}
                 </div>
 
-                {(exclusiveLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
+                {(exclusiveLabel || reassignedLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
                   <div className="flex flex-wrap gap-1.5 mb-3">
                     {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
-                      <span className="text-[10px] font-bold bg-bg-elevated text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                      <span className="text-[10px] font-bold bg-bg-raised text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">
                         {job.queue_type === 'solo_duo' ? t('booster.jobs.soloQueue') : t('booster.jobs.flexQueue')}
                       </span>
                     )}
-                    {exclusiveLabel && (
+                    {reassignedLabel ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-rank-master/15 text-rank-master border border-rank-master/30">
+                        <Sparkles className="h-3 w-3" />
+                        {reassignedLabel}
+                      </span>
+                    ) : exclusiveLabel && (
                       <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-accent/15 text-accent border border-accent/30">
                         <Sparkles className="h-3 w-3" />
                         {exclusiveLabel}

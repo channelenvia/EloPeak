@@ -121,11 +121,11 @@ export function BoosterPublicProfilePage() {
             {/* Concluídos + rank pico */}
             <div className="grid grid-cols-2 gap-2">
               {statCells.map(({ key, icon: Icon, label, value, color, rankTier, rankDivision }) => (
-                <div key={key} className="rounded-xl bg-bg-elevated/50 p-2.5 flex flex-col items-center gap-1">
+                <div key={key} className="rounded-xl bg-bg-raised/50 p-2.5 flex flex-col items-center gap-1">
                   {rankTier ? (
                     <RankBadge tier={rankTier} division={rankDivision as never} size="xs" showLabel={false} />
                   ) : Icon ? (
-                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-bg-elevated border border-border-subtle">
+                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-bg-raised border border-border-subtle">
                       <Icon className={`h-6 w-6 ${color}`} />
                     </span>
                   ) : null}
@@ -178,7 +178,7 @@ export function BoosterPublicProfilePage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {services.map(s => (
-              <div key={s.id} className="rounded-xl border border-border-subtle bg-bg-elevated/30 overflow-hidden flex flex-col">
+              <div key={s.id} className="rounded-xl border border-border-subtle bg-bg-raised/30 overflow-hidden flex flex-col">
                 <div className="h-1 bg-success shrink-0" />
                 <div className="p-5 flex flex-col gap-2.5 flex-1">
                 <div>
@@ -280,7 +280,7 @@ export function BoosterPublicProfilePage() {
             <ServiceTagPills lanes={viewingService.lanes} champions={viewingService.champions} specialties={viewingService.specialties} labeled />
             <div className={cn('grid gap-3 pt-4 border-t border-border-subtle', viewingService.tempo ? 'grid-cols-2' : 'grid-cols-1')}>
               {viewingService.tempo && (
-                <div className="rounded-xl bg-bg-elevated/50 p-3 flex items-center justify-center gap-2">
+                <div className="rounded-xl bg-bg-raised/50 p-3 flex items-center justify-center gap-2">
                   <Clock className="h-4 w-4 text-ink-muted" />
                   <span className="text-sm font-bold text-ink">{viewingService.tempo}</span>
                 </div>

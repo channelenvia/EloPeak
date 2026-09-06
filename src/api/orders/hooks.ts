@@ -5,7 +5,8 @@ import { useRealtimeInvalidate } from '@/api/core/realtime'
 import type { OrderStatus, ServiceType } from '@/types'
 import { secondsRemaining } from './cooldown'
 import {
-  getBoosterOrder, getBoosterSlotInfo, getCustomerOrderState, getOrder, getOrderCustomerNickname, getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getPendingDropRequest,
+  getAdminOrderTabCounts, getBoosterOrder, getBoosterOrderTabCounts, getBoosterSlotInfo, getCustomerOrderState, getCustomerOrderTabCounts, getOrder, getOrderCustomerNickname,
+  getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderBoosterDuoMatches, listOrderCoachingTopics,
   listOrderMatches, listOrderStatusHistory,
 } from './queries'
@@ -15,7 +16,7 @@ import {
   revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
 } from './mutations'
-import type { AdminOrdersTab, BoosterOrdersTab } from './types'
+import type { OrderListTab } from './types'
 
 // Pedido individual: Realtime + fallback conservador (30s) no lugar do
 // polling agressivo de 4-15s que existia em cada página antes desta camada.
@@ -91,10 +92,10 @@ export function useBoosterOrder(orderId: string | undefined) {
   return query
 }
 
-export function useCustomerOrders(customerId: string | undefined, limit?: number) {
+export function useCustomerOrders(customerId: string | undefined, tab: OrderListTab = 'all', limit?: number, includeCanceled = false) {
   const query = useQuery({
-    queryKey: queryKeys.orders.customerList(customerId ?? '', { limit }),
-    queryFn: () => listCustomerOrders(customerId!, limit),
+    queryKey: queryKeys.orders.customerList(customerId ?? '', { tab, limit, includeCanceled }),
+    queryFn: () => listCustomerOrders(customerId!, tab, limit, includeCanceled),
     enabled: !!customerId,
     refetchInterval: 30_000,
   })
@@ -105,10 +106,23 @@ export function useCustomerOrders(customerId: string | undefined, limit?: number
     channel: `customer-orders-${customerId ?? 'none'}`,
     table: 'order_status_events',
     event: 'INSERT',
-    queryKeys: customerId ? [queryKeys.orders.customerList(customerId, { limit })] : [],
+    queryKeys: customerId
+      ? [queryKeys.orders.customerList(customerId, { tab, limit, includeCanceled }), queryKeys.orders.customerTabCounts(customerId)]
+      : [],
     enabled: !!customerId,
   })
   return query
+}
+
+// Total por aba (ver OrderStatusFilterDropdown), independente da aba
+// selecionada agora -- por isso não depende de `tab` como useCustomerOrders.
+export function useCustomerOrderTabCounts(customerId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.orders.customerTabCounts(customerId ?? ''),
+    queryFn: () => getCustomerOrderTabCounts(customerId!),
+    enabled: !!customerId,
+    refetchInterval: 30_000,
+  })
 }
 
 export function useAvailableJobs() {
@@ -128,10 +142,10 @@ export function useAvailableJobs() {
 
 // page é 1-based (UI); listBoosterOrdersPage espera um offset 0-based (que
 // ela mesma multiplica por pageSize internamente).
-export function useBoosterOrdersPage(boosterId: string | undefined, tab: BoosterOrdersTab, page: number, pageSize: number) {
+export function useBoosterOrdersPage(boosterId: string | undefined, tab: OrderListTab, page: number, pageSize: number, includeCanceled = false) {
   const query = useQuery({
-    queryKey: queryKeys.orders.boosterList(boosterId ?? '', { tab, page, pageSize }),
-    queryFn: () => listBoosterOrdersPage({ boosterId: boosterId!, tab, offset: page - 1, pageSize }),
+    queryKey: queryKeys.orders.boosterList(boosterId ?? '', { tab, page, pageSize, includeCanceled }),
+    queryFn: () => listBoosterOrdersPage({ boosterId: boosterId!, tab, offset: page - 1, pageSize, includeCanceled }),
     enabled: !!boosterId,
     refetchInterval: 30_000,
   })
@@ -144,25 +158,48 @@ export function useBoosterOrdersPage(boosterId: string | undefined, tab: Booster
     channel: `booster-orders-list-${boosterId ?? 'none'}`,
     table: 'order_status_events',
     event: 'INSERT',
-    queryKeys: boosterId ? [queryKeys.orders.boosterList(boosterId, { tab, page, pageSize })] : [],
+    queryKeys: boosterId
+      ? [queryKeys.orders.boosterList(boosterId, { tab, page, pageSize, includeCanceled }), queryKeys.orders.boosterTabCounts(boosterId)]
+      : [],
     enabled: !!boosterId,
   })
   return query
 }
 
-export function useAdminOrders(tab: AdminOrdersTab = 'all', serviceType?: ServiceType | 'all') {
+// Total por aba (ver OrderStatusFilterDropdown) -- independente de página/aba
+// selecionada, por isso é um hook à parte de useBoosterOrdersPage.
+export function useBoosterOrderTabCounts(boosterId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.orders.boosterTabCounts(boosterId ?? ''),
+    queryFn: () => getBoosterOrderTabCounts(boosterId!),
+    enabled: !!boosterId,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useAdminOrders(tab: OrderListTab = 'all', serviceType?: ServiceType | 'all', includeCanceled = false) {
   const query = useQuery({
-    queryKey: queryKeys.orders.adminList({ status: tab, serviceType }),
-    queryFn: () => listAdminOrders(tab, serviceType),
+    queryKey: queryKeys.orders.adminList({ status: tab, serviceType, includeCanceled }),
+    queryFn: () => listAdminOrders(tab, serviceType, undefined, includeCanceled),
     refetchInterval: 30_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-orders',
     table: 'order_status_events',
     event: 'INSERT',
-    queryKeys: [queryKeys.orders.adminList({ status: tab, serviceType })],
+    queryKeys: [queryKeys.orders.adminList({ status: tab, serviceType, includeCanceled }), queryKeys.orders.adminTabCounts()],
   })
   return query
+}
+
+// Total por aba (ver OrderStatusFilterDropdown), independente da aba/tipo de
+// serviço selecionado agora.
+export function useAdminOrderTabCounts() {
+  return useQuery({
+    queryKey: queryKeys.orders.adminTabCounts(),
+    queryFn: getAdminOrderTabCounts,
+    refetchInterval: 30_000,
+  })
 }
 
 export function useOrderStatusHistory(orderId: string | undefined) {

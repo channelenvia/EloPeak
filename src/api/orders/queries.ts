@@ -1,12 +1,12 @@
 import { supabase } from '@/lib/supabase'
 import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
 import { normalizeApiError } from '@/api/core/errors'
-import type { ServiceType } from '@/types'
+import type { OrderStatus, ServiceType } from '@/types'
 import type {
-  AdminOrdersTab, BoosterDuoMatch, BoosterOrdersPage, BoosterOrdersTab, CustomerOrderState, DuoAccountHistoryEntry, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch,
-  OrderRankVerification, OrderStatusHistory, SlotInfo,
+  BoosterDuoMatch, BoosterOrdersPage, CustomerOrderState, DuoAccountHistoryEntry, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch,
+  OrderListTab, OrderListTabCounts, OrderRankVerification, OrderStatusHistory, SlotInfo,
 } from './types'
-import { ADMIN_HIDDEN_STATUSES, ADMIN_IN_PROGRESS_STATUSES, boosterOrderTabStatuses } from './types'
+import { HIDDEN_STATUSES_FILTER, ORDER_LIST_TABS, orderListTabStatuses } from './types'
 
 export async function getOrder(orderId: string): Promise<Order> {
   const { data, error } = await supabase.from('orders').select(ORDER_SAFE_COLUMNS).eq('id', orderId).single()
@@ -23,16 +23,13 @@ export async function getBoosterOrder(orderId: string): Promise<Order> {
   return getOrder(orderId)
 }
 
-export async function listCustomerOrders(customerId: string, limit = 100): Promise<Order[]> {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(ORDER_SAFE_COLUMNS)
-    .eq('customer_id', customerId)
-    // draft (carrinho nunca finalizado) e canceled/refunded/disputed nunca
-    // aparecem pro cliente -- só o admin tem uma auditoria à parte pra esses.
-    .not('status', 'in', '(draft,canceled,refunded,disputed)')
-    .order('created_at', { ascending: false })
-    .limit(limit)
+export async function listCustomerOrders(customerId: string, tab: OrderListTab = 'all', limit = 100, includeCanceled = false): Promise<Order[]> {
+  let query = supabase.from('orders').select(ORDER_SAFE_COLUMNS).eq('customer_id', customerId).order('created_at', { ascending: false }).limit(limit)
+  const statuses = orderListTabStatuses(tab, includeCanceled)
+  // draft (carrinho nunca finalizado) nunca aparece pro cliente -- mesmo
+  // padrão do admin, cada cliente só vê os próprios pedidos.
+  query = statuses ? query.in('status', statuses) : query.not('status', 'in', HIDDEN_STATUSES_FILTER)
+  const { data, error } = await query
   if (error) throw normalizeApiError(error, 'Não foi possível carregar seus pedidos.')
   return (data ?? []) as unknown as Order[]
 }
@@ -55,47 +52,68 @@ export async function listAvailableJobs(limit = 300): Promise<Order[]> {
 
 export async function listBoosterOrdersPage(params: {
   boosterId: string
-  tab: BoosterOrdersTab
+  tab: OrderListTab
   offset: number
   pageSize: number
+  includeCanceled?: boolean
 }): Promise<BoosterOrdersPage> {
-  const { boosterId, tab, offset, pageSize } = params
+  const { boosterId, tab, offset, pageSize, includeCanceled = false } = params
   const from = offset * pageSize
   const to = from + pageSize - 1
-  const { data, error } = await supabase
-    .from('orders')
-    .select(ORDER_SAFE_COLUMNS)
-    .eq('assigned_booster_id', boosterId)
-    .in('status', boosterOrderTabStatuses(tab))
-    .order('created_at', { ascending: false })
-    .range(from, to)
+  let query = supabase.from('orders').select(ORDER_SAFE_COLUMNS).eq('assigned_booster_id', boosterId).order('created_at', { ascending: false }).range(from, to)
+  const statuses = orderListTabStatuses(tab, includeCanceled)
+  query = statuses ? query.in('status', statuses) : query.not('status', 'in', HIDDEN_STATUSES_FILTER)
+  const { data, error } = await query
   if (error) throw normalizeApiError(error, 'Não foi possível carregar seus pedidos.')
   const orders = (data ?? []) as unknown as Order[]
   return { orders, nextOffset: orders.length === pageSize ? offset + 1 : undefined }
 }
 
-export async function listAdminOrders(tab: AdminOrdersTab = 'all', serviceType?: ServiceType | 'all', limit = 100): Promise<Order[]> {
+export async function listAdminOrders(tab: OrderListTab = 'all', serviceType?: ServiceType | 'all', limit = 100, includeCanceled = false): Promise<Order[]> {
   let query = supabase.from('orders').select(ORDER_SAFE_COLUMNS).order('created_at', { ascending: false }).limit(limit)
-  if (tab === 'completed') {
-    query = query.eq('status', 'completed')
-  } else if (tab === 'in_progress') {
-    // "Aguardando algo" (pagamento, booster, credenciais, drop) conta como
-    // em andamento pro admin -- é a correção do bug de "Aguardando Booster"
-    // aparecer como aba própria separada de "Em andamento".
-    query = query.in('status', ADMIN_IN_PROGRESS_STATUSES)
-  } else if (tab === 'canceled') {
-    // Auditoria -- único lugar do sistema (só pro admin) que mostra
-    // cancelados/reembolsados/disputados.
-    query = query.in('status', ADMIN_HIDDEN_STATUSES)
-  } else {
-    // "Todos" nunca inclui draft (carrinho nunca finalizado) nem
-    // cancelados/reembolsados/disputados -- auditoria é opt-in (aba "Cancelados").
-    query = query.not('status', 'in', '(draft,canceled,refunded,disputed)')
-  }
+  const statuses = orderListTabStatuses(tab, includeCanceled)
+  query = statuses ? query.in('status', statuses) : query.not('status', 'in', HIDDEN_STATUSES_FILTER)
   if (serviceType && serviceType !== 'all') query = query.eq('service_type', serviceType)
   const { data, error } = await query
   if (error) throw normalizeApiError(error, 'Não foi possível carregar os pedidos.')
   return (data ?? []) as unknown as Order[]
+}
+
+// Contagem por aba pro dropdown de status (ver OrderStatusFilterDropdown) --
+// queries `count: 'exact', head: true` em paralelo (sem baixar linha
+// nenhuma), uma por aba (+ uma extra só pro sub-filtro "Cancelados" dentro de
+// Concluídos), escopadas pelo mesmo filtro de dono das listagens
+// (customer_id/assigned_booster_id/nenhum pro admin). Deliberadamente
+// ignora o filtro de tipo de serviço e a busca por texto -- mesmo recorte
+// que os contadores de categoria já usam hoje (contam antes do filtro de
+// busca), só que no eixo de status.
+async function orderTabCounts(ownerFilter?: { column: 'customer_id' | 'assigned_booster_id'; value: string }): Promise<OrderListTabCounts> {
+  async function countStatuses(statuses: OrderStatus[] | null): Promise<number> {
+    let query = supabase.from('orders').select('id', { count: 'exact', head: true })
+    if (ownerFilter) query = query.eq(ownerFilter.column, ownerFilter.value)
+    query = statuses ? query.in('status', statuses) : query.not('status', 'in', HIDDEN_STATUSES_FILTER)
+    const { count, error } = await query
+    if (error) throw normalizeApiError(error, 'Não foi possível carregar os totais de pedidos.')
+    return count ?? 0
+  }
+
+  const [tabEntries, canceled] = await Promise.all([
+    Promise.all(ORDER_LIST_TABS.map(async (tab) => [tab, await countStatuses(orderListTabStatuses(tab))] as const)),
+    countStatuses(['canceled']),
+  ])
+  return { ...Object.fromEntries(tabEntries), canceled } as OrderListTabCounts
+}
+
+export async function getCustomerOrderTabCounts(customerId: string): Promise<OrderListTabCounts> {
+  return orderTabCounts({ column: 'customer_id', value: customerId })
+}
+
+export async function getBoosterOrderTabCounts(boosterId: string): Promise<OrderListTabCounts> {
+  return orderTabCounts({ column: 'assigned_booster_id', value: boosterId })
+}
+
+export async function getAdminOrderTabCounts(): Promise<OrderListTabCounts> {
+  return orderTabCounts()
 }
 
 export async function listOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]> {

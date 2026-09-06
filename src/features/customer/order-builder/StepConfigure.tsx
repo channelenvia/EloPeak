@@ -768,7 +768,7 @@ export function StepConfigure() {
                     não tem PDL alvo — o preço depende da faixa do PDL atual,
                     não de um alvo informado pelo cliente. */}
                 {currentRank && (
-                  <div className="rounded-xl border border-border-subtle bg-bg-elevated/20 p-3 space-y-2.5">
+                  <div className="rounded-xl border border-border-subtle bg-bg-raised/20 p-3 space-y-2.5">
                     {currentIsMasterPlus ? (
                       <PdlFieldRow fields={[
                         { label: 'PDL Atual', value: currentPdl, min: 0, max: 9999, onChange: setCurrentPdl, disabled: true },

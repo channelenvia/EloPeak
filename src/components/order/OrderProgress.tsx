@@ -22,7 +22,7 @@ function ProgressBar({ percent, tone = 'brand', locked = false }: { percent: num
   const clamped = Math.max(0, Math.min(100, percent))
   return (
     <div className="relative">
-      <div className={cn('h-2 w-full rounded-full bg-bg-elevated overflow-hidden', locked && 'blur-[3px] opacity-60')}>
+      <div className={cn('h-2 w-full rounded-full bg-bg-raised overflow-hidden', locked && 'blur-[3px] opacity-60')}>
         <div
           className={`h-full rounded-full transition-all ${tone === 'success' ? 'bg-success' : 'bg-brand'}`}
           style={{ width: `${clamped}%` }}

@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn, initials } from '@/lib/utils'
 import { resolveRiotAvatarUrl } from '@/lib/riotAssets'
 
-const avatarVariants = cva('relative flex shrink-0 overflow-hidden rounded-full bg-bg-elevated', {
+const avatarVariants = cva('relative flex shrink-0 overflow-hidden rounded-full bg-bg-raised', {
   variants: {
     size: {
       xs: 'h-6 w-6 text-[10px]',

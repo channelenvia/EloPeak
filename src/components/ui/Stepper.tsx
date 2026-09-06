@@ -30,7 +30,7 @@ export function Stepper({ steps, currentStep, completedSteps = [] }: StepperProp
                     'flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold transition-all',
                     isCompleted && 'border-brand bg-brand text-white',
                     isCurrent && !isCompleted && 'border-brand bg-brand/10 text-brand',
-                    !isCurrent && !isCompleted && 'border-border-subtle bg-bg-elevated text-ink-muted'
+                    !isCurrent && !isCompleted && 'border-border-subtle bg-bg-raised text-ink-muted'
                   )}
                 >
                   {isCompleted ? (
@@ -52,7 +52,7 @@ export function Stepper({ steps, currentStep, completedSteps = [] }: StepperProp
                 <div
                   className={cn(
                     'h-px flex-1 mx-2 mt-[-1rem]',
-                    isCompleted ? 'bg-brand' : 'bg-bg-elevated'
+                    isCompleted ? 'bg-brand' : 'bg-bg-raised'
                   )}
                 />
               )}

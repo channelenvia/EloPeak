@@ -88,7 +88,7 @@ export function AdminPaymentsPage() {
                   <TableCell className="font-semibold text-ink" data-tabular>{currency(payment.amount)}</TableCell>
                   <TableCell className="capitalize">{payment.payment_method_type ?? '—'}</TableCell>
                   <TableCell>
-                    <StatusBadge className={PAYMENT_STATUS_COLOR[payment.status] ?? 'border-border-strong bg-bg-elevated text-ink-muted'}>
+                    <StatusBadge className={PAYMENT_STATUS_COLOR[payment.status] ?? 'border-border-strong bg-bg-raised text-ink-muted'}>
                       {PAYMENT_STATUS_LABEL[payment.status] ?? payment.status}
                     </StatusBadge>
                   </TableCell>

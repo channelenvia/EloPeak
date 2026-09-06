@@ -47,7 +47,7 @@ export function OrderSoundSettings() {
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors"
+        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors"
         aria-label="Som de novo pedido"
       >
         {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
@@ -96,7 +96,7 @@ export function OrderSoundSettings() {
                   key={id}
                   className={cn(
                     'flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors',
-                    soundId === id ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-card',
+                    soundId === id ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-surface',
                   )}
                 >
                   <button
@@ -109,7 +109,7 @@ export function OrderSoundSettings() {
                   <button
                     onClick={() => preview(id)}
                     aria-label={`Ouvir ${label}`}
-                    className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-elevated transition-colors shrink-0"
+                    className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors shrink-0"
                   >
                     <Play className="h-3.5 w-3.5" />
                   </button>

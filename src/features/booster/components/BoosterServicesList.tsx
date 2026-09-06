@@ -101,7 +101,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
             'text-xs font-bold px-2.5 py-1 rounded-full',
             services.length >= MAX_SERVICES
               ? 'bg-warning/15 text-warning border border-warning/25'
-              : 'bg-bg-elevated text-ink-muted',
+              : 'bg-bg-raised text-ink-muted',
           )}>
             {services.length}/{MAX_SERVICES}
           </span>
@@ -142,7 +142,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
         </div>
       ) : services.length === 0 && !adding ? (
         <div className="card flex flex-col items-center justify-center py-12 text-center gap-4">
-          <div className="h-10 w-10 rounded-2xl bg-bg-elevated flex items-center justify-center">
+          <div className="h-10 w-10 rounded-2xl bg-bg-raised flex items-center justify-center">
             <Package className="h-5 w-5 text-ink-muted" />
           </div>
           <div>

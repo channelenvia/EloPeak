@@ -19,17 +19,15 @@ export default {
           surface:     'rgb(var(--color-bg-surface) / <alpha-value>)',
           raised:      'rgb(var(--color-bg-raised) / <alpha-value>)',
           interactive: 'rgb(var(--color-bg-interactive) / <alpha-value>)',
-          // Novo degrau intermediário (conteúdo aninhado dentro de um card já
-          // elevado, ex.: métrica compacta dentro de um card grande). Chave
-          // própria ("inset"), NÃO reaproveita "elevated" — esse nome já é
-          // sinônimo consolidado de bg-raised em ~200 usos existentes.
+          // Degrau intermediário (conteúdo aninhado dentro de um card já
+          // elevado, ex.: métrica compacta dentro de um card grande). Note
+          // que a variável CSS (--color-bg-elevated) e a classe Tailwind
+          // "bg-inset" têm nomes diferentes de propósito — "elevated" como
+          // classe já tinha sido usado como sinônimo de bg-raised (removido
+          // no rename que unificou os ~60 arquivos legados).
           inset:       'rgb(var(--color-bg-elevated) / <alpha-value>)',
           // Scrim de modal/overlay — sempre com alpha, nunca cor sólida.
           scrim:       'rgb(var(--color-bg-scrim) / <alpha-value>)',
-          // Sinônimos (nomes originais, mantidos pra não forçar rename em
-          // ~60 páginas ainda não reconstruídas — ver Estágios 5-8).
-          card:        'rgb(var(--color-bg-surface) / <alpha-value>)',
-          elevated:    'rgb(var(--color-bg-raised) / <alpha-value>)',
         },
         border: {
           subtle: 'rgb(var(--color-border-subtle) / <alpha-value>)',

@@ -98,7 +98,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 }
 
 export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
-  draft: 'text-ink-secondary bg-bg-elevated',
+  draft: 'text-ink-secondary bg-bg-raised',
   awaiting_payment: 'text-warning bg-warning/10',
   paid: 'text-info bg-info/10',
   pending_review: 'text-info bg-info/10',
@@ -111,8 +111,8 @@ export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   completed: 'text-success bg-success/10',
   disputed: 'text-danger bg-danger/10',
   under_review: 'text-danger bg-danger/10',
-  refunded: 'text-ink-secondary bg-bg-elevated',
-  canceled: 'text-ink-muted bg-bg-elevated',
+  refunded: 'text-ink-secondary bg-bg-raised',
+  canceled: 'text-ink-muted bg-bg-raised',
 }
 
 // Agrupamento padronizado dos 13 status brutos em 6 grupos visíveis (mais
@@ -178,7 +178,7 @@ export const ORDER_STATUS_GROUP_COLOR: Record<OrderStatusGroup, string> = {
   in_progress: 'text-success bg-success/10',
   drop_requested: 'text-danger bg-danger/10',
   completed: 'text-success bg-success/10',
-  hidden: 'text-ink-muted bg-bg-elevated',
+  hidden: 'text-ink-muted bg-bg-raised',
 }
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -194,8 +194,8 @@ export const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   pending: 'text-warning bg-warning/10 border-warning/20',
   paid: 'text-success bg-success/10 border-success/20',
   failed: 'text-danger bg-danger/10 border-danger/20',
-  refunded: 'text-ink-secondary bg-bg-elevated border-bg-elevated',
-  partially_refunded: 'text-ink-secondary bg-bg-elevated border-bg-elevated',
+  refunded: 'text-ink-secondary bg-bg-raised border-bg-raised',
+  partially_refunded: 'text-ink-secondary bg-bg-raised border-bg-raised',
   disputed: 'text-danger bg-danger/10 border-danger/20',
 }
 
@@ -257,8 +257,8 @@ export const BOOSTER_STATUS_COLOR: Record<BoosterStatus, string> = {
   under_review: 'text-info bg-info/10',
   approved: 'text-success bg-success/10',
   suspended: 'text-danger bg-danger/10',
-  rejected: 'text-ink-muted bg-bg-elevated',
-  removed: 'text-ink-muted bg-bg-elevated',
+  rejected: 'text-ink-muted bg-bg-raised',
+  removed: 'text-ink-muted bg-bg-raised',
 }
 
 // ─── Payout request status ──────────────────────────────────────────────────
@@ -282,7 +282,7 @@ export const PAYOUT_REQUEST_STATUS_COLOR: Record<PayoutRequestStatus, string> = 
   approved: 'text-brand bg-brand/10',
   paid: 'text-success bg-success/10',
   rejected: 'text-danger bg-danger/10',
-  canceled: 'text-ink-muted bg-bg-elevated',
+  canceled: 'text-ink-muted bg-bg-raised',
 }
 
 // ─── Service label ────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ const buttonVariants = cva(
         // Superfície Primary/CTA — brilho verde reservado pra ação principal
         // de um contexto (disciplina de glow: raro e proposital).
         primary:
-          'bg-brand text-white shadow-brand hover:bg-brand-hover hover:shadow-brand active:scale-[0.98]',
+          'bg-brand text-ink-inverse shadow-brand hover:bg-brand-hover hover:shadow-brand active:scale-[0.98]',
         accent:
           'bg-accent text-bg-base shadow-accent hover:bg-accent-hover active:scale-[0.98]',
         // Antes usava bg-bg-overlay (token de scrim) como borda/hover — aqui
@@ -24,11 +24,11 @@ const buttonVariants = cva(
         outline:
           'border border-border-subtle text-ink-secondary hover:border-brand/50 hover:text-ink hover:bg-brand/10 active:scale-[0.98]',
         danger:
-          'bg-danger text-white hover:bg-danger/90 active:scale-[0.98]',
+          'bg-danger text-ink-inverse hover:bg-danger/90 active:scale-[0.98]',
         'danger-ghost':
           'text-danger hover:bg-danger/10 active:scale-[0.98]',
         success:
-          'bg-success text-white hover:bg-success/90 active:scale-[0.98]',
+          'bg-success text-ink-inverse hover:bg-success/90 active:scale-[0.98]',
         link:
           'text-brand underline-offset-4 hover:underline p-0 h-auto',
       },

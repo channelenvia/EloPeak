@@ -140,7 +140,7 @@ export function StepExtras() {
                       'relative flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all duration-150',
                       selected
                         ? 'border-brand bg-brand/10 shadow-brand'
-                        : 'border-border-subtle bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+                        : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
                     )}
                   >
                     {selected && (
@@ -148,7 +148,7 @@ export function StepExtras() {
                     )}
                     <div className={cn(
                       'h-9 w-9 rounded-xl flex items-center justify-center shrink-0',
-                      selected ? 'bg-brand text-white' : 'bg-bg-elevated text-ink-secondary',
+                      selected ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
                     )}>
                       <Icon className="h-4 w-4" />
                     </div>
@@ -188,7 +188,7 @@ export function StepExtras() {
                       'relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center transition-all duration-150',
                       isSelected
                         ? 'border-brand bg-brand/10'
-                        : 'border-border-subtle bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+                        : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
                     )}
                   >
                     {isSelected && (
@@ -198,7 +198,7 @@ export function StepExtras() {
                     {/* Discount badge */}
                     <span className={cn(
                       'text-[10px] font-black px-2 py-0.5 rounded-full',
-                      isSelected ? 'bg-brand text-white' : 'bg-bg-elevated text-ink-secondary',
+                      isSelected ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
                     )}>
                       -{discountPct}%
                     </span>

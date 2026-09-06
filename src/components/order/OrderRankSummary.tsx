@@ -15,7 +15,7 @@ import type { Order } from '@/types'
 export function WinsRemainingBadge({ purchased, remaining }: { purchased: number; remaining: number }) {
   return (
     <div className="flex items-center gap-2.5 min-w-0 shrink-0">
-      <div className="flex items-center justify-center bg-bg-elevated border border-border-subtle shrink-0 w-20 h-20 rounded-2xl p-2.5">
+      <div className="flex items-center justify-center bg-bg-raised border border-border-subtle shrink-0 w-20 h-20 rounded-2xl p-2.5">
         <span className="text-2xl font-extrabold text-ink-muted leading-none" data-tabular>{purchased}</span>
       </div>
       <div className="min-w-0">

@@ -11,6 +11,9 @@ export const queryKeys = {
       ['orders', 'booster', boosterId, filters ?? {}] as const,
     adminList: (filters?: Record<string, unknown>) =>
       ['orders', 'admin', filters ?? {}] as const,
+    customerTabCounts: (customerId: string) => ['orders', 'customer-tab-counts', customerId] as const,
+    boosterTabCounts: (boosterId: string) => ['orders', 'booster-tab-counts', boosterId] as const,
+    adminTabCounts: () => ['orders', 'admin-tab-counts'] as const,
     detail: (orderId: string) => ['orders', 'detail', orderId] as const,
     state: (orderId: string) => ['orders', 'state', orderId] as const,
     duoPartnerRiotId: (orderId: string) => ['orders', 'duo-partner-riot-id', orderId] as const,

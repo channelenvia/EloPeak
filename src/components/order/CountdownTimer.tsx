@@ -34,7 +34,7 @@ export function CountdownTimer({ startedAt, estimatedHours }: CountdownTimerProp
   const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000))
 
   return (
-    <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-bg-elevated text-ink-secondary">
+    <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-bg-raised text-ink-secondary">
       <Clock className="h-3.5 w-3.5 shrink-0" />
       <span>
         {days > 0 && `${days}d `}{hours}h {minutes}min restantes

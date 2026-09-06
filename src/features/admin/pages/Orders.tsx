@@ -4,24 +4,14 @@ import { Skeleton, EmptyState, ErrorAlert, Button, Pagination } from '@/componen
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
-import { ORDER_STATUS_GROUP_LABEL } from '@/lib/utils'
-import type { AdminOrdersTab } from '@/api/orders'
+import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
+import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
 import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
-import { useAdminOrders } from '@/api/orders'
-
-// Padronizado com OrderHistory.tsx (cliente) e booster/Orders.tsx: sempre as
-// mesmas 3 abas (Todos/Em andamento/Concluído). "Em andamento" aqui inclui
-// todo pedido "aguardando algo" (pagamento, booster, credenciais, drop) --
-// não é mais uma aba própria separada de "Aguardando Booster".
-const STATUS_OPTS: { label: string; value: Exclude<AdminOrdersTab, 'canceled'> }[] = [
-  { label: ORDER_STATUS_GROUP_LABEL.in_progress, value: 'in_progress' },
-  { label: ORDER_STATUS_GROUP_LABEL.completed,   value: 'completed' },
-  { label: 'Todos',                              value: 'all' },
-]
+import { useAdminOrders, useAdminOrderTabCounts } from '@/api/orders'
 
 export function AdminOrdersPage() {
-  const [tab, setTab] = useState<AdminOrdersTab>('in_progress')
+  const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
   const { t } = useTranslation()
   const currency = useCurrency()
@@ -30,10 +20,12 @@ export function AdminOrdersPage() {
   // padrão de AvailableJobs.tsx (booster) e "Meus Pedidos" (cliente). Serviço
   // sempre busca 'all' do servidor pra essa filtragem cobrir os 100 mais
   // recentes inteiros, não só os que já vieram de um tipo pré-filtrado.
-  const { data: orders, isLoading, isError, refetch } = useAdminOrders(tab, 'all')
+  const { data: orders, isLoading, isError, refetch } = useAdminOrders(statusFilter.tab, 'all', statusFilter.includeCanceled)
+  const { data: tabCounts } = useAdminOrderTabCounts()
   const serviceFilters = useServiceFilters(orders)
+  const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
 
-  const filtered = serviceFilters.filtered.filter((o) =>
+  const filtered = statusFilter.applySubFilters(serviceFilters.filtered).filter((o) =>
     !search || o.id.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -58,30 +50,19 @@ export function AdminOrdersPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
             <input className="input-base pl-8 py-1.5 text-xs" placeholder={t('admin.orders.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <div className="flex gap-1 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl p-1 overflow-x-auto">
-            {STATUS_OPTS.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => setTab(value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${tab === value ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* Auditoria à parte do grupo padrão -- cancelados/reembolsados/disputados
-              nunca aparecem em Todos/Em andamento/Concluído, só aqui, opt-in. */}
-          <button
-            onClick={() => setTab(tab === 'canceled' ? 'all' : 'canceled')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 border ${
-              tab === 'canceled'
-                ? 'bg-danger/10 text-danger border-danger/20'
-                : 'text-ink-muted border-transparent hover:text-ink-secondary hover:border-border-subtle'
-            }`}
-            title="Auditoria: pedidos cancelados, reembolsados e disputados"
-          >
-            Ver cancelados
-          </button>
+          <OrderStatusFilterDropdown
+            tab={statusFilter.tab}
+            onTabChange={statusFilter.setTab}
+            counts={tabCounts}
+            dropped={statusFilter.dropped}
+            onDroppedChange={statusFilter.setDropped}
+            droppedCount={subCounts.dropped}
+            overdue={statusFilter.overdue}
+            onOverdueChange={statusFilter.setOverdue}
+            overdueCount={subCounts.overdue}
+            includeCanceled={statusFilter.includeCanceled}
+            onIncludeCanceledChange={statusFilter.setIncludeCanceled}
+          />
         </div>
         <ServiceFilterBar
           category={serviceFilters.category}
@@ -89,12 +70,16 @@ export function AdminOrdersPage() {
           counts={serviceFilters.counts}
           queue={serviceFilters.queue}
           onQueueChange={serviceFilters.setQueue}
+          queueCounts={serviceFilters.queueCounts}
           mode={serviceFilters.mode}
           onModeChange={serviceFilters.setMode}
+          modeCounts={serviceFilters.modeCounts}
           clashTier={serviceFilters.clashTier}
           onClashTierChange={serviceFilters.setClashTier}
+          clashTierCounts={serviceFilters.clashTierCounts}
           clashDay={serviceFilters.clashDay}
           onClashDayChange={serviceFilters.setClashDay}
+          clashDayCounts={serviceFilters.clashDayCounts}
         />
       </div>
 

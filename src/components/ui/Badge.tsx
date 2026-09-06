@@ -15,7 +15,7 @@ import {
 const badgeVariants = cva('badge', {
   variants: {
     variant: {
-      neutral: 'text-ink-secondary bg-bg-elevated',
+      neutral: 'text-ink-secondary bg-bg-raised',
       brand: 'text-brand bg-brand/10',
       accent: 'text-accent bg-accent/10',
       success: 'text-success bg-success/10',

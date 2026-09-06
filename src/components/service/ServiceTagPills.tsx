@@ -77,7 +77,7 @@ export function ServiceTagPills({ lanes, champions, specialties, compact, labele
   })
 
   const specialtyNodes = specialties?.map(s => (
-    <span key={s} className={cn(pillCls, 'font-medium bg-bg-elevated', compact ? 'text-ink-muted' : 'text-ink-secondary')}>
+    <span key={s} className={cn(pillCls, 'font-medium bg-bg-raised', compact ? 'text-ink-muted' : 'text-ink-secondary')}>
       <Sparkles className={cn('shrink-0', labeled ? 'h-4 w-4' : 'h-3.5 w-3.5')} />{SPECIALTY_LABEL[s] ?? s}
     </span>
   ))

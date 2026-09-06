@@ -35,7 +35,7 @@
 
     --color-ink:           237 238 239;   /* #EDEEEF */
     --color-ink-secondary: 160 163 168;   /* #A0A3A8 */
-    --color-ink-muted:     108 111 117;   /* #6C6F75 */
+    --color-ink-muted:     135 139 146;   /* #878B92 -- lightened from #6C6F75 (3.4-3.65:1, below AA) to clear 4.5:1 on both bg-surface and bg-raised */
     --color-ink-inverse:   14  14  16;
 
     /* Marca e acento — únicas fontes de verdade (Tailwind consome via

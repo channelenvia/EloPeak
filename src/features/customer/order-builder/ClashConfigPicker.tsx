@@ -119,7 +119,7 @@ export function ClashConfigPicker() {
                 'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
                 boostMode === mode
                   ? 'border-brand bg-brand/10 shadow-brand'
-                  : 'border-border-subtle bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+                  : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
               )}
             >
               <p className={cn('text-sm font-bold', boostMode === mode ? 'text-brand' : 'text-ink')}>{title}</p>

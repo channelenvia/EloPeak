@@ -29,11 +29,11 @@ const csPerMinTone = (cs: number | null | undefined) => toneFromThresholds(cs, 7
 const ratingTone = (rating: number | null | undefined) => toneFromThresholds(rating, 4.5, 3.5)
 
 // Mesma badge quadradinha do mini-perfil do booster (Rank Máximo/
-// Concluídos): fundo bg-bg-elevated/50, ícone em cima, valor em negrito,
+// Concluídos): fundo bg-bg-raised/50, ícone em cima, valor em negrito,
 // label pequeno em caps embaixo.
 function StatCell({ icon: Icon, label, value, valueClassName }: { icon: LucideIcon; label: string; value: string; valueClassName?: string }) {
   return (
-    <div className="rounded-xl bg-bg-elevated/50 p-2.5 flex flex-col items-center gap-1">
+    <div className="rounded-xl bg-bg-raised/50 p-2.5 flex flex-col items-center gap-1">
       <Icon className="h-5 w-5 text-ink-muted" />
       <p className={cn('text-xs font-bold text-ink text-center leading-tight', valueClassName)} data-tabular>{value}</p>
       <p className="text-[10px] text-ink-muted uppercase tracking-wide">{label}</p>

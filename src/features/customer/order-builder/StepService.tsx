@@ -106,7 +106,7 @@ export function StepService({ fullWidth }: { fullWidth?: boolean }) {
               fullWidth ? 'p-6' : 'p-5',
               serviceType === type
                 ? 'border-brand bg-brand/10 shadow-brand'
-                : 'border-border-subtle bg-bg-card hover:border-brand/40 hover:bg-bg-elevated cursor-pointer'
+                : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised cursor-pointer'
             )}
           >
             {serviceType === type ? (
@@ -116,7 +116,7 @@ export function StepService({ fullWidth }: { fullWidth?: boolean }) {
                 {badge}
               </span>
             ) : null}
-            <div className={cn('rounded-xl flex items-center justify-center shrink-0', fullWidth ? 'h-11 w-11' : 'h-10 w-10', serviceType === type ? 'bg-brand text-white' : 'bg-bg-elevated text-ink-secondary')}>
+            <div className={cn('rounded-xl flex items-center justify-center shrink-0', fullWidth ? 'h-11 w-11' : 'h-10 w-10', serviceType === type ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary')}>
               <Icon className="h-5 w-5" />
             </div>
             <div>

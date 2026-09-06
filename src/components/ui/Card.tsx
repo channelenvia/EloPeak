@@ -18,8 +18,11 @@ const cardVariants = cva('transition-all duration-base', {
       glass: 'card-glass',
       // Standard — agrupamento geral de informação. É o card "default".
       standard: 'card',
-      // Interactive — clicável/navegável (order cards, booster cards).
-      interactive: 'card cursor-pointer hover:bg-bg-raised/90 hover:border-border-strong hover:shadow-card-hover',
+      // Interactive — clicável/navegável (order cards, booster cards). Mesmo
+      // hover exato do card da aba Jobs (ver AvailableJobs.tsx): só borda +
+      // sombra + leve elevação, sem tingir o fundo -- fonte única aqui pra
+      // todo card clicável do app.
+      interactive: 'card cursor-pointer hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out',
       // Primary — o objeto mais importante de contexto na tela (pedido
       // ativo, job ativo). Quem decide acender um glow de marca é quem usa o
       // componente (via className com shadow-brand), não o Card em si.

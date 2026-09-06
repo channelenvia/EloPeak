@@ -4,7 +4,7 @@
  */
 export function DiscordAccountNotice() {
   return (
-    <div className="rounded-xl border border-border-subtle bg-bg-elevated/30 p-3 space-y-2">
+    <div className="rounded-xl border border-border-subtle bg-bg-raised/30 p-3 space-y-2">
       <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Conta Discord</p>
       <p className="text-[11px] text-ink-secondary leading-relaxed">
         Precisa trocar a conta do Discord vinculada? Por segurança, essa alteração deve ser

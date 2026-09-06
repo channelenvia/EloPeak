@@ -73,7 +73,7 @@ export function AvatarIconPicker({ currentUrl, onSelect, maxIcons = 240, gridCla
       ) : (
         <div className="grid grid-cols-6 gap-1.5">
           {Array.from({ length: 18 }).map((_, i) => (
-            <div key={i} className="aspect-square rounded-lg bg-bg-elevated animate-pulse" />
+            <div key={i} className="aspect-square rounded-lg bg-bg-raised animate-pulse" />
           ))}
         </div>
       )}

@@ -218,7 +218,6 @@ export interface Order {
   discount_price: number
   estimated_hours: number | null
   customer_notes: string | null
-  booster_notes: string | null
   wins_played: number
   losses_played: number
   assigned_booster_id: string | null
@@ -244,6 +243,12 @@ export interface Order {
   // estiver no futuro, o pedido só aparece para esse booster no pool.
   preferred_booster_id: string | null
   exclusive_until: string | null
+  // true quando a reserva em preferred_booster_id veio de admin_reassign_
+  // booster (admin escolheu esse booster pra um pedido que já tinha dono ou
+  // que estava parado no pool), não de compra direta de perfil/coaching.
+  // Card na aba Jobs é roxo "Reatribuído" em vez de amarelo "Exclusivo", e
+  // accept_boost_order ignora o limite de 1 slot exclusivo pra esse caso.
+  reassigned_by_admin: boolean
   // Janela de revisão de 1 minuto do admin logo após o pagamento (ou envio
   // de credenciais) -- só preenchido enquanto status === 'pending_review'.
   review_release_at: string | null

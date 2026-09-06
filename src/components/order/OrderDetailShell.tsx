@@ -111,7 +111,7 @@ export function OrderDetailShell({
           </div>
 
           {order.customer_notes && (
-            <div className="mt-5 bg-bg-elevated rounded-xl p-3">
+            <div className="mt-5 bg-bg-raised rounded-xl p-3">
               <p className="text-xs text-ink-muted mb-1">{notesLabel}</p>
               <p className="text-sm text-ink-secondary">{order.customer_notes}</p>
             </div>

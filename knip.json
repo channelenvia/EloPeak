@@ -10,15 +10,15 @@
   ],
   "ignore": [
     "src/lib/database.types.ts",
-    "supabase/functions/_shared/orderPricing.test.ts",
-    "supabase/functions/_shared/riotLookup.test.ts"
+    "supabase/functions/_shared/*.test.ts"
   ],
   "ignoreBinaries": ["supabase"],
   "ignoreDependencies": [
     "shadcn",
     "@fontsource-variable/inter",
     "@fontsource-variable/jetbrains-mono",
-    "@fontsource-variable/space-grotesk"
+    "@fontsource-variable/space-grotesk",
+    "vitest-environment-jsdom`"
   ],
   "ignoreExportsUsedInFile": true
 }

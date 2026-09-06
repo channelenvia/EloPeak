@@ -46,7 +46,7 @@ function TopBoosterCard({ entry, position }: { entry: TopBoosterEntry; position:
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center bg-bg-elevated rounded-xl py-2.5">
+      <div className="grid grid-cols-3 gap-2 text-center bg-bg-raised rounded-xl py-2.5">
         <div>
           <p className={cn('text-base font-extrabold', medal.text)}>{entry.win_rate_pct != null ? `${entry.win_rate_pct}%` : '—'}</p>
           <p className="text-[10px] text-ink-muted uppercase tracking-wide">Win rate</p>
@@ -199,7 +199,7 @@ export function BoostersPage() {
             <section>
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Trophy className="h-5 w-5 text-yellow-400" />
-                <h2 className="text-xl font-black text-ink">Top 3 Boosters</h2>
+                <h2 className="text-xl font-black text-ink">Top {top3.length} Booster{top3.length > 1 ? 's' : ''}</h2>
                 <Trophy className="h-5 w-5 text-yellow-400" />
               </div>
               <p className="text-center text-xs text-ink-muted mb-8 flex items-center justify-center gap-1.5">

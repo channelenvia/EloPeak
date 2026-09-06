@@ -46,7 +46,7 @@ export function ClashDayBadge({ createdAt, clashDay }: { createdAt: string; clas
   const { day, month } = getClashDateParts(createdAt, clashDay)
   return (
     <div className="flex items-center gap-3 min-w-0 shrink-0">
-      <div className="flex items-center justify-center bg-bg-elevated border border-border-subtle shrink-0 w-20 h-20 rounded-2xl p-2">
+      <div className="flex items-center justify-center bg-bg-raised border border-border-subtle shrink-0 w-20 h-20 rounded-2xl p-2">
         <span className="text-lg font-extrabold text-ink leading-none" data-tabular>{day}/{month}</span>
       </div>
       <div className="min-w-0">

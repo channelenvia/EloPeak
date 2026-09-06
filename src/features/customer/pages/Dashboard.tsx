@@ -39,7 +39,7 @@ export function CustomerDashboard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const currency = useCurrency()
-  const { data: orders, isLoading } = useCustomerOrders(profile?.id, 20)
+  const { data: orders, isLoading } = useCustomerOrders(profile?.id, 'all', 20)
   const { data: stats } = useCustomerDashboardStats(profile?.id)
 
   const activeCount = stats?.activeOrders ?? 0

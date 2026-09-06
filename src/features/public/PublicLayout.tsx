@@ -44,7 +44,7 @@ export function PublicLayout() {
             ].map(({ href, label }) => (
               <Link key={href} to={href}
                 className={cn('px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                  pathname === href ? 'text-ink bg-bg-elevated' : 'text-ink-secondary hover:text-ink hover:bg-bg-elevated/60'
+                  pathname === href ? 'text-ink bg-bg-raised' : 'text-ink-secondary hover:text-ink hover:bg-bg-raised/60'
                 )}
               >
                 {label}
@@ -67,7 +67,7 @@ export function PublicLayout() {
 
           {/* Mobile toggle */}
           <button
-            className="lg:hidden ml-auto p-2 rounded-lg text-ink-secondary hover:bg-bg-elevated"
+            className="lg:hidden ml-auto p-2 rounded-lg text-ink-secondary hover:bg-bg-raised"
             onClick={() => setMobileOpen(!mobileOpen)}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -86,7 +86,7 @@ export function PublicLayout() {
               { href: '/apply?booster=1', label: t('nav.applyBooster')  },
             ].map(({ href, label }) => (
               <Link key={href} to={href} onClick={() => setMobileOpen(false)}
-                className="block px-3 py-2.5 rounded-xl text-sm text-ink-secondary hover:text-ink hover:bg-bg-elevated"
+                className="block px-3 py-2.5 rounded-xl text-sm text-ink-secondary hover:text-ink hover:bg-bg-raised"
               >
                 {label}
               </Link>

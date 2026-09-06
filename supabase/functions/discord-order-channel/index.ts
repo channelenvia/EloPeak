@@ -126,6 +126,13 @@ async function deleteOrderChannels(voiceChannelId: string | null, textChannelId:
 function buildExclusiveJobDM(order: any) {
   const shortCode = String(order.id).slice(0, 8).toUpperCase()
   const isCoaching = order.service_type === 'coaching'
+  // reassigned_by_admin vem de admin_reassign_booster -- admin escolheu esse
+  // booster pra um pedido que já tinha dono ou estava parado no pool, em vez
+  // de compra direta/coaching. Mesmo mecanismo de reserva (preferred_
+  // booster_id + exclusive_until), mas título/cor própria pra não parecer
+  // que o booster escolheu/comprou esse pedido -- espelha o card roxo
+  // "Reatribuído" da aba Jobs (ver AvailableJobs.tsx).
+  const isReassigned = !isCoaching && order.reassigned_by_admin === true
   const fields = buildOrderFields(order)
 
   // Campo sempre presente (mesmo padrão dos demais -- "—"/texto fixo em vez
@@ -138,12 +145,27 @@ function buildExclusiveJobDM(order: any) {
       : '—'
   fields.splice(fields.length - 1, 0, { name: '⏳ Expira em', value: expiresValue, inline: true })
 
+  const title = isCoaching
+    ? '🎓 Novo Pedido de Coaching Reservado pra Você!'
+    : isReassigned
+      ? '🔄 Pedido Reatribuído pra Você!'
+      : '🔒 Novo Pedido Reservado pra Você!'
+  const description = isCoaching
+    ? `Pedido #${shortCode} — esse pacote é exclusivamente seu.`
+    : isReassigned
+      ? `Pedido #${shortCode} — um administrador reatribuiu este pedido pra você. Só você pode aceitar por enquanto.`
+      : `Pedido #${shortCode} — só você pode aceitar esse pedido por enquanto.`
+
   return {
     embeds: [{
-      title: isCoaching ? '🎓 Novo Pedido de Coaching Reservado pra Você!' : '🔒 Novo Pedido Reservado pra Você!',
+      title,
       url: `${APP_URL}/booster/jobs`,
-      description: `Pedido #${shortCode} — ${isCoaching ? 'esse pacote é exclusivamente seu.' : 'só você pode aceitar esse pedido por enquanto.'}`,
-      color: 0x8B5CF6,
+      description,
+      // Roxo mais forte (0xA855F7) pro reatribuído, distinto do violeta do
+      // exclusivo comum/coaching (0x8B5CF6) -- mesma ideia do rank-master
+      // usado no card do site, cores diferentes por não compartilhar token
+      // entre o design system do site e os embeds do Discord.
+      color: isReassigned ? 0xA855F7 : 0x8B5CF6,
       fields,
       thumbnail: { url: cardThumbnailUrl(APP_URL, rankIconTier(order)) },
       footer: eloPeakFooter(APP_URL),

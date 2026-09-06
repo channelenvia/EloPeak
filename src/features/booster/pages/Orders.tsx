@@ -2,47 +2,45 @@ import { useEffect, useState } from 'react'
 import { Search, ShoppingBag } from 'lucide-react'
 import { EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
-import { cn, ORDER_STATUS_GROUP_LABEL } from '@/lib/utils'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
-import { useBoosterOrdersPage } from '@/api/orders'
-import type { BoosterOrdersTab } from '@/api/orders'
+import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
+import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
+import { useBoosterOrdersPage, useBoosterOrderTabCounts } from '@/api/orders'
 import { useOwnBoosterTop3Status } from '@/api/boosters'
 
-// Padronizado com OrderHistory.tsx (cliente) e admin/Orders.tsx: sempre as
-// mesmas 3 abas (Todos/Em andamento/Concluído). O pool de pedidos ainda não
-// aceitos (awaiting_assignment) é responsabilidade da página Jobs -- aqui só
-// entram pedidos já atribuídos a este booster. canceled/refunded/disputed
-// nunca aparecem pro booster (não é tela de auditoria).
-const TABS: { key: BoosterOrdersTab; label: string }[] = [
-  { key: 'active',    label: ORDER_STATUS_GROUP_LABEL.in_progress },
-  { key: 'completed', label: ORDER_STATUS_GROUP_LABEL.completed   },
-  { key: 'all',       label: 'Todos' },
-]
-
-type TabKey = BoosterOrdersTab
 const PAGE_SIZE = 12
 
 export function BoosterOrdersPage() {
   const { profile } = useAuthStore()
-  const [tab, setTab] = useState<TabKey>('active')
+  const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
   const { data: isTop3 } = useOwnBoosterTop3Status(profile?.id)
 
-  const { data, isLoading } = useBoosterOrdersPage(profile?.id, tab, page, PAGE_SIZE)
+  const { data, isLoading } = useBoosterOrdersPage(profile?.id, statusFilter.tab, page, PAGE_SIZE, statusFilter.includeCanceled)
+  const { data: tabCounts } = useBoosterOrderTabCounts(profile?.id)
 
   const rawOrders = data?.orders ?? []
   const serviceFilters = useServiceFilters(rawOrders)
-  const orders = serviceFilters.filtered
+  const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
+  const orders = statusFilter.applySubFilters(serviceFilters.filtered)
     .filter((o) => !search || o.id.toLowerCase().includes(search.toLowerCase()))
   const hasNextPage = data?.nextOffset !== undefined
 
-  // Trocar de aba/busca sem voltar pra página 1 podia deixar o booster numa
-  // página que não existe mais nesse recorte.
-  useEffect(() => { setPage(1) }, [tab])
+  // Paginação é do servidor (useBoosterOrdersPage busca só a página atual),
+  // mas dropped/overdue e os filtros de serviço são aplicados client-side EM
+  // CIMA da página já buscada -- sem resetar a página ao mudar qualquer um
+  // deles, o booster podia ficar preso numa página 2+ que o filtro client-side
+  // zerou, mesmo havendo pedidos correspondentes na página 1. tab já cobre
+  // includeCanceled (setIncludeCanceled troca a aba, ver useOrderStatusFilter).
+  useEffect(() => { setPage(1) }, [
+    statusFilter.tab, statusFilter.dropped, statusFilter.overdue,
+    serviceFilters.category, serviceFilters.queue, serviceFilters.mode,
+    serviceFilters.clashTier, serviceFilters.clashDay,
+  ])
 
   return (
     <div className="space-y-6">
@@ -63,20 +61,19 @@ export function BoosterOrdersPage() {
               className="input-base pl-8 py-1.5 text-xs"
             />
           </div>
-          <div className="flex gap-1 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl p-1">
-            {TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                  tab === key ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <OrderStatusFilterDropdown
+            tab={statusFilter.tab}
+            onTabChange={statusFilter.setTab}
+            counts={tabCounts}
+            dropped={statusFilter.dropped}
+            onDroppedChange={statusFilter.setDropped}
+            droppedCount={subCounts.dropped}
+            overdue={statusFilter.overdue}
+            onOverdueChange={statusFilter.setOverdue}
+            overdueCount={subCounts.overdue}
+            includeCanceled={statusFilter.includeCanceled}
+            onIncludeCanceledChange={statusFilter.setIncludeCanceled}
+          />
         </div>
         <ServiceFilterBar
           category={serviceFilters.category}
@@ -84,12 +81,16 @@ export function BoosterOrdersPage() {
           counts={serviceFilters.counts}
           queue={serviceFilters.queue}
           onQueueChange={serviceFilters.setQueue}
+          queueCounts={serviceFilters.queueCounts}
           mode={serviceFilters.mode}
           onModeChange={serviceFilters.setMode}
+          modeCounts={serviceFilters.modeCounts}
           clashTier={serviceFilters.clashTier}
           onClashTierChange={serviceFilters.setClashTier}
+          clashTierCounts={serviceFilters.clashTierCounts}
           clashDay={serviceFilters.clashDay}
           onClashDayChange={serviceFilters.setClashDay}
+          clashDayCounts={serviceFilters.clashDayCounts}
         />
       </div>
 

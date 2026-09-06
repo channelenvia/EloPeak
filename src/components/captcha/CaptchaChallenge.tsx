@@ -121,7 +121,7 @@ function HatchedChampionIcon({ src }: { src: string }) {
   const scale = useMemo(() => 1.15 + Math.random() * 0.15, [])
 
   return (
-    <div className="relative w-28 h-28 mx-auto rounded-xl overflow-hidden border border-border-subtle bg-bg-elevated select-none">
+    <div className="relative w-28 h-28 mx-auto rounded-xl overflow-hidden border border-border-subtle bg-bg-raised select-none">
       <img
         src={src}
         alt=""

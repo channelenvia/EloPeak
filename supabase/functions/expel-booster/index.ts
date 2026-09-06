@@ -54,7 +54,12 @@ serve(async (req) => {
     })
     if (banError) {
       console.error('expel-booster: status flipped but ban failed', banError.message)
-      return errorResponse(req, 'booster_removed_but_ban_failed', 500)
+      return errorResponse(
+        req,
+        'Booster removido do pedido, mas o banimento no Discord falhou. Tente banir manualmente ou repita a ação.',
+        500,
+        'BOOSTER_REMOVED_BAN_FAILED',
+      )
     }
 
     return jsonResponse(req, { success: true })

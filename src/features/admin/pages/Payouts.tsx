@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<PayoutRequestStatus, string> = {
   approved: 'text-warning bg-warning/10 border-warning/20',
   paid: 'text-success bg-success/10 border-success/20',
   rejected: 'text-danger bg-danger/10 border-danger/20',
-  canceled: 'text-ink-muted bg-bg-elevated border-border-subtle',
+  canceled: 'text-ink-muted bg-bg-raised border-border-subtle',
 }
 // Só requested/under_review/approved têm ação pendente pro admin -- o resto
 // (pago/rejeitado/cancelado) é estado final, só consulta.
@@ -112,7 +112,7 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
           ) : (
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {breakdown.map((row) => (
-                <div key={row.order_id} className="flex items-center justify-between rounded-lg bg-bg-elevated px-3 py-2 text-xs">
+                <div key={row.order_id} className="flex items-center justify-between rounded-lg bg-bg-raised px-3 py-2 text-xs">
                   <span className="font-mono text-brand">{row.order_id.slice(0, 8).toUpperCase()}</span>
                   <span className="text-ink-secondary">{row.service_type}</span>
                   <span className="font-semibold text-ink" data-tabular>{currency(row.amount_included)}</span>

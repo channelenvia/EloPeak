@@ -34,6 +34,11 @@ async function findExpiredExclusiveOrders(db: ReturnType<typeof supabaseAdmin>) 
     .eq('status', 'awaiting_assignment')
     .is('assigned_booster_id', null)
     .not('preferred_booster_id', 'is', null)
+    // Coaching é reserva permanente do dono do pacote -- exclusive_until
+    // nunca é setado pra coaching (ver _release_pending_review_order), mas
+    // a checagem explícita fica como segunda trava contra esse pedido
+    // vazar pro canal público caso algo volte a setar um prazo nele.
+    .neq('service_type', 'coaching')
     .not('exclusive_until', 'is', null)
     .lte('exclusive_until', new Date().toISOString())
     .is('exclusive_expired_announced_at', null)

@@ -56,31 +56,52 @@ export interface BoosterOrdersPage {
   nextOffset?: number
 }
 
+// Fonte única de abas de status, compartilhada pelos 3 papéis (cliente,
+// booster, admin) -- cada query ainda escopa por dono (customer_id/
+// assigned_booster_id/nenhum filtro pro admin), só a lista de status por aba
+// é comum. "em_analise" agrupa tudo que tem uma pendência financeira em
+// avaliação -- aguardando pagamento, aguardando decisão de reembolso
+// (under_review), disputa de chargeback (disputed) e já reembolsado
+// (refunded) -- corrige o bug original de "aguardando pagamento" contar como
+// "em andamento". "canceled" (cancelamento simples, sem reembolso) não é aba
+// própria -- é sub-filtro opcional de "completed" (ver includeCanceled).
+export type OrderListTab = 'in_progress' | 'em_analise' | 'completed' | 'all'
+
+// Ordem fixa da lista, igual pros 3 papéis -- ver OrderStatusFilterDropdown.
+export const ORDER_LIST_TABS: OrderListTab[] = ['in_progress', 'em_analise', 'completed', 'all']
+
+export type OrderListTabCounts = Record<OrderListTab, number> & { canceled: number }
+
 // Um pedido do booster nunca está em draft/awaiting_payment/awaiting_assignment
 // (isso é responsabilidade da página Jobs -- só entra na lista do booster a
-// partir de 'assigned'). canceled/refunded/disputed nunca aparecem aqui --
-// não é tela de auditoria, isso é só pro admin (ver ADMIN_HIDDEN_STATUSES).
-export type BoosterOrdersTab = 'all' | 'active' | 'completed'
-
-const BOOSTER_ACTIVE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 'drop_requested', 'awaiting_customer']
-const BOOSTER_COMPLETED_STATUSES: OrderStatus[] = ['completed']
-
-export function boosterOrderTabStatuses(tab: BoosterOrdersTab): OrderStatus[] {
-  if (tab === 'active') return BOOSTER_ACTIVE_STATUSES
-  if (tab === 'completed') return BOOSTER_COMPLETED_STATUSES
-  return [...BOOSTER_ACTIVE_STATUSES, ...BOOSTER_COMPLETED_STATUSES]
-}
-
-// Mesmo padrão de 3 abas no admin: Todos/Em andamento/Concluído. "canceled"
-// aqui não é uma 4ª aba do mesmo grupo -- é uma auditoria à parte, só pro
-// admin, escondida de tudo mais por padrão (ver ADMIN_HIDDEN_STATUSES).
-export type AdminOrdersTab = 'all' | 'in_progress' | 'completed' | 'canceled'
-
-// "Aguardando algo" (pagamento, booster, credenciais, drop) conta como
-// "em andamento" pro admin -- inclui todo status não-terminal. 'draft' fica
-// de fora de propósito: carrinho nunca finalizado não é um pedido de verdade.
-export const ADMIN_IN_PROGRESS_STATUSES: OrderStatus[] = [
-  'awaiting_payment', 'paid', 'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'drop_requested', 'awaiting_customer',
+// partir de 'assigned') -- incluir esses status na lista de "in_progress" não
+// muda nada na prática pro booster, já que ele nunca tem assigned_booster_id
+// setado nesses estados.
+const IN_PROGRESS_STATUSES: OrderStatus[] = [
+  'paid', 'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'drop_requested', 'awaiting_customer',
 ]
 
-export const ADMIN_HIDDEN_STATUSES: OrderStatus[] = ['canceled', 'refunded', 'disputed']
+const EM_ANALISE_STATUSES: OrderStatus[] = ['awaiting_payment', 'under_review', 'disputed', 'refunded']
+
+// 'canceled' nunca entra na aba "completed" por padrão -- só quando o
+// checkbox "Cancelados" (ver OrderStatusFilterDropdown) tá marcado.
+function completedStatuses(includeCanceled: boolean): OrderStatus[] {
+  return includeCanceled ? ['completed', 'canceled'] : ['completed']
+}
+
+// null = sem filtro de status além da exclusão padrão (ver HIDDEN_STATUSES_FILTER
+// nas queries) -- só 'draft' (carrinho nunca finalizado) nunca entra em
+// "Todos"; todo o resto (inclusive canceled) já é coberto por alguma das
+// outras 3 abas, então "Todos" é a união real delas.
+export function orderListTabStatuses(tab: OrderListTab, includeCanceled = false): OrderStatus[] | null {
+  switch (tab) {
+    case 'in_progress': return IN_PROGRESS_STATUSES
+    case 'em_analise': return EM_ANALISE_STATUSES
+    case 'completed': return completedStatuses(includeCanceled)
+    case 'all': return null
+  }
+}
+
+// String pronta pro filtro `.not('status', 'in', ...)` do Postgrest -- só
+// draft fica de fora de "Todos" agora.
+export const HIDDEN_STATUSES_FILTER = '(draft)'

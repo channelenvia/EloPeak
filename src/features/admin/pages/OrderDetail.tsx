@@ -70,7 +70,7 @@ const ASSIGN_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'awaiting
 // sem processar nada no Mercado Pago nem no saldo do booster).
 const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
   success: 'text-success hover:bg-success/10',
-  neutral: 'text-ink-secondary hover:bg-bg-elevated',
+  neutral: 'text-ink-secondary hover:bg-bg-raised',
   danger:  'text-danger hover:bg-danger/10',
 }
 
@@ -146,8 +146,8 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
       title={isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
       maxWidth="lg"
       description={isNewAssignment
-        ? 'Atribui o pedido a um booster específico, tirando-o do pool de pedidos disponíveis -- ele deixa de aparecer na aba Jobs dos outros boosters e passa a aparecer só pro selecionado.'
-        : 'Atribui o pedido a qualquer booster, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos.'}
+        ? 'Reserva o pedido pro booster escolhido -- ele some da aba Jobs dos outros e aparece só pra ele, marcado como "Reatribuído" (roxo). Ele recebe uma notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'
+        : 'Reserva o pedido pro booster escolhido, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos. Ele recebe uma notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'}
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
@@ -171,7 +171,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
             onClick={() => setSelectedBoosterId(b.user_id)}
             className={cn(
               'w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors border',
-              selectedBoosterId === b.user_id ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-bg-elevated',
+              selectedBoosterId === b.user_id ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-bg-raised',
             )}
           >
             <span className="flex items-center gap-2 min-w-0">
@@ -399,7 +399,9 @@ export function AdminOrderDetailPage() {
           <span className="inline-flex items-center gap-1.5">
             <BoosterLink userId={boosterId} booster={parties?.boosterByUserId.get(boosterId)} />
             {!order.assigned_booster_id && (
-              <span className="text-[10px] font-bold text-accent uppercase">Exclusivo</span>
+              <span className={`text-[10px] font-bold uppercase ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
+                {order.reassigned_by_admin ? 'Reatribuído (aguardando aceite)' : 'Exclusivo'}
+              </span>
             )}
           </span>
         )

@@ -75,7 +75,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         {looksLikeUuid && lookupLoading && <p className="text-xs text-ink-muted mt-1">Buscando pedido…</p>}
         {looksLikeUuid && !lookupLoading && !lookupOrder && <p className="text-xs text-danger mt-1">Pedido não encontrado.</p>}
         {lookupOrder && (
-          <p className="text-xs text-ink-secondary mt-1.5 bg-bg-elevated rounded-lg px-3 py-2">
+          <p className="text-xs text-ink-secondary mt-1.5 bg-bg-raised rounded-lg px-3 py-2">
             Cliente: <span className="font-semibold text-ink">{customerUsername ?? 'Carregando…'}</span> · Total do pedido: <span className="font-semibold text-ink">{currency(lookupOrder.total_price)}</span>
           </p>
         )}
@@ -326,7 +326,7 @@ export function AdminRefundsPage() {
                 <TableRow key={r.id}>
                   <TableCell>
                     {r.is_manual ? (
-                      <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">Manual</span>
+                      <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">Manual</span>
                     ) : (
                       <span className="font-mono text-xs">{r.mp_refund_id?.slice(-10) ?? '—'}</span>
                     )}

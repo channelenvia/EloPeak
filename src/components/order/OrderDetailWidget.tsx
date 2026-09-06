@@ -52,12 +52,12 @@ export function OrderDetailWidget({ icon: Icon, label, status, children, popover
           onClick={() => setOpen((v) => !v)}
           className={cn(
             'flex items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-left transition-colors',
-            open ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-card hover:border-brand/40 hover:bg-bg-elevated',
+            open ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
           )}
         >
           <div className={cn(
             'h-8 w-8 rounded-lg flex items-center justify-center shrink-0',
-            open ? 'bg-brand text-white' : 'bg-bg-elevated text-ink-secondary',
+            open ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
           )}>
             <Icon className="h-4 w-4" />
           </div>

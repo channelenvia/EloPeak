@@ -34,7 +34,7 @@ export function OrderInfoGrid({ items, extras }: { items: OrderInfoGridItem[]; e
         ))}
       </div>
       {sortedExtras.length > 0 && (
-        <div className="mt-5 rounded-xl border border-border-subtle bg-bg-elevated/40 px-3 py-2.5">
+        <div className="mt-5 rounded-xl border border-border-subtle bg-bg-raised/40 px-3 py-2.5">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}

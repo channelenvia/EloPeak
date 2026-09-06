@@ -107,7 +107,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-bg-elevated p-1">
+      <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-bg-raised p-1">
         <button
           type="button"
           onClick={() => setAccountSource('platform')}
@@ -130,7 +130,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
             Use sua própria conta pra jogar com o cliente — só o Riot ID, sem token (você já tem acesso).
           </p>
           {order.duo_own_riot_id ? (
-            <div className="flex items-center justify-between bg-bg-elevated rounded-xl px-3 py-2.5">
+            <div className="flex items-center justify-between bg-bg-raised rounded-xl px-3 py-2.5">
               <p className="text-sm font-semibold text-ink truncate">{order.duo_own_riot_id}</p>
               <Button size="sm" variant="danger-ghost" loading={clearOwnAccount.isPending} onClick={doClearOwnAccount}>
                 Remover
@@ -163,7 +163,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
         <p className="text-xs text-ink-muted">Carregando contas...</p>
       ) : reserved && !switching ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between bg-bg-elevated rounded-xl px-3 py-2.5">
+          <div className="flex items-center justify-between bg-bg-raised rounded-xl px-3 py-2.5">
             <div>
               <p className="text-sm font-semibold text-ink">{reserved.riot_id ?? reserved.label}</p>
               {reserved.current_rank && (
@@ -218,7 +218,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
                   type="button"
                   onClick={() => setSelectedAccountId(a.id)}
                   className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
-                    selectedAccountId === a.id ? 'border-brand bg-brand/10' : 'border-border-subtle hover:bg-bg-elevated/60'
+                    selectedAccountId === a.id ? 'border-brand bg-brand/10' : 'border-border-subtle hover:bg-bg-raised/60'
                   }`}
                 >
                   {a.current_rank && <RankBadge tier={a.current_rank.tier} division={a.current_rank.division} size="xs" showLabel={false} />}

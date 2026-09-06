@@ -201,7 +201,7 @@ export function LoginPage() {
           {/* 2. Termos — bloqueados até vincular o Discord */}
           <div className="space-y-3">
             <label
-              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-card/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
+              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
             >
               <input
                 type="checkbox"
@@ -219,7 +219,7 @@ export function LoginPage() {
             </label>
 
             <label
-              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-card/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
+              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
             >
               <input
                 type="checkbox"

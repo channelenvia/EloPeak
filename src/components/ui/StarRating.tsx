@@ -20,7 +20,7 @@ export function StarRating({ rating, count, size = 'sm', showValue = true }: Sta
     <div className="flex items-center gap-1.5">
       <div className="flex">
         {[1, 2, 3, 4, 5].map((i) => (
-          <Star key={i} className={cn(SIZE_CLASS[size], i <= filled ? 'text-warning fill-warning' : 'text-bg-elevated')} />
+          <Star key={i} className={cn(SIZE_CLASS[size], i <= filled ? 'text-warning fill-warning' : 'text-bg-raised')} />
         ))}
       </div>
       {showValue && <span className="text-sm font-bold text-ink">{rating.toFixed(1)}</span>}

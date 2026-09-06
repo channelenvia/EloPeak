@@ -131,7 +131,7 @@ function MatchListPanel({
                   className={cn(
                     'flex items-center gap-3 rounded-xl px-3 py-2.5 border',
                     match.result === 'remake'
-                      ? 'bg-bg-elevated border-border-subtle opacity-70'
+                      ? 'bg-bg-raised border-border-subtle opacity-70'
                       : match.result === 'win'
                       ? 'bg-success/5 border-success/15'
                       : 'bg-danger/5 border-danger/15',
@@ -147,7 +147,7 @@ function MatchListPanel({
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
                       />
                     ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-bg-elevated">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-bg-raised">
                         <Gamepad2 className="h-4 w-4 text-ink-muted" />
                       </div>
                     )}

@@ -155,9 +155,9 @@ export function HomePage() {
                 prefere menos movimento. */}
             <RankLadder />
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 mt-12 overflow-hidden rounded-2xl border border-border-subtle bg-bg-elevated/70 gap-px shadow-card">
+            <div className="grid grid-cols-2 lg:grid-cols-4 mt-12 overflow-hidden rounded-2xl border border-border-subtle bg-bg-raised/70 gap-px shadow-card">
               {STATS.map(({ value, label }) => (
-                <div key={label} className="bg-bg-card/90 px-4 py-5 sm:px-6">
+                <div key={label} className="bg-bg-surface/90 px-4 py-5 sm:px-6">
                   <p className="text-2xl font-extrabold text-ink">{value}</p>
                   <p className="text-xs text-ink-muted mt-1">{label}</p>
                 </div>

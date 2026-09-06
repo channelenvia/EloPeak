@@ -123,7 +123,7 @@ serve(async (req) => {
         req, body.intent, user.id, serviceClient, RIOT_API_KEY, body.preferred_booster_id ?? null,
       )
       if (!outcome.ok) return outcome.response
-      const { normalized, priced, md5MatchesRemaining, pdlBracket, preferredBoosterId, extras } = outcome
+      const { normalized, priced, pdlBracket, preferredBoosterId, extras } = outcome
 
       // Reconstrói o shape específico de `orders.extras` a partir dos extras
       // já validados e precificados — o formato de linha de pedido (extra_id/
@@ -180,7 +180,6 @@ serve(async (req) => {
           preferred_booster_id: preferredBoosterId,
           riot_id: normalized.riotId,
           booster_service_id: normalized.boosterServiceId,
-          md5_matches_remaining: md5MatchesRemaining,
           customer_lanes: normalized.customerLanes.length ? normalized.customerLanes : null,
         })
         .select('id, customer_id, total_price, mp_payment_id')

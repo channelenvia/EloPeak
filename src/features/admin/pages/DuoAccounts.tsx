@@ -53,7 +53,7 @@ function DuoAccountHistoryModal({ account, onClose }: { account: AdminDuoAccount
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2 rounded-xl bg-bg-elevated p-3 text-center" data-tabular>
+          <div className="grid grid-cols-3 gap-2 rounded-xl bg-bg-raised p-3 text-center" data-tabular>
             <div>
               <p className="text-sm font-bold text-ink">{data.stats.total_reservations}</p>
               <p className="text-[10px] text-ink-muted mt-0.5">Reservas totais</p>
@@ -306,7 +306,7 @@ export function AdminDuoAccountsPage() {
                       <button
                         onClick={() => toggleActive.mutate(a)}
                         disabled={toggleActive.isPending}
-                        className={`badge text-xs disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-elevated'}`}
+                        className={`badge text-xs disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
                       >
                         {a.is_active ? 'Ativa' : 'Inativa'}
                       </button>
@@ -330,7 +330,7 @@ export function AdminDuoAccountsPage() {
                         <button
                           type="button"
                           onClick={() => setHistoryTarget(a)}
-                          className="badge text-xs text-ink-muted bg-bg-elevated hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1"
+                          className="badge text-xs text-ink-muted bg-bg-raised hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1"
                           title="Ver histórico de reservas"
                         >
                           <History className="h-3 w-3" /> Livre
@@ -436,7 +436,7 @@ export function AdminDuoAccountsPage() {
           )}
 
           {!riotVerified ? (
-            <p className="text-sm text-ink-muted rounded-xl border border-border-subtle bg-bg-elevated/40 px-5 py-4">
+            <p className="text-sm text-ink-muted rounded-xl border border-border-subtle bg-bg-raised/40 px-5 py-4">
               Verifique o Riot ID acima para liberar os campos de login e senha.
             </p>
           ) : (
@@ -470,7 +470,7 @@ export function AdminDuoAccountsPage() {
             />
           </FormField>
 
-          <label className="flex items-center gap-2.5 text-sm text-ink-secondary rounded-xl border border-border-subtle bg-bg-elevated/40 px-5 py-3.5 w-fit">
+          <label className="flex items-center gap-2.5 text-sm text-ink-secondary rounded-xl border border-border-subtle bg-bg-raised/40 px-5 py-3.5 w-fit">
             <input
               type="checkbox"
               checked={form.is_active}

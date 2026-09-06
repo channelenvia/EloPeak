@@ -89,3 +89,6 @@ graphify-out/
 id_rsa*
 id_ed25519*
 *.mobileprovision
+
+# Local cxpak MCP tool cache (large generated index, machine-local)
+.cxpak/

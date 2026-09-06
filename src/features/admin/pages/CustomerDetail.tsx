@@ -38,7 +38,7 @@ export function AdminCustomerDetailPage() {
             { label: 'Pedidos', value: customer.total_orders, icon: ShoppingBag, color: 'text-brand bg-brand/10' },
             { label: 'Total Gasto', value: currency(customer.total_spent), icon: Wallet, color: 'text-success bg-success/10' },
             { label: 'Avaliações Dadas', value: reviews?.length ?? 0, icon: Star, color: 'text-warning bg-warning/10' },
-            { label: 'Cliente desde', value: formatDate(customer.profiles?.created_at ?? customer.created_at), icon: ClipboardList, color: 'text-ink-secondary bg-bg-elevated' },
+            { label: 'Cliente desde', value: formatDate(customer.profiles?.created_at ?? customer.created_at), icon: ClipboardList, color: 'text-ink-secondary bg-bg-raised' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="text-center">
               <div className={`h-9 w-9 rounded-xl ${color} flex items-center justify-center mx-auto mb-2`}>

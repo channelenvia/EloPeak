@@ -13,7 +13,7 @@ export function DuoPartnerRiotId({ orderId }: { orderId: string }) {
         Conta que vai jogar com você nesse pedido, escolhida pelo booster.
       </p>
       {riotId ? (
-        <div className="flex items-center gap-2 bg-bg-elevated rounded-xl px-3 py-2.5">
+        <div className="flex items-center gap-2 bg-bg-raised rounded-xl px-3 py-2.5">
           <Hash className="h-4 w-4 text-brand shrink-0" />
           <p className="text-sm font-semibold text-ink truncate">{riotId}</p>
         </div>

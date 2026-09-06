@@ -52,7 +52,7 @@ function BoosterActionsMenu({
         <button
           type="button"
           onClick={() => { setDraft(note?.note ?? ''); setNotesOpen(true); setMenuOpen(false) }}
-          className={cn(itemClass, 'text-ink-secondary hover:bg-bg-elevated')}
+          className={cn(itemClass, 'text-ink-secondary hover:bg-bg-raised')}
         >
           <StickyNote className="h-4 w-4 shrink-0" />
           Notas
@@ -97,7 +97,7 @@ function BoosterActionsMenu({
               type="button"
               disabled={statusPending}
               onClick={() => { onReinstate(); setMenuOpen(false) }}
-              className={cn(itemClass, 'text-ink-secondary hover:bg-bg-elevated')}
+              className={cn(itemClass, 'text-ink-secondary hover:bg-bg-raised')}
             >
               <RotateCcw className="h-4 w-4 shrink-0" /> Reativar
             </button>

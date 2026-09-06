@@ -141,13 +141,13 @@ function ClashPricingSection({ currency, discountRevealed }: { currency: (n: num
               <th className="py-3 px-5 text-right text-xs font-semibold uppercase tracking-wide text-ink-muted">Duo Clash</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-bg-elevated">
+          <tbody className="divide-y divide-bg-raised">
             {CLASH_TIERS.map((tier) => {
               const { low, high } = CLASH_TIER_BOUNDARY_RANKS[tier]
               const soloPrice = getClashBasePrice('solo', tier)
               const duoPrice = getClashBasePrice('duo', tier)
               return (
-                <tr key={tier} className="hover:bg-bg-elevated/40 transition-colors">
+                <tr key={tier} className="hover:bg-bg-raised/40 transition-colors">
                   <td className="py-3 px-5">
                     <div className="flex items-center gap-3">
                       <div className="flex items-center shrink-0">
@@ -226,11 +226,11 @@ export function PricingPage() {
                   <th className="py-3 px-5 text-right text-xs font-semibold uppercase tracking-wide text-ink-muted">Tier completo (solo)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-bg-elevated">
+              <tbody className="divide-y divide-bg-raised">
                 {ELO_TIERS.map(({ tier, perDiv }) => {
                   const duoDiv = getEloDivPrice('solo_duo', tier, 'duo')
                   return (
-                    <tr key={tier} className="hover:bg-bg-elevated/40 transition-colors">
+                    <tr key={tier} className="hover:bg-bg-raised/40 transition-colors">
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-3">
                           <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
@@ -261,7 +261,7 @@ export function PricingPage() {
                   )
                 })}
                 {ELO_MASTER_PLUS_TIERS.map((tier) => (
-                  <tr key={tier} className="hover:bg-bg-elevated/40 transition-colors">
+                  <tr key={tier} className="hover:bg-bg-raised/40 transition-colors">
                     <td className="py-3 px-5">
                       <div className="flex items-center gap-3">
                         <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />

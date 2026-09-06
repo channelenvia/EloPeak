@@ -62,7 +62,7 @@ export function AdminLayout() {
                   to={href}
                   className={cn(
                     'flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
-                    isActive(href) ? 'bg-brand/15 text-brand' : 'text-ink-secondary hover:bg-bg-elevated hover:text-ink',
+                    isActive(href) ? 'bg-brand/15 text-brand' : 'text-ink-secondary hover:bg-bg-raised hover:text-ink',
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />

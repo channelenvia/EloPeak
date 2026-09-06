@@ -31,7 +31,7 @@ export function BoosterServiceCard({
           <button
             onClick={onEdit}
             aria-label="Editar serviço"
-            className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-elevated transition-colors"
+            className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -71,7 +71,7 @@ export function BoosterServiceCard({
         className={cn(
           'flex items-center justify-center gap-1.5 text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-40',
           service.is_active
-            ? 'text-ink-secondary hover:bg-bg-elevated'
+            ? 'text-ink-secondary hover:bg-bg-raised'
             : 'text-success bg-success/10 hover:bg-success/20',
         )}
       >

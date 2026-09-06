@@ -110,7 +110,7 @@ export function CoachPackagePicker() {
       </div>
 
       {/* Caixa de filtros */}
-      <div className="rounded-2xl border border-border-subtle bg-bg-card/40 p-4 space-y-3.5">
+      <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 p-4 space-y-3.5">
         {/* Cabeçalho: título + contador + limpar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -186,7 +186,7 @@ export function CoachPackagePicker() {
                     'rounded-2xl border-2 overflow-hidden flex flex-col transition-all',
                     selected
                       ? 'border-brand bg-brand/10'
-                      : 'border-border-subtle bg-bg-card hover:border-brand/30',
+                      : 'border-border-subtle bg-bg-surface hover:border-brand/30',
                   )}
                 >
                   <div className="h-1 bg-success shrink-0" />
@@ -238,7 +238,7 @@ export function CoachPackagePicker() {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 aria-label="Página anterior"
-                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -248,7 +248,7 @@ export function CoachPackagePicker() {
                 onClick={() => setPage(p => Math.min(pageCount, p + 1))}
                 disabled={page === pageCount}
                 aria-label="Próxima página"
-                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>

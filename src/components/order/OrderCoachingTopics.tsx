@@ -50,7 +50,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
               key={topic.id}
               className={cn(
                 'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors',
-                topic.is_done ? 'bg-brand/5 border-brand/15' : 'bg-bg-elevated/40 border-border-subtle',
+                topic.is_done ? 'bg-brand/5 border-brand/15' : 'bg-bg-raised/40 border-border-subtle',
               )}
             >
               <input

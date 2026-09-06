@@ -62,7 +62,7 @@ function BoosterDropModal({ order, open, onClose }: { order: Order; open: boolea
       title="Solicitar Drop de Pedido"
       description="Enviado ao admin para aprovação. Pagamento proporcional ao progresso já concluído."
     >
-      <p className="text-xs font-medium text-ink-secondary bg-bg-elevated rounded-lg px-3 py-2">
+      <p className="text-xs font-medium text-ink-secondary bg-bg-raised rounded-lg px-3 py-2">
         Você ainda possui {remainingDrops} drop{remainingDrops === 1 ? '' : 's'} disponíve{remainingDrops === 1 ? 'l' : 'is'} para este pedido.
       </p>
       <div>
@@ -222,8 +222,8 @@ export function JobDetailPage() {
     ...(order.preferred_booster_id === profile?.id
       ? [{
         icon: Trophy, label: 'Vínculo', value: (
-          <span className="text-accent font-semibold uppercase text-xs">
-            {order.service_type === 'coaching' ? 'Exclusivo' : 'Pedido vinculado'}
+          <span className={`font-semibold uppercase text-xs ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
+            {order.reassigned_by_admin ? 'Reatribuído' : order.service_type === 'coaching' ? 'Exclusivo' : 'Pedido vinculado'}
           </span>
         ),
       }]

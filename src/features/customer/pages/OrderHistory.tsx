@@ -6,42 +6,30 @@ import { EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
+import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
+import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
 import { useAuthStore } from '@/stores/authStore'
 import { useCurrency } from '@/hooks/useCurrency'
-import { ORDER_STATUS_GROUP_LABEL } from '@/lib/utils'
-import { useCustomerOrders } from '@/api/orders'
-
-// Padronizado com booster/Orders.tsx e admin/Orders.tsx: sempre as mesmas 3
-// abas (Todos/Em andamento/Concluído). listCustomerOrders já exclui draft e
-// canceled/refunded/disputed no servidor, então "tudo que não é completed"
-// aqui já é, por definição, o grupo "em andamento".
-type StatusFilter = 'all' | 'in_progress' | 'completed'
-
-const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
-  { label: ORDER_STATUS_GROUP_LABEL.in_progress, value: 'in_progress' },
-  { label: ORDER_STATUS_GROUP_LABEL.completed,   value: 'completed'  },
-  { label: 'Todos',                             value: 'all'        },
-]
+import { useCustomerOrders, useCustomerOrderTabCounts } from '@/api/orders'
 
 export function OrderHistoryPage() {
   const navigate = useNavigate()
   const { profile } = useAuthStore()
   const { t } = useTranslation()
   const currency = useCurrency()
-  const [filter, setFilter] = useState<StatusFilter>('in_progress')
+  const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
 
-  const { data: orders, isLoading } = useCustomerOrders(profile?.id, 100)
+  const { data: orders, isLoading } = useCustomerOrders(profile?.id, statusFilter.tab, 100, statusFilter.includeCanceled)
+  const { data: tabCounts } = useCustomerOrderTabCounts(profile?.id)
   const serviceFilters = useServiceFilters(orders)
+  const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
 
-  const filtered = serviceFilters.filtered.filter((o) => {
-    if (filter === 'in_progress' && o.status === 'completed') return false
-    if (filter === 'completed' && o.status !== 'completed') return false
-    if (search && !o.id.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+  const filtered = statusFilter.applySubFilters(serviceFilters.filtered).filter((o) =>
+    !search || o.id.toLowerCase().includes(search.toLowerCase())
+  )
 
   const pageOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasNextPage = page * PAGE_SIZE < filtered.length
@@ -68,19 +56,19 @@ export function OrderHistoryPage() {
               className="input-base pl-8 py-1.5 text-xs"
             />
           </div>
-          <div className="flex gap-1 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl p-1">
-            {STATUS_FILTERS.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => setFilter(value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  filter === value ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <OrderStatusFilterDropdown
+            tab={statusFilter.tab}
+            onTabChange={statusFilter.setTab}
+            counts={tabCounts}
+            dropped={statusFilter.dropped}
+            onDroppedChange={statusFilter.setDropped}
+            droppedCount={subCounts.dropped}
+            overdue={statusFilter.overdue}
+            onOverdueChange={statusFilter.setOverdue}
+            overdueCount={subCounts.overdue}
+            includeCanceled={statusFilter.includeCanceled}
+            onIncludeCanceledChange={statusFilter.setIncludeCanceled}
+          />
         </div>
         <ServiceFilterBar
           category={serviceFilters.category}
@@ -88,12 +76,16 @@ export function OrderHistoryPage() {
           counts={serviceFilters.counts}
           queue={serviceFilters.queue}
           onQueueChange={serviceFilters.setQueue}
+          queueCounts={serviceFilters.queueCounts}
           mode={serviceFilters.mode}
           onModeChange={serviceFilters.setMode}
+          modeCounts={serviceFilters.modeCounts}
           clashTier={serviceFilters.clashTier}
           onClashTierChange={serviceFilters.setClashTier}
+          clashTierCounts={serviceFilters.clashTierCounts}
           clashDay={serviceFilters.clashDay}
           onClashDayChange={serviceFilters.setClashDay}
+          clashDayCounts={serviceFilters.clashDayCounts}
         />
       </div>
 
@@ -106,8 +98,8 @@ export function OrderHistoryPage() {
         <EmptyState
           icon={ShoppingBag}
           title={t('customer.history.empty')}
-          description={filter !== 'all' ? t('customer.history.emptyFilter') : t('customer.history.emptyAll')}
-          action={filter === 'all' ? { label: t('customer.history.startBoost'), onClick: () => navigate('/orders/new?new=1') } : undefined}
+          description={statusFilter.tab !== 'all' ? t('customer.history.emptyFilter') : t('customer.history.emptyAll')}
+          action={statusFilter.tab === 'all' ? { label: t('customer.history.startBoost'), onClick: () => navigate('/orders/new?new=1') } : undefined}
         />
       ) : (
         <>

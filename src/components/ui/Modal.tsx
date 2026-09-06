@@ -53,7 +53,10 @@ export function Modal({ open, onOpenChange, title, description, children, maxWid
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {headerExtra}
-              <Dialog.Close className="focus-ring p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-elevated transition-colors">
+              <Dialog.Close
+                aria-label="Fechar"
+                className="focus-ring p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors"
+              >
                 <X className="h-4 w-4" />
               </Dialog.Close>
             </div>

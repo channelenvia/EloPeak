@@ -111,7 +111,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
             onClick={() => setSelectedBoosterId(b.user_id)}
             className={cn(
               'w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors border',
-              selectedBoosterId === b.user_id ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-bg-elevated',
+              selectedBoosterId === b.user_id ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-bg-raised',
             )}
           >
             <span className="font-medium truncate">{b.display_name}</span>

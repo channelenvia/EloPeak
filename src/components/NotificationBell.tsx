@@ -83,7 +83,7 @@ export function NotificationBell() {
       <button
         ref={containerRef}
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-elevated transition-colors"
+        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors"
         aria-label="Notificações"
       >
         <Bell className="h-[18px] w-[18px]" />
@@ -123,13 +123,13 @@ export function NotificationBell() {
                   key={n.id}
                   onClick={() => handleItemClick(n)}
                   className={cn(
-                    'w-full text-left flex items-start gap-3 px-4 py-3 border-b border-border-subtle last:border-0 transition-colors hover:bg-bg-elevated',
+                    'w-full text-left flex items-start gap-3 px-4 py-3 border-b border-border-subtle last:border-0 transition-colors hover:bg-bg-raised',
                     !n.is_read && 'bg-brand/5',
                   )}
                 >
                   <div className={cn(
                     'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-                    n.is_read ? 'bg-bg-elevated text-ink-muted' : 'bg-brand/15 text-brand',
+                    n.is_read ? 'bg-bg-raised text-ink-muted' : 'bg-brand/15 text-brand',
                   )}>
                     <Icon className="h-4 w-4" />
                   </div>

@@ -64,7 +64,9 @@ function AssignedBoosterValue({ order }: { order: Order }) {
         {booster.display_name}
       </Link>
       {!order.assigned_booster_id && (
-        <span className="text-[10px] font-bold text-accent uppercase">Exclusivo</span>
+        <span className={`text-[10px] font-bold uppercase ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
+          {order.reassigned_by_admin ? 'Reatribuído' : 'Exclusivo'}
+        </span>
       )}
     </span>
   )
@@ -282,7 +284,7 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
       title="Solicitar troca de booster"
       description="Enviamos ao admin para aprovação. O pedido continua ativo e passa para outro booster, sem cobrança ou reembolso."
     >
-      <p className="text-xs font-medium text-ink-secondary bg-bg-elevated rounded-lg px-3 py-2">
+      <p className="text-xs font-medium text-ink-secondary bg-bg-raised rounded-lg px-3 py-2">
         Você ainda possui {remainingDrops} drop{remainingDrops === 1 ? '' : 's'} disponíve{remainingDrops === 1 ? 'l' : 'is'} para este pedido.
       </p>
       <div>

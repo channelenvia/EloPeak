@@ -81,7 +81,7 @@ export function AdminDropsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">
+                      <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
                         {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
                       </span>
                     </TableCell>
@@ -170,7 +170,7 @@ export function AdminDropsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <span className="badge text-[10px] font-bold bg-bg-elevated text-ink-secondary">
+                      <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
                         {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
                       </span>
                     </TableCell>
