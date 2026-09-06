@@ -80,9 +80,9 @@ function RiotIdField({
             antes vinha de fora via FormField, deslocado do conteúdo que
             rotula. */}
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+          <label htmlFor="order-riot-id-input" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
             Riot ID<span className="text-danger ml-0.5">*</span>
-          </p>
+          </label>
           {verified && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-success">
               <Check className="h-3 w-3" />
@@ -93,6 +93,7 @@ function RiotIdField({
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <input
+              id="order-riot-id-input"
               type="text"
               value={riotId}
               onChange={e => onRiotIdChange(e.target.value)}
@@ -294,8 +295,11 @@ export function StepConfigure() {
       const remaining = result.matches_remaining ?? 5
       setIsMd5(true)
       setMd5Blocked(false)
+      // setMd5MatchesRemainingFromApi já clampa winsPurchased internamente
+      // (Math.max(1, remaining)) -- um setWinsPurchased extra aqui lia
+      // `winsPurchased` de uma closure obsoleta (valor de antes desta busca),
+      // desfazendo o clamp correto que o setter acabou de aplicar.
       setMd5MatchesRemainingFromApi(remaining)
-      setWinsPurchased(Math.min(remaining, winsPurchased ?? remaining))
       setRiotVerified(true)
       setMd5Message(`MD5 ativado — faltam ${remaining} partida(s) de posicionamento.`)
     } else {
@@ -378,19 +382,23 @@ export function StepConfigure() {
     [leagueCutoffs],
   )
 
-  useEffect(() => {
+  // Cálculo puro extraído do useEffect que só empurrava pra store -- ter isso
+  // num useMemo evita o passo de render extra que um useEffect sempre
+  // adiciona (render -> efeito dispara -> setState -> re-render) a cada
+  // mudança de rank/modo/fila antes do preço atualizar. Chaves ausentes no
+  // resultado = "não mexe nesse campo" (mesma semântica dos early-return do
+  // efeito original, ex.: coaching/clash só resetam pdlModifierPct e nunca
+  // tocam basePrice/estimatedHours, que são setados por outro componente).
+  const pricingUpdate = useMemo((): { basePrice?: number; estimatedHours?: number | null; pdlModifierPct?: number | null } | null => {
     if (serviceType === 'elo_boost') {
-      if (!currentRank) return
+      if (!currentRank) return null
 
       if (currentIsMasterPlus) {
         const price = masterPlusPriceRow?.price
-        // Modificador de PDL nunca se aplica ao Master+ — sempre null aqui.
-        setPdlModifierPct(null)
         // Duo Boost no Master+ só é aceito na fila Flex.
         if (!targetRank || price == null || (boostMode === 'duo' && queueType !== 'flex')) {
-          setBasePrice(0)
-          setEstimatedHours(null)
-          return
+          // Modificador de PDL nunca se aplica ao Master+ — sempre null aqui.
+          return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
         }
         const discountedPrice = applyMasterPlusPdlDiscount(
           price,
@@ -400,7 +408,6 @@ export function StepConfigure() {
           queueType,
           masterPlusCutoffs,
         )
-        setBasePrice(discountedPrice)
         const masterPlusHours = estimateEloBoostHours({
           currentRank,
           targetRank,
@@ -410,18 +417,18 @@ export function StepConfigure() {
           currentPdl,
           masterPlusCutoffs,
         })
-        setEstimatedHours(masterPlusHours == null ? null : masterPlusHours * DELIVERY_ESTIMATE_MULTIPLIER)
-        return
+        return {
+          basePrice: discountedPrice,
+          estimatedHours: masterPlusHours == null ? null : masterPlusHours * DELIVERY_ESTIMATE_MULTIPLIER,
+          pdlModifierPct: null,
+        }
       }
 
-      if (!targetRank) return
+      if (!targetRank) return null
       // Duo Boost com alvo Grão-Mestre/Challenger só é aceito na fila Flex
       // -- alvo Master em si é permitido normalmente na Solo/Duo.
       if (boostMode === 'duo' && queueType !== 'flex' && isDuoBlockedAtTier(targetRank.tier)) {
-        setBasePrice(0)
-        setEstimatedHours(null)
-        setPdlModifierPct(null)
-        return
+        return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
       }
       const { price } = calcEloPrice(
         queueType, boostMode,
@@ -432,10 +439,7 @@ export function StepConfigure() {
       let combined = withLp
       if (isStandardToMasterPlus) {
         if (masterPlusPriceRow?.price == null || !targetRank) {
-          setBasePrice(0)
-          setEstimatedHours(null)
-          setPdlModifierPct(null)
-          return
+          return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
         }
         const discountedMasterPlusPrice = applyMasterPlusPdlDiscount(
           masterPlusPriceRow.price,
@@ -447,7 +451,6 @@ export function StepConfigure() {
         )
         combined = Math.round((withLp + discountedMasterPlusPrice) * 100) / 100
       }
-      setBasePrice(combined)
       const eloHours = estimateEloBoostHours({
         currentRank,
         targetRank,
@@ -457,43 +460,59 @@ export function StepConfigure() {
         currentPdl: null,
         masterPlusCutoffs,
       })
-      setEstimatedHours(eloHours == null ? null : eloHours * DELIVERY_ESTIMATE_MULTIPLIER)
-      setPdlModifierPct(lpModifierPct(avgLpGain))
+      return {
+        basePrice: combined,
+        estimatedHours: eloHours == null ? null : eloHours * DELIVERY_ESTIMATE_MULTIPLIER,
+        pdlModifierPct: lpModifierPct(avgLpGain),
+      }
 
     } else if (serviceType === 'win_boost') {
-      if (!winsPurchased || !currentRank) return
+      if (!winsPurchased || !currentRank) return null
       const pricePerWin = getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
       const winsTotal = Math.round(winsPurchased * pricePerWin * 100) / 100
-      setBasePrice(winsTotal)
-      setEstimatedHours(expectedMatchesForWins(winsPurchased) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER)
-      setPdlModifierPct(null)
+      return {
+        basePrice: winsTotal,
+        estimatedHours: expectedMatchesForWins(winsPurchased) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER,
+        pdlModifierPct: null,
+      }
     } else if (serviceType === 'md5') {
-      if (!winsPurchased || !currentRank) return
+      if (!winsPurchased || !currentRank) return null
       const cappedWins = Math.min(5, winsPurchased)
       const pricePerWin = getMd5WinPrice(queueType, currentRank.tier, boostMode)
       const winsTotal = Math.round(cappedWins * pricePerWin * 100) / 100
-      setBasePrice(winsTotal)
-      setEstimatedHours(expectedMatchesForWins(cappedWins) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER)
-      setPdlModifierPct(null)
+      return {
+        basePrice: winsTotal,
+        estimatedHours: expectedMatchesForWins(cappedWins) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER,
+        pdlModifierPct: null,
+      }
     } else if (serviceType === 'coaching') {
       // Preço vem do pacote escolhido em CoachPackagePicker (setBasePrice
       // chamado lá, não recalculado aqui) — mas o modificador de PDL de uma
       // configuração elo_boost anterior na mesma sessão não pode vazar para
       // o resumo de um pedido de coaching.
-      setPdlModifierPct(null)
+      return { pdlModifierPct: null }
     } else if (serviceType === 'clash') {
       // Preço/estimativa vêm de ClashConfigPicker (que já chama
       // setBasePrice/setEstimatedHours diretamente) — só garante que o
       // modificador de PDL de uma configuração elo_boost anterior não vaza
       // pro resumo de um pedido de Clash.
-      setPdlModifierPct(null)
+      return { pdlModifierPct: null }
     }
+    return null
   }, [
     serviceType, currentRank, targetRank, boostMode, winsPurchased, queueType,
-    currentLp, avgLpGain, avgLpLoss, currentPdl, avgPdlGain, currentIsMasterPlus, isStandardToMasterPlus,
+    currentLp, avgLpGain, avgLpLoss, currentPdl, currentIsMasterPlus, isStandardToMasterPlus,
     masterPlusPriceRow, masterPlusCutoffs,
-    setBasePrice, setEstimatedHours, setPdlModifierPct,
   ])
+
+  // Único efeito colateral real (escrever num store externo ao componente) --
+  // só espelha o resultado já calculado acima.
+  useEffect(() => {
+    if (!pricingUpdate) return
+    if ('basePrice' in pricingUpdate) setBasePrice(pricingUpdate.basePrice!)
+    if ('estimatedHours' in pricingUpdate) setEstimatedHours(pricingUpdate.estimatedHours!)
+    if ('pdlModifierPct' in pricingUpdate) setPdlModifierPct(pricingUpdate.pdlModifierPct!)
+  }, [pricingUpdate, setBasePrice, setEstimatedHours, setPdlModifierPct])
 
   return (
     <div>
@@ -510,9 +529,10 @@ export function StepConfigure() {
             some/trava quando descobrimos. */}
         {serviceType === 'elo_boost' && (
           <FormField label="Modalidade">
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3" role="group" aria-label="Modalidade">
               <button
                 type="button"
+                aria-pressed={boostMode === 'solo'}
                 onClick={() => setBoostMode('solo')}
                 className={cn(
                   'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
@@ -527,6 +547,7 @@ export function StepConfigure() {
               </button>
               <button
                 type="button"
+                aria-pressed={boostMode === 'duo'}
                 onClick={() => setBoostMode('duo')}
                 disabled={eloDuoBlocked}
                 className={cn(
@@ -569,9 +590,10 @@ export function StepConfigure() {
             considera isMd5). */}
         {(serviceType === 'win_boost' || serviceType === 'md5') && (
           <FormField label="Modalidade">
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3" role="group" aria-label="Modalidade">
               <button
                 type="button"
+                aria-pressed={boostMode === 'solo'}
                 onClick={() => setBoostMode('solo')}
                 className={cn(
                   'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
@@ -586,6 +608,7 @@ export function StepConfigure() {
               </button>
               <button
                 type="button"
+                aria-pressed={boostMode === 'duo'}
                 onClick={() => setBoostMode('duo')}
                 disabled={winsMd5DuoBlocked}
                 className={cn(

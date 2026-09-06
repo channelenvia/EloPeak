@@ -142,6 +142,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
                 value={ownRiotId}
                 onChange={(e) => setOwnRiotId(e.target.value)}
                 placeholder="Nome#TAG"
+                aria-label="Riot ID da conta"
                 className="input-base flex-1 text-sm"
               />
               <Button size="sm" disabled={!ownRiotId.trim()} loading={saveOwnAccount.isPending} onClick={() => saveOwnAccount.mutate()}>
@@ -201,7 +202,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
         </div>
       ) : (
         <div className="space-y-2">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nick..." className="input-base w-full text-xs" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nick..." aria-label="Buscar conta duo" className="input-base w-full text-xs" />
           <p className="text-[10px] text-ink-muted">
             {clientStep != null
               ? `Contas filtradas automaticamente pelo elo do cliente (${clientStep <= DUO_RANK_WINDOW_EMERALD_I_STEP ? '±1 divisão' : '±2 subdivisões'}).`

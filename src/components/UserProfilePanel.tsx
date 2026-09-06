@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import * as Dialog from '@radix-ui/react-dialog'
 import { useNavigate } from 'react-router-dom'
 import { X, LogOut } from 'lucide-react'
 import { Avatar } from '@/components/ui'
@@ -151,165 +151,172 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
     navigate('/')
   }
 
-  if (!open) return null
-
   const role = profile?.role ?? 'customer'
   const roleBadge = ROLE_BADGE[role]
 
-  // Portal pra document.body: os headers que montam esse painel (Booster/
-  // Customer/AdminLayout) usam backdrop-blur, que -- assim como transform/
-  // filter/will-change -- cria containing block pra descendentes
-  // `position: fixed`. Sem o portal, o backdrop e o aside abaixo ficavam
-  // confinados à caixa do header (~68px), não ao viewport inteiro.
-  return createPortal(
-    <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+  // Dialog.Root/Portal/Overlay/Content do Radix em vez de div+aside
+  // hand-rolled: dá foco preso dentro do painel, Escape pra fechar, restore
+  // de foco pro elemento que abriu, e role="dialog"/aria-modal de graça --
+  // achado CRITICAL de a11y (o overlay manual anterior deixava tab
+  // atravessar pro conteúdo atrás e não tinha saída via teclado).
+  return (
+    <Dialog.Root open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/40 z-40" />
 
-      <aside className="fixed right-0 top-0 h-full w-96 bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
-          <h2 className="text-base font-bold text-ink">Minha Conta</h2>
-          <button
-            onClick={onClose}
-            aria-label="Fechar"
-            className="p-1.5 rounded-lg hover:bg-bg-raised text-ink-muted hover:text-ink transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        <Dialog.Content
+          asChild
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="fixed right-0 top-0 h-full w-96 bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl focus:outline-none"
+        >
+          <aside>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
+              <Dialog.Title className="text-base font-bold text-ink">Minha Conta</Dialog.Title>
+              <Dialog.Close
+                aria-label="Fechar"
+                className="p-1.5 rounded-lg hover:bg-bg-raised text-ink-muted hover:text-ink transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
-          {/* Identity */}
-          <div className="flex items-center gap-3">
-            <Avatar src={profile?.avatar_url} name={profile?.username} size="lg" />
-            <div className="min-w-0">
-              <p className="font-semibold text-ink text-sm truncate">{profile?.username}</p>
-              <p className="text-xs text-ink-muted truncate">{profile?.email}</p>
-              {roleBadge && (
-                <span className={cn('text-[10px] px-2 py-0.5 rounded-full mt-1 inline-block font-semibold', roleBadge.className)}>
-                  {roleBadge.label}
-                </span>
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {/* Identity */}
+              <div className="flex items-center gap-3">
+                <Avatar src={profile?.avatar_url} name={profile?.username} size="lg" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink text-sm truncate">{profile?.username}</p>
+                  <p className="text-xs text-ink-muted truncate">{profile?.email}</p>
+                  {roleBadge && (
+                    <span className={cn('text-[10px] px-2 py-0.5 rounded-full mt-1 inline-block font-semibold', roleBadge.className)}>
+                      {roleBadge.label}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Dados da conta */}
+              <div className="rounded-xl border border-border-subtle p-3 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-ink-muted">Username do Discord</span>
+                  <span className="text-ink font-medium truncate max-w-[160px]">{profile?.username ?? '—'}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-ink-muted">ID do Discord</span>
+                  <span className="text-ink font-medium font-mono truncate max-w-[160px]">{profile?.discord_id ?? '—'}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-ink-muted">E-mail</span>
+                  <span className="text-ink font-medium truncate max-w-[160px]">{profile?.email ?? '—'}</span>
+                </div>
+              </div>
+
+              {/* Riot icon picker */}
+              <AvatarIconPicker currentUrl={profile?.avatar_url} onSelect={handleSelectIcon} maxIcons={90} />
+
+              {/* Booster-only fields */}
+              {isBooster && (
+                <div className="border-t border-border-subtle pt-4 space-y-5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Conta Booster</p>
+
+                  {/* Nome de exibição (público, cooldown de 30 dias) */}
+                  <div className="space-y-2">
+                    <label htmlFor="profile-display-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição</label>
+                    <div className="flex gap-2">
+                      <input
+                        id="profile-display-name"
+                        value={displayName}
+                        onChange={e => { setDisplayName(e.target.value.slice(0, 32)); setDisplayNameError(null) }}
+                        placeholder="Nome público"
+                        maxLength={32}
+                        disabled={displayNameLocked}
+                        className="input-base flex-1 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveDisplayName}
+                        disabled={displayNameSaving || displayNameLocked || !displayName.trim() || displayName === boosterData?.display_name}
+                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                      >
+                        {displayNameSaving ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                    {displayNameLocked && (
+                      <p className="text-xs text-ink-muted">
+                        Você já alterou seu nome de exibição recentemente. Poderá alterar novamente em {displayNameDaysRemaining} dia{displayNameDaysRemaining === 1 ? '' : 's'}.
+                      </p>
+                    )}
+                    {displayNameError && <p className="text-xs text-danger">{displayNameError}</p>}
+                    {displayNameSaved && <p className="text-xs text-success">Nome de exibição salvo!</p>}
+                  </div>
+
+                  {/* Full name */}
+                  <div className="space-y-2">
+                    <label htmlFor="profile-full-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome completo (PIX)</label>
+                    <div className="flex gap-2">
+                      <input
+                        id="profile-full-name"
+                        value={fullName}
+                        onChange={e => setFullName(e.target.value)}
+                        placeholder="Como no CPF"
+                        maxLength={120}
+                        className="input-base flex-1 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveFullName}
+                        disabled={fullNameSaving || fullName.trim() === (boosterData?.full_name ?? '')}
+                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                      >
+                        {fullNameSaving ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                    {fullNameSaved && <p className="text-xs text-success">Nome salvo!</p>}
+                  </div>
+
+                  {/* CPF */}
+                  <div className="space-y-2">
+                    <label htmlFor="profile-cpf" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">CPF (PIX)</label>
+                    <div className="flex gap-2">
+                      <input
+                        id="profile-cpf"
+                        value={cpf}
+                        onChange={e => handleCpfChange(e.target.value)}
+                        placeholder="000.000.000-00"
+                        className="input-base flex-1 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveCpf}
+                        disabled={cpfSaving || cpf.replace(/\D/g, '').length !== 11}
+                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                      >
+                        {cpfSaving ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                    {cpfError && <p className="text-xs text-danger">{cpfError}</p>}
+                    {cpfSaved && <p className="text-xs text-success">CPF salvo!</p>}
+                  </div>
+                </div>
               )}
+
+              <DiscordAccountNotice />
             </div>
-          </div>
 
-          {/* Dados da conta */}
-          <div className="rounded-xl border border-border-subtle p-3 space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-ink-muted">Username do Discord</span>
-              <span className="text-ink font-medium truncate max-w-[160px]">{profile?.username ?? '—'}</span>
+            {/* Footer */}
+            <div className="p-4 border-t border-border-subtle shrink-0">
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-danger/30 text-danger hover:bg-danger/10 transition-colors text-sm font-semibold"
+              >
+                <LogOut className="h-4 w-4" />
+                Sair da conta
+              </button>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-ink-muted">ID do Discord</span>
-              <span className="text-ink font-medium font-mono truncate max-w-[160px]">{profile?.discord_id ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-ink-muted">E-mail</span>
-              <span className="text-ink font-medium truncate max-w-[160px]">{profile?.email ?? '—'}</span>
-            </div>
-          </div>
-
-          {/* Riot icon picker */}
-          <AvatarIconPicker currentUrl={profile?.avatar_url} onSelect={handleSelectIcon} maxIcons={90} />
-
-          {/* Booster-only fields */}
-          {isBooster && (
-            <div className="border-t border-border-subtle pt-4 space-y-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Conta Booster</p>
-
-              {/* Nome de exibição (público, cooldown de 30 dias) */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição</p>
-                <div className="flex gap-2">
-                  <input
-                    value={displayName}
-                    onChange={e => { setDisplayName(e.target.value.slice(0, 32)); setDisplayNameError(null) }}
-                    placeholder="Nome público"
-                    maxLength={32}
-                    disabled={displayNameLocked}
-                    className="input-base flex-1 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveDisplayName}
-                    disabled={displayNameSaving || displayNameLocked || !displayName.trim() || displayName === boosterData?.display_name}
-                    className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
-                  >
-                    {displayNameSaving ? '...' : 'Salvar'}
-                  </button>
-                </div>
-                {displayNameLocked && (
-                  <p className="text-xs text-ink-muted">
-                    Você já alterou seu nome de exibição recentemente. Poderá alterar novamente em {displayNameDaysRemaining} dia{displayNameDaysRemaining === 1 ? '' : 's'}.
-                  </p>
-                )}
-                {displayNameError && <p className="text-xs text-danger">{displayNameError}</p>}
-                {displayNameSaved && <p className="text-xs text-success">Nome de exibição salvo!</p>}
-              </div>
-
-              {/* Full name */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome completo (PIX)</p>
-                <div className="flex gap-2">
-                  <input
-                    value={fullName}
-                    onChange={e => setFullName(e.target.value)}
-                    placeholder="Como no CPF"
-                    maxLength={120}
-                    className="input-base flex-1 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveFullName}
-                    disabled={fullNameSaving || fullName.trim() === (boosterData?.full_name ?? '')}
-                    className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
-                  >
-                    {fullNameSaving ? '...' : 'Salvar'}
-                  </button>
-                </div>
-                {fullNameSaved && <p className="text-xs text-success">Nome salvo!</p>}
-              </div>
-
-              {/* CPF */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">CPF (PIX)</p>
-                <div className="flex gap-2">
-                  <input
-                    value={cpf}
-                    onChange={e => handleCpfChange(e.target.value)}
-                    placeholder="000.000.000-00"
-                    className="input-base flex-1 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveCpf}
-                    disabled={cpfSaving || cpf.replace(/\D/g, '').length !== 11}
-                    className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
-                  >
-                    {cpfSaving ? '...' : 'Salvar'}
-                  </button>
-                </div>
-                {cpfError && <p className="text-xs text-danger">{cpfError}</p>}
-                {cpfSaved && <p className="text-xs text-success">CPF salvo!</p>}
-              </div>
-            </div>
-          )}
-
-          <DiscordAccountNotice />
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-border-subtle shrink-0">
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-danger/30 text-danger hover:bg-danger/10 transition-colors text-sm font-semibold"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair da conta
-          </button>
-        </div>
-      </aside>
-    </>,
-    document.body
+          </aside>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

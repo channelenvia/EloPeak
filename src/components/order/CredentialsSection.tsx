@@ -31,12 +31,12 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
       {canSet && (
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-ink-secondary block mb-1">Login / E-mail da conta</label>
-            <input type="text" value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Ex: SeuUsuario#BR1" className="input-base w-full text-sm" autoComplete="username" maxLength={160} />
+            <label htmlFor="order-credentials-login" className="text-xs font-semibold text-ink-secondary block mb-1">Login / E-mail da conta</label>
+            <input id="order-credentials-login" type="text" value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Ex: SeuUsuario#BR1" className="input-base w-full text-sm" autoComplete="username" maxLength={160} />
           </div>
           <div>
-            <label className="text-xs font-semibold text-ink-secondary block mb-1">Senha da conta</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input-base w-full text-sm" autoComplete="current-password" maxLength={256} />
+            <label htmlFor="order-credentials-password" className="text-xs font-semibold text-ink-secondary block mb-1">Senha da conta</label>
+            <input id="order-credentials-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input-base w-full text-sm" autoComplete="current-password" maxLength={256} />
             <p className="text-[10px] text-ink-muted mt-1">O valor enviado é transformado em payload criptografado no banco. Não compartilhe a senha no chat.</p>
           </div>
           <Button size="sm" className="w-full" loading={saveCredentials.isPending} disabled={!login.trim() || password.length < 4} onClick={submit} variant={saved ? 'success' : 'primary'}>

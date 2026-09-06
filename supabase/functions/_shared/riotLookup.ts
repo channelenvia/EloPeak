@@ -1,5 +1,30 @@
 import { fetchWithTimeout } from './http.ts'
-import type { RankTier, Division } from '../../../shared/pricing.ts'
+import { rankStep, type RankTier, type Division } from '../../../shared/pricing.ts'
+
+// Cap curto e único retry: a Riot devolve 429 com Retry-After em segundos.
+// Sem isso, syncs concorrentes de pedidos diferentes compartilhando a mesma
+// API key simplesmente falhavam rápido (503 pro chamador) em vez de esperar
+// a janela de rate limit da Riot passar. Um retry só (não um loop) porque
+// cada function tem timeout de execução próprio -- se a Riot ainda estiver
+// throttling depois do Retry-After, o chamador trata como rate_limited
+// normalmente (ver os `if (resp.status === 429)` logo depois de cada chamada).
+const MAX_RETRY_AFTER_SECONDS = 5
+
+async function fetchRiotWithRetry(
+  input: string,
+  init: RequestInit,
+  timeoutMs?: number,
+): Promise<Response> {
+  const resp = await fetchWithTimeout(input, init, timeoutMs)
+  if (resp.status !== 429) return resp
+
+  const retryAfterSeconds = Math.min(
+    MAX_RETRY_AFTER_SECONDS,
+    Math.max(1, Number(resp.headers.get('retry-after')) || 1),
+  )
+  await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
+  return fetchWithTimeout(input, init, timeoutMs)
+}
 
 export const RIOT_TIER_MAP: Record<string, RankTier> = {
   IRON: 'iron', BRONZE: 'bronze', SILVER: 'silver', GOLD: 'gold',
@@ -50,7 +75,7 @@ export async function fetchRiotAccount(
   const gameName = riotId.slice(0, hashIdx)
   const tagLine = riotId.slice(hashIdx + 1)
 
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${regionalRoute}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
     { headers: { 'X-Riot-Token': apiKey } },
   )
@@ -86,7 +111,7 @@ export async function fetchLeagueEntries(
   apiKey: string,
   platformRoute: string,
 ): Promise<LeagueEntriesResult> {
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${platformRoute}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`,
     { headers: { 'X-Riot-Token': apiKey } },
   )
@@ -99,6 +124,84 @@ export async function fetchLeagueEntries(
 export const RIOT_QUEUE_TYPE: Record<'solo_duo' | 'flex', { leagueQueue: string; matchQueueId: number }> = {
   solo_duo: { leagueQueue: 'RANKED_SOLO_5x5', matchQueueId: 420 },
   flex: { leagueQueue: 'RANKED_FLEX_SR', matchQueueId: 440 },
+}
+
+export interface RankOrdinal {
+  ordinal: number
+  tier: RankTier
+  division: Division | null
+  lp: number
+}
+
+export type RankOrdinalResult =
+  | { ok: true; ordinal: RankOrdinal }
+  | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'not_ranked'; status: number }
+
+// League-V4 não expõe LP ganho/perdido POR partida (ver estimateLpAverages
+// acima), mas dá pra saber se uma conta específica subiu, desceu ou ficou no
+// mesmo lugar comparando dois snapshots tirados antes/depois de uma partida
+// -- é assim que resolveMatchResult decide remake ("kitada") sem depender da
+// heurística de timePlayed. `rankStep*1000` garante que promoção/rebaixamento
+// sempre pesa mais que a variação de LP dentro da mesma divisão (LP nunca
+// passa de ~100 fora de Mestre+) -- comparar só o LP cru erraria toda vez que
+// a MESMA partida também promove ou rebaixa quem está sendo rastreado.
+export function rankOrdinal(tier: RankTier, division: Division | null, lp: number): number {
+  return rankStep(tier, division) * 1000 + lp
+}
+
+export async function fetchRankOrdinal(
+  puuid: string,
+  apiKey: string,
+  platformRoute: string,
+  leagueQueue: string,
+): Promise<RankOrdinalResult> {
+  const result = await fetchLeagueEntries(puuid, apiKey, platformRoute)
+  if (!result.ok) return result
+  const entry = result.entries.find((e) => e.queueType === leagueQueue)
+  const tier = entry?.tier ? RIOT_TIER_MAP[entry.tier] : undefined
+  if (!tier) return { ok: false, reason: 'not_ranked', status: 404 }
+  const division = NO_DIVISION_TIERS.includes(tier)
+    ? null
+    : entry?.rank ? RIOT_DIVISION_MAP[entry.rank] ?? null : null
+  if (!NO_DIVISION_TIERS.includes(tier) && !division) return { ok: false, reason: 'not_ranked', status: 404 }
+  const lp = Math.max(0, Number(entry?.leaguePoints ?? 0))
+  return { ok: true, ordinal: { ordinal: rankOrdinal(tier, division, lp), tier, division, lp } }
+}
+
+// Resolve o resultado (win/loss/remake) de UM lado (cliente OU duo) de uma
+// partida e mantém o checkpoint de PDL/LP daquele lado atualizado, pra
+// resolver o próximo remake do mesmo lote com um "antes" confiável. Fora de
+// RANK_TRACKED_SERVICE_TYPES (Clash etc.) nunca gasta chamada na Riot --
+// usa sempre a heurística antiga de timePlayed (ver causedRemake). Dentro de
+// RANK_TRACKED, também cai pra essa heurística se a Riot falhar/a conta
+// estiver sem entry na fila (unranked) -- degrada em vez de travar o sync.
+export async function resolveMatchResult(params: {
+  isRankTracked: boolean
+  isRemake: boolean
+  rawResult: 'win' | 'loss'
+  body: RiotMatchV5Body
+  puuid: string
+  tracker: { value: number | null }
+  fetchOrdinal: () => Promise<RankOrdinalResult>
+  persist: (ordinal: RankOrdinal) => Promise<void>
+}): Promise<'win' | 'loss' | 'remake'> {
+  const { isRankTracked, isRemake, rawResult, body, puuid, tracker, fetchOrdinal, persist } = params
+  const heuristicFallback = () => (isRemake ? (causedRemake(body, puuid) ? 'loss' : 'remake') : rawResult)
+
+  if (!isRankTracked) return heuristicFallback()
+
+  const fresh = await fetchOrdinal()
+  if (!fresh.ok) return heuristicFallback()
+
+  const before = tracker.value
+  tracker.value = fresh.ordinal.ordinal
+  await persist(fresh.ordinal)
+
+  if (!isRemake) return rawResult
+  if (before == null) return causedRemake(body, puuid) ? 'loss' : 'remake'
+  if (fresh.ordinal.ordinal > before) return 'win'
+  if (fresh.ordinal.ordinal < before) return 'loss'
+  return 'remake'
 }
 
 export type LeagueCutoffResult =
@@ -136,7 +239,7 @@ export async function fetchLeagueCutoff(
 ): Promise<LeagueCutoffResult> {
   const { leagueQueue } = RIOT_QUEUE_TYPE[queue]
   const path = tier === 'challenger' ? 'challengerleagues' : 'grandmasterleagues'
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${platformRoute}.api.riotgames.com/lol/league/v4/${path}/by-queue/${leagueQueue}`,
     { headers: { 'X-Riot-Token': apiKey } },
     15_000,
@@ -181,7 +284,7 @@ export async function fetchRecentRankedRecord(
   queue: 'solo_duo' | 'flex',
 ): Promise<RecentRankedRecordResult> {
   const { matchQueueId } = RIOT_QUEUE_TYPE[queue]
-  const idsResp = await fetchWithTimeout(
+  const idsResp = await fetchRiotWithRetry(
     `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
     + `?queue=${matchQueueId}&start=0&count=10`,
     { headers: { 'X-Riot-Token': apiKey } },
@@ -193,7 +296,7 @@ export async function fetchRecentRankedRecord(
   if (!Array.isArray(matchIds) || matchIds.length === 0) return { ok: true, wins: 0, losses: 0, matches: 0 }
 
   const details = await Promise.all(matchIds.map(async (matchId) => {
-    const resp = await fetchWithTimeout(
+    const resp = await fetchRiotWithRetry(
       `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
       { headers: { 'X-Riot-Token': apiKey } },
     )
@@ -225,7 +328,7 @@ export async function fetchRankedMatchIdsThisSplit(
   splitStartEpochSeconds: number,
 ): Promise<MatchIdsResult> {
   const { matchQueueId } = RIOT_QUEUE_TYPE[queue]
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
     + `?queue=${matchQueueId}&startTime=${splitStartEpochSeconds}&count=10`,
     { headers: { 'X-Riot-Token': apiKey } },
@@ -249,7 +352,7 @@ export async function fetchMatchIdsSince(
   startTimeEpochSeconds: number,
   count = 20,
 ): Promise<MatchIdsResult> {
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
     + `?queue=${matchQueueId}&startTime=${startTimeEpochSeconds}&count=${count}`,
     { headers: { 'X-Riot-Token': apiKey } },
@@ -309,7 +412,7 @@ export function causedRemake(body: RiotMatchV5Body, puuid: string): boolean {
 
 export type MatchDetailResult =
   | { ok: true; detail: MatchDetail }
-  | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'participant_not_found'; status: number }
+  | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'participant_not_found' | 'missing_played_at'; status: number }
 
 interface RiotParticipant {
   puuid?: string
@@ -346,6 +449,14 @@ export function parseMatchDetail(body: RiotMatchV5Body, puuid: string, matchId: 
   if (!participant || typeof participant.win !== 'boolean') {
     return { ok: false, reason: 'participant_not_found', status: 502 }
   }
+  // gameEndTimestamp ausente é uma partida malformada -- played_at alimenta a
+  // janela de atribuição de booster em record_order_match/record_duo_match,
+  // então cair pro "agora" atribuiria a partida a quem está ATUALMENTE
+  // designado em vez de quem de fato jogou. Melhor pular/retentar depois do
+  // que gravar um played_at inventado.
+  if (typeof body.info?.gameEndTimestamp !== 'number') {
+    return { ok: false, reason: 'missing_played_at', status: 502 }
+  }
 
   // MVP = maior KDA entre os 5 do mesmo teamId (empate conta pros dois --
   // usa >= contra o máximo do time, não > estrito). Se teamId vier ausente
@@ -368,7 +479,7 @@ export function parseMatchDetail(body: RiotMatchV5Body, puuid: string, matchId: 
       assists: participant.assists ?? 0,
       queueId: body.info?.queueId ?? null,
       durationSeconds: body.info?.gameDuration ?? null,
-      playedAt: new Date((body.info?.gameEndTimestamp ?? Date.now())).toISOString(),
+      playedAt: new Date(body.info.gameEndTimestamp).toISOString(),
       minionsKilled: participant.totalMinionsKilled ?? 0,
       neutralMinionsKilled: participant.neutralMinionsKilled ?? 0,
       isMvp,
@@ -392,7 +503,7 @@ export async function fetchMatchBody(
   apiKey: string,
   regionalRoute: string,
 ): Promise<MatchBodyResult> {
-  const resp = await fetchWithTimeout(
+  const resp = await fetchRiotWithRetry(
     `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
     { headers: { 'X-Riot-Token': apiKey } },
   )

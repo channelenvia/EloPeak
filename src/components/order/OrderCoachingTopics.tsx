@@ -82,6 +82,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd() } }}
           placeholder="ex: Revisar posicionamento em teamfight..."
+          aria-label="Novo tópico de coaching"
           maxLength={200}
           className="input-base flex-1 text-sm"
         />

@@ -33,8 +33,15 @@ export function AdminOrdersPage() {
   const PAGE_SIZE = 12
   const pageOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasNextPage = page * PAGE_SIZE < filtered.length
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  useEffect(() => { if (page > maxPage) setPage(maxPage) }, [maxPage, page])
+  // Reseta pra página 1 em qualquer mudança de filtro/busca -- só clampar
+  // pra maxPage (comportamento anterior) deixava o admin "preso" na página
+  // 2+ do conjunto ANTIGO ao trocar de filtro. Mesmo padrão de
+  // BoosterOrdersPage (Orders.tsx do booster) e OrderHistory.tsx (cliente).
+  useEffect(() => { setPage(1) }, [
+    statusFilter.tab, statusFilter.dropped, statusFilter.overdue, statusFilter.includeCanceled,
+    serviceFilters.category, serviceFilters.queue, serviceFilters.mode,
+    serviceFilters.clashTier, serviceFilters.clashDay, search,
+  ])
 
   return (
     <div className="space-y-6">

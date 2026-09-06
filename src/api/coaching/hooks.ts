@@ -49,7 +49,7 @@ export function useBoosterServicesByIds(ids: string[]) {
 
 export function useCoachBoosterInfo(boosterIds: string[]) {
   return useQuery({
-    queryKey: queryKeys.coaching.packages({ boosterIds }),
+    queryKey: queryKeys.coaching.boosterInfo(boosterIds),
     queryFn: () => listCoachBoosterInfo(boosterIds),
     enabled: boosterIds.length > 0,
   })

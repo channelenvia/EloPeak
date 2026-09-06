@@ -177,8 +177,34 @@ export function buildPublicJobEmbed(order: any) {
   }
 }
 
+// Cap curto e único retry em 429: sem isso, um envio limitado por taxa é
+// logado e perdido pra sempre, já que todo chamador de sendChannelMessage/
+// sendDirectMessage é um trigger de cron/webhook fire-and-forget sem caminho
+// de retry próprio. Discord manda o tempo de espera tanto no header
+// Retry-After quanto no corpo JSON (`retry_after`, em segundos, às vezes
+// fracionário) -- tenta o header primeiro, cai pro corpo se ausente.
+const MAX_DISCORD_RETRY_SECONDS = 5
+
+async function fetchDiscordWithRetry(input: string, init: RequestInit): Promise<Response> {
+  const res = await fetchWithTimeout(input, init)
+  if (res.status !== 429) return res
+
+  let retryAfterSeconds = Number(res.headers.get('retry-after'))
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    try {
+      const body = await res.clone().json() as { retry_after?: number }
+      retryAfterSeconds = Number(body.retry_after)
+    } catch {
+      retryAfterSeconds = 0
+    }
+  }
+  retryAfterSeconds = Math.min(MAX_DISCORD_RETRY_SECONDS, Math.max(1, retryAfterSeconds || 1))
+  await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
+  return fetchWithTimeout(input, init)
+}
+
 export async function sendChannelMessage(channelId: string, payload: object) {
-  const res = await fetchWithTimeout(`${DISCORD_API}/channels/${channelId}/messages`, {
+  const res = await fetchDiscordWithRetry(`${DISCORD_API}/channels/${channelId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -187,4 +213,22 @@ export async function sendChannelMessage(channelId: string, payload: object) {
     console.error(`Discord send message failed ${res.status}:`, await res.text())
     throw new Error(`Discord send message ${res.status}`)
   }
+}
+
+// DM direto -- Discord exige abrir (ou reaproveitar) o canal de DM com o
+// usuário antes de mandar qualquer mensagem direta (idempotente, sempre
+// retorna o mesmo channel id pra um par bot/usuário). Extraído aqui em vez
+// de duplicado entre discord-order-channel e discord-chat-mention.
+export async function sendDirectMessage(discordUserId: string, payload: object) {
+  const dmRes = await fetchDiscordWithRetry(`${DISCORD_API}/users/@me/channels`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipient_id: discordUserId }),
+  })
+  if (!dmRes.ok) {
+    console.error(`Discord create DM channel failed ${dmRes.status}:`, await dmRes.text())
+    throw new Error(`Discord create DM channel ${dmRes.status}`)
+  }
+  const dmChannel = await dmRes.json() as { id: string }
+  await sendChannelMessage(dmChannel.id, payload)
 }

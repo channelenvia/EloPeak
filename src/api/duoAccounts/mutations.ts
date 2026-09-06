@@ -49,12 +49,18 @@ export async function clearDuoOwnRiotId(orderId: string) {
   return assertRpcSuccess(data as { success: boolean; error?: string }, OWN_ACCOUNT_MESSAGES)
 }
 
+const UPDATE_RANK_MESSAGES: Record<string, string> = {
+  invalid_rank: 'Rank informado é inválido ou fora do intervalo suportado (Ferro IV a Diamante I).',
+  account_not_found: 'Conta Duo não encontrada.',
+  unauthorized: 'Você não tem permissão para atualizar o rank desta conta.',
+}
+
 export async function updateDuoAccountRank(params: { accountId: string; tier: string; division: string | null }) {
   const { data, error } = await supabase.rpc('update_duo_account_rank', {
     p_account_id: params.accountId, p_tier: params.tier, p_division: (params.division ?? '') as never,
   })
   if (error) throw normalizeApiError(error)
-  return data as { success?: boolean; error?: string }
+  return assertRpcSuccess(data as { success?: boolean; error?: string }, UPDATE_RANK_MESSAGES)
 }
 
 const DUO_ACCOUNT_MESSAGES: Record<string, string> = {

@@ -62,8 +62,15 @@ serve(async (req) => {
     }
 
     if (stale) {
-      for (const tier of TIERS) {
-        const result = await fetchLeagueCutoff(tier, queue, RIOT_API_KEY, PLATFORM_ROUTE)
+      // Os dois refetches são independentes (grandmaster/challenger) --
+      // rodar em Promise.all em vez de sequencial evita dobrar a latência de
+      // pior caso (2×15s de timeout) quando o cache está velho.
+      const results = await Promise.all(
+        TIERS.map((tier) => fetchLeagueCutoff(tier, queue, RIOT_API_KEY, PLATFORM_ROUTE)),
+      )
+      for (let i = 0; i < TIERS.length; i++) {
+        const tier = TIERS[i]
+        const result = results[i]
         if (result.ok) {
           cutoffs[tier] = result.cutoffLp
           const nowIso = new Date().toISOString()

@@ -43,11 +43,23 @@ export function usePendingReviewOrders() {
   return query
 }
 
+// invalidateOrder também dispara o refetch da própria página de detalhe do
+// pedido (AdminOrderDetailPage usa useOrder, chave orders.detail) -- essas
+// mutations agora são chamadas tanto do painel do dashboard (PendingReviewPanel)
+// quanto do menu de ações da página do pedido, então precisam invalidar as
+// duas chaves em vez de só admin.pendingReview().
+function invalidateOrderAndPendingReview(queryClient: ReturnType<typeof useQueryClient>, orderId: string) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.orders.state(orderId) })
+}
+
 export function useAdminSetPendingReviewLock() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminSetPendingReviewLock,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() }),
+    onSuccess: (_data, variables) => invalidateOrderAndPendingReview(queryClient, variables.orderId),
   })
 }
 
@@ -55,7 +67,7 @@ export function useAdminCancelPendingReviewOrder() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminCancelPendingReviewOrder,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() }),
+    onSuccess: (_data, variables) => invalidateOrderAndPendingReview(queryClient, variables.orderId),
   })
 }
 
@@ -63,10 +75,9 @@ export function useAdminAssignPendingReviewOrder() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminAssignPendingReviewOrder,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() })
-      void queryClient.invalidateQueries({ queryKey: ['booster-slots'] })
-      void queryClient.invalidateQueries({ queryKey: ['boosters', 'with-slots'] })
+    onSuccess: (_data, variables) => {
+      invalidateOrderAndPendingReview(queryClient, variables.orderId)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
     },
   })
 }

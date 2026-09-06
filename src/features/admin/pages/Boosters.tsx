@@ -26,6 +26,7 @@ function BoosterActionsMenu({
   const [draft, setDraft] = useState(note?.note ?? '')
   const [expelOpen, setExpelOpen] = useState(false)
   const [expelReason, setExpelReason] = useState('')
+  const [suspendConfirmOpen, setSuspendConfirmOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const setNote = useSetBoosterAdminNote()
   const hasNote = !!note?.note?.trim()
@@ -84,7 +85,7 @@ function BoosterActionsMenu({
           <button
             type="button"
             disabled={statusPending}
-            onClick={() => { onSuspend(); setMenuOpen(false) }}
+            onClick={() => { setSuspendConfirmOpen(true); setMenuOpen(false) }}
             className={cn(itemClass, 'text-danger hover:bg-danger/10')}
           >
             <Ban className="h-4 w-4 shrink-0" /> Suspender
@@ -147,10 +148,11 @@ function BoosterActionsMenu({
         description="Ação permanente: o login é banido e não pode ser reativado."
       >
         <div>
-          <label className="text-xs font-semibold text-ink-secondary block mb-1.5">
+          <label htmlFor="booster-expel-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
             Motivo <span className="text-danger">*</span>
           </label>
           <textarea
+            id="booster-expel-reason"
             value={expelReason}
             onChange={(e) => setExpelReason(e.target.value)}
             placeholder="Descreva o motivo da expulsão..."
@@ -167,6 +169,24 @@ function BoosterActionsMenu({
             onClick={() => { onExpel(expelReason.trim()); setExpelOpen(false); setExpelReason('') }}
           >
             Expulsar Permanentemente
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={suspendConfirmOpen}
+        onOpenChange={setSuspendConfirmOpen}
+        title={`Suspender ${booster.display_name}`}
+        description="O booster fica suspenso por 24h e sai temporariamente dos jobs -- diferente de Expulsar, essa ação é reversível (Reativar)."
+      >
+        <div className="flex gap-3 justify-end pt-2">
+          <Button variant="ghost" onClick={() => setSuspendConfirmOpen(false)}>Cancelar</Button>
+          <Button
+            variant="danger"
+            loading={statusPending}
+            onClick={() => { onSuspend(); setSuspendConfirmOpen(false) }}
+          >
+            Suspender
           </Button>
         </div>
       </Modal>
@@ -272,13 +292,13 @@ export function AdminBoostersPage() {
                     <BoosterActionsMenu
                       booster={b}
                       note={boosterNotes?.get(b.id)}
-                      statusPending={updateBoosterStatusMutation.isPending}
+                      statusPending={updateBoosterStatusMutation.isPending && updateBoosterStatusMutation.variables?.boosterId === b.id}
                       onApprove={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
                       onReject={() => updateBoosterStatus.mutate({ id: b.id, status: 'rejected' })}
                       onSuspend={() => updateBoosterStatus.mutate({ id: b.id, status: 'suspended' })}
                       onReinstate={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
                       onExpel={(reason) => expelBoosterMutation.mutate({ boosterId: b.id, reason })}
-                      expelPending={expelBoosterMutation.isPending}
+                      expelPending={expelBoosterMutation.isPending && expelBoosterMutation.variables?.boosterId === b.id}
                     />
                   </TableCell>
                 </TableRow>

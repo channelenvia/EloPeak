@@ -26,10 +26,10 @@ import { Button, ErrorAlert, Modal, OrderStatusBadge, Skeleton } from '@/compone
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { EdgeFunctionError } from '@/lib/invokeEdgeFunction'
-import { formatDateTime, formatEstimatedDelivery, getOrderServiceName } from '@/lib/utils'
+import { formatDateTime, formatEstimatedDelivery, getOrderServiceName, getOrderStatusGroup } from '@/lib/utils'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { useAuthStore } from '@/stores/authStore'
-import type { Order, OrderStatus } from '@/types'
+import type { Order } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
 import {
     CalendarDays,
@@ -46,7 +46,7 @@ import {
     Wallet,
     XCircle,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -123,24 +123,37 @@ function PendingPaymentSection({ order }: { order: Order }) {
   const generatePix = useGeneratePix(order.id)
   const cancelOrderMutation = useCancelPendingOrder()
 
+  // Reconfirma o estado ao vivo do pedido e redireciona se o pagamento já foi
+  // confirmado nesse meio-tempo -- usada tanto no polling normal quanto nos
+  // dois pontos que cancelam o pedido (erro do cancelamento E o timeout do
+  // countdown), pra nenhum dos dois arriscar cancelar um pedido que acabou de
+  // ser pago (webhook confirmando bem no instante do vencimento).
+  const redirectIfPaymentConfirmed = useCallback(async (): Promise<boolean> => {
+    const state = await getCustomerOrderState(order.id).catch((err: unknown) => {
+      // Loga a causa real -- sem isso, uma falha real de rede/servidor fica
+      // indistinguível de "ainda não confirmado".
+      console.error('Failed to check customer order state', err instanceof Error ? err.message : err)
+      return null
+    })
+    if (!state?.payment_confirmed) return false
+
+    queryClient.setQueryData(['orders', 'state', order.id], state)
+    await queryClient.invalidateQueries({ queryKey: ['orders', 'detail', order.id] })
+    navigate(`/orders/${order.id}${state.requires_credentials ? '#credentials' : ''}`, { replace: true })
+    return true
+  }, [order.id, queryClient, navigate])
+
   useEffect(() => {
     if (!pix || order.status !== 'awaiting_payment') return
     const interval = window.setInterval(async () => {
-      const state = await getCustomerOrderState(order.id).catch(() => null)
-      if (state?.payment_confirmed) {
+      const confirmed = await redirectIfPaymentConfirmed()
+      if (confirmed) {
         window.clearInterval(interval)
-        queryClient.setQueryData(['orders', 'state', order.id], state)
-        if (state.requires_credentials) {
-          navigate(`/orders/${order.id}#credentials`, { replace: true })
-        }
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['orders', 'detail', order.id] }),
-          queryClient.invalidateQueries({ queryKey: ['orders', 'customer'] }),
-        ])
+        await queryClient.invalidateQueries({ queryKey: ['orders', 'customer'] })
       }
     }, 5000)
     return () => window.clearInterval(interval)
-  }, [pix, order.id, order.status, queryClient, navigate])
+  }, [pix, order.status, queryClient, redirectIfPaymentConfirmed])
 
   function loadPix() {
     setError(null)
@@ -153,7 +166,7 @@ function PendingPaymentSection({ order }: { order: Order }) {
     })
   }
 
-  function cancelOrder() {
+  const cancelOrder = useCallback(() => {
     setError(null)
     cancelOrderMutation.mutate(order.id, {
       onSuccess: () => {
@@ -163,25 +176,29 @@ function PendingPaymentSection({ order }: { order: Order }) {
         navigate('/orders/new?new=1', { replace: true })
       },
       onError: async () => {
-        const state = await getCustomerOrderState(order.id).catch(() => null)
-        if (state?.payment_confirmed) {
-          queryClient.setQueryData(['orders', 'state', order.id], state)
-          await queryClient.invalidateQueries({ queryKey: ['orders', 'detail', order.id] })
-          navigate(`/orders/${order.id}${state.requires_credentials ? '#credentials' : ''}`, { replace: true })
-          return
-        }
+        // Reconfirma antes de tratar como "cancelamento falhou de vez" -- o
+        // cancelamento pode ter sido rejeitado justamente porque o pagamento
+        // acabou de ser confirmado (corrida com o webhook do MP).
+        const confirmed = await redirectIfPaymentConfirmed()
+        if (confirmed) return
         queryClient.invalidateQueries({ queryKey: ['orders', 'customer'] })
         queryClient.invalidateQueries({ queryKey: ['resumable-customer-order'] })
         navigate('/orders/new?new=1', { replace: true })
       },
     })
-  }
+  }, [order.id, cancelOrderMutation, queryClient, navigate, redirectIfPaymentConfirmed])
 
   useEffect(() => {
     if (!pix || remaining !== 0) return
-    cancelOrder()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining, pix])
+    // Reconfirma o estado ao vivo ANTES de cancelar por timeout -- o poll de
+    // 5s (efeito acima) pode confirmar o pagamento bem no instante do
+    // vencimento; sem checar de novo aqui, o timeout cancelaria um pedido
+    // que acabou de ser pago.
+    void (async () => {
+      const confirmed = await redirectIfPaymentConfirmed()
+      if (!confirmed) cancelOrder()
+    })()
+  }, [remaining, pix, redirectIfPaymentConfirmed, cancelOrder])
 
   async function copyPix() {
     if (!pix?.qr_code) return
@@ -257,7 +274,10 @@ function PendingPaymentSection({ order }: { order: Order }) {
   )
 }
 
-const CUSTOMER_DROPPABLE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 'awaiting_customer']
+// Mesmo teto de drop_count usado pelo backend (apply_order_drop, ver
+// supabase/migrations) -- centralizado aqui em vez de repetir o literal 2 em
+// dois pontos deste arquivo.
+const MAX_CUSTOMER_DROPS = 2
 
 function DropLockedBadge({ order }: { order: Order }) {
   if (order.status !== 'drop_requested') return null
@@ -275,7 +295,7 @@ function DropLockedBadge({ order }: { order: Order }) {
 function CustomerDropModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const [dropReason, setDropReason] = useState('')
   const requestDrop = useRequestCustomerOrderDrop(order.id)
-  const remainingDrops = Math.max(0, 2 - order.drop_count)
+  const remainingDrops = Math.max(0, MAX_CUSTOMER_DROPS - order.drop_count)
 
   return (
     <Modal
@@ -288,10 +308,10 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
         Você ainda possui {remainingDrops} drop{remainingDrops === 1 ? '' : 's'} disponíve{remainingDrops === 1 ? 'l' : 'is'} para este pedido.
       </p>
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">
+        <label htmlFor="customer-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="customer-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
@@ -335,7 +355,11 @@ export function OrderDetailPage() {
   const markChatRead = useMarkOrderChatRead(id ?? '')
   useEffect(() => {
     if (unreadChatCount > 0) markChatRead.mutate()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // markChatRead (objeto de useMutation) muda de identidade a cada render
+    // independente de unreadChatCount -- incluí-lo na dependency array
+    // disparia mutate() de novo em qualquer re-render não relacionado
+    // enquanto ainda houver mensagem não lida, não só quando o count muda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadChatCount])
 
   // Deep link pós-pagamento (StepPayment.tsx navega pra cá com #credentials
@@ -401,8 +425,12 @@ export function OrderDetailPage() {
     { icon: Wallet, label: t('customer.order.totalPaid'), value: currency(order.total_price) },
   ]
 
-  const dropVisible = CUSTOMER_DROPPABLE_STATUSES.includes(order.status)
-  const dropLimitReached = order.drop_count >= 2
+  // getOrderStatusGroup === 'in_progress' cobre assigned/in_progress/paused
+  // sempre, e awaiting_customer só quando já tem booster designado -- mais
+  // preciso que a lista antiga (que incluía awaiting_customer mesmo antes de
+  // ter booster, quando "trocar de booster" não faz sentido nenhum ainda).
+  const dropVisible = getOrderStatusGroup(order) === 'in_progress'
+  const dropLimitReached = order.drop_count >= MAX_CUSTOMER_DROPS
   const canConfirm = !!customerState?.can_confirm_completion
 
   return (
@@ -432,6 +460,11 @@ export function OrderDetailPage() {
                 Pedido reatribuído · valor e prazo atualizados
               </span>
             )}
+            {/* Deliberadamente NÃO usa getOrderStatusGroup(order) === 'in_progress'
+                aqui -- esse grupo também inclui 'assigned', mas o contador só
+                faz sentido depois que match_sync_started_at de fato existe
+                (setado só ao entrar em in_progress), então 'assigned' fica de
+                fora de propósito. */}
             {['in_progress', 'paused', 'awaiting_customer'].includes(order.status) && (
               <CountdownTimer startedAt={order.match_sync_started_at} estimatedHours={order.estimated_hours} />
             )}
@@ -461,13 +494,19 @@ export function OrderDetailPage() {
         notesLabel={t('customer.order.notes')}
         syncMatches={syncMatches}
         accountSectionRef={accountSectionRef}
+        // Deliberadamente NÃO usa getOrderStatusGroup: essa lista é "todo
+        // status exceto canceled/refunded/under_review/draft" e inclui
+        // 'disputed' de propósito (mostra a barra de progresso mesmo em
+        // disputa), enquanto getOrderStatusGroup classifica 'disputed' como
+        // 'hidden' junto com canceled/refunded -- usar o grupo aqui
+        // esconderia o progresso de um pedido em disputa.
         showProgress={['awaiting_payment', 'paid', 'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'drop_requested', 'awaiting_customer', 'completed', 'disputed'].includes(order.status)}
         accountLockedMessage={
           order.status === 'awaiting_payment'
             ? 'A conta do pedido fica disponível após a confirmação do pagamento.'
             : order.status === 'completed' && order.boost_mode !== 'duo'
               ? 'As credenciais ficam indisponíveis após a conclusão do pedido.'
-              : order.boost_mode === 'duo' && ['paid', 'awaiting_assignment'].includes(order.status)
+              : order.boost_mode === 'duo' && getOrderStatusGroup(order) === 'awaiting_booster'
                 ? 'A conta Duo fica disponível quando um booster aceitar o pedido.'
                 : customerState && !customerState.requires_credentials && order.boost_mode !== 'duo'
                   ? 'Este serviço não exige acesso à conta.'
@@ -475,6 +514,11 @@ export function OrderDetailPage() {
         }
         accountContent={
           order.boost_mode === 'duo'
+            // Deliberadamente NÃO usa getOrderStatusGroup: esse grupo também
+            // inclui 'assigned', mas o histórico de partidas duo só existe
+            // depois que a sincronização de fato começou (in_progress em
+            // diante) -- em 'assigned' ainda não há nada pra mostrar, então
+            // continua caindo no card de "Riot ID do parceiro" até lá.
             ? (['in_progress', 'paused', 'awaiting_customer', 'completed'].includes(order.status)
               ? <DuoAccountHistoryList orderId={order.id} />
               : <DuoPartnerRiotId orderId={order.id} />)

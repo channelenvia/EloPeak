@@ -26,6 +26,13 @@ const WIN_PACKAGES = [
   { wins: 5, discountPct: 30 },
 ]
 
+// Função de módulo (não fecha sobre nada do componente) pra poder ser
+// chamada dentro do useEffect de preço sem precisar entrar na dependency
+// array como uma closure instável recriada a cada render.
+function packageTotal(unitWinPrice: number, wins: number, discountPct: number): number {
+  return Math.round(unitWinPrice * wins * (1 - discountPct / 100) * 100) / 100
+}
+
 export function StepExtras() {
   const {
     selectedExtraIds, toggleExtra, basePrice, setExtrasPrice,
@@ -51,13 +58,12 @@ export function StepExtras() {
   // soma winPackagePrice sem excluir Master+ nenhum -- só faltava aqui.
   const showWinPackages = !!currentRank && serviceType === 'elo_boost'
 
-  const unitWinPrice = showWinPackages && currentRank
-    ? getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
-    : 0
-
-  function packageTotal(wins: number, discountPct: number): number {
-    return Math.round(unitWinPrice * wins * (1 - discountPct / 100) * 100) / 100
-  }
+  const unitWinPrice = useMemo(
+    () => (showWinPackages && currentRank
+      ? getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
+      : 0),
+    [showWinPackages, currentRank, queueType, boostMode],
+  )
 
   // Addons são específicos do fluxo (Solo padrão / Duo padrão / Master+) —
   // a query já vem filtrada por `flow`, nunca é a lista inteira escondida
@@ -83,12 +89,11 @@ export function StepExtras() {
 
     if (winPackage && showWinPackages) {
       const pkg = WIN_PACKAGES.find(p => p.wins === winPackage)
-      if (pkg) total += packageTotal(pkg.wins, pkg.discountPct)
+      if (pkg) total += packageTotal(unitWinPrice, pkg.wins, pkg.discountPct)
     }
 
     setExtrasPrice(Math.round(total * 100) / 100)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extras, selectedExtraIds, basePrice, winPackage, showWinPackages, setExtrasPrice])
+  }, [extras, selectedExtraIds, basePrice, winPackage, showWinPackages, unitWinPrice, setExtrasPrice])
 
   function getExtraPrice(extra: ServiceExtra): number {
     if (extra.price_modifier > 0) return extra.price_modifier
@@ -125,7 +130,7 @@ export function StepExtras() {
             {showWinPackages && (
               <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Opções Adicionais</p>
             )}
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3" role="group" aria-label="Opções adicionais">
               {extras.map((extra) => {
                 const selected = selectedExtraIds.has(extra.id)
                 const Icon = ICON_MAP[extra.icon ?? 'zap'] ?? Zap
@@ -135,6 +140,8 @@ export function StepExtras() {
                 return (
                   <button
                     key={extra.id}
+                    type="button"
+                    aria-pressed={selected}
                     onClick={() => toggleExtra(extra.id)}
                     className={cn(
                       'relative flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all duration-150',
@@ -172,9 +179,9 @@ export function StepExtras() {
         {showWinPackages && (
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Pacotes de Vitórias</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-3" role="group" aria-label="Pacotes de vitórias">
               {WIN_PACKAGES.map(({ wins, discountPct }) => {
-                const total = packageTotal(wins, discountPct)
+                const total = packageTotal(unitWinPrice, wins, discountPct)
                 const original = Math.round(unitWinPrice * wins * 100) / 100
                 const savings = Math.round((original - total) * 100) / 100
                 const isSelected = winPackage === wins
@@ -183,6 +190,7 @@ export function StepExtras() {
                   <button
                     key={wins}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => setWinPackage(isSelected ? null : wins)}
                     className={cn(
                       'relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center transition-all duration-150',

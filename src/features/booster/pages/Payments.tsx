@@ -196,7 +196,7 @@ export function BoosterPaymentsPage() {
                     </Button>
                   )}
                   {(r.status === 'requested' || r.status === 'under_review') && (
-                    <Button size="xs" variant="danger-ghost" leftIcon={<XCircle className="h-3.5 w-3.5" />} loading={cancelRequest.isPending} onClick={() => cancelRequest.mutate(r.id)}>
+                    <Button size="xs" variant="danger-ghost" leftIcon={<XCircle className="h-3.5 w-3.5" />} loading={cancelRequest.isPending && cancelRequest.variables === r.id} onClick={() => cancelRequest.mutate(r.id)}>
                       Cancelar
                     </Button>
                   )}

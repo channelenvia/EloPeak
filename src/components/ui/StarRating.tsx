@@ -18,7 +18,7 @@ export function StarRating({ rating, count, size = 'sm', showValue = true }: Sta
   const filled = Math.round(rating)
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex">
+      <div className="flex" aria-label={`${rating.toFixed(1)} de 5`}>
         {[1, 2, 3, 4, 5].map((i) => (
           <Star key={i} className={cn(SIZE_CLASS[size], i <= filled ? 'text-warning fill-warning' : 'text-bg-raised')} />
         ))}

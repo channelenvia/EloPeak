@@ -3,9 +3,8 @@ import { constantTimeEqual } from '../_shared/crypto.ts'
 import { jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
+import { DISCORD_API, BOT_TOKEN } from '../_shared/discordJobAnnounce.ts'
 
-const DISCORD_API = 'https://discord.com/api/v10'
-const BOT_TOKEN     = Deno.env.get('DISCORD_BOT_TOKEN')  ?? ''
 const WEBHOOK_SECRET = Deno.env.get('DISCORD_WEBHOOK_SECRET') ?? ''
 
 const CHANNELS = {

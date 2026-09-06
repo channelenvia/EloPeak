@@ -7,18 +7,23 @@ import { useUnlockedAudioContext } from '@/hooks/useUnlockedAudioContext'
 const MENTION_SOUND_VOLUME = 0.5
 
 /**
- * Toca um som quando o usuário logado é mencionado (@) em um chat de pedido,
- * desde que a aba esteja visível -- vale pra qualquer papel (cliente, booster
- * ou admin), então precisa ser montado uma vez em cada layout raiz, no mesmo
- * espírito de useNewOrderSound (booster-only).
+ * Toca um som quando o usuário logado recebe uma notificação de um tipo
+ * específico (default: menção @ em chat de pedido), desde que a aba esteja
+ * visível -- vale pra qualquer papel (cliente, booster ou admin), então
+ * precisa ser montado uma vez em cada layout raiz, no mesmo espírito de
+ * useNewOrderSound (booster-only). AdminLayout monta uma segunda instância
+ * pra 'order_pending_review' (alerta de pedido pago entrando na janela de
+ * revisão) -- canal Realtime próprio por tipo, senão a segunda montagem
+ * rouba o canal da primeira (ver comentário de channelSuffix em
+ * useUnreadNotificationsCount).
  */
-export function useChatMentionSound() {
+export function useChatMentionSound(notificationType: string = 'chat_mention') {
   const userId = useAuthStore((s) => s.profile?.id)
   const getAudioContext = useUnlockedAudioContext()
 
   useEffect(() => {
     if (!userId) return
-    const channelName = `chat-mention-sound-${userId}`
+    const channelName = `chat-mention-sound-${userId}-${notificationType}`
     let cancelled = false
     let channel: ReturnType<typeof supabase.channel> | null = null
 
@@ -38,7 +43,7 @@ export function useChatMentionSound() {
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
           (payload) => {
-            if ((payload.new as { type?: string } | null)?.type !== 'chat_mention') return
+            if ((payload.new as { type?: string } | null)?.type !== notificationType) return
             if (document.visibilityState !== 'visible') return
 
             const context = getAudioContext()
@@ -59,5 +64,5 @@ export function useChatMentionSound() {
       cancelled = true
       if (channel) void supabase.removeChannel(channel)
     }
-  }, [userId, getAudioContext])
+  }, [userId, getAudioContext, notificationType])
 }

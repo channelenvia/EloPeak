@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, MessageCircle, Plus, RefreshCw, Wallet } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -62,8 +62,9 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
       description="Registra um reembolso manual (PIX por fora) sem chamar o Mercado Pago."
     >
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Número do pedido (ID completo)</label>
+        <label htmlFor="manual-refund-order-id" className="text-xs font-semibold text-ink-secondary block mb-1.5">Número do pedido (ID completo)</label>
         <input
+          id="manual-refund-order-id"
           value={orderId}
           onChange={(e) => setOrderId(e.target.value)}
           placeholder="Cole o ID completo do pedido..."
@@ -83,12 +84,13 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
 
       <div>
         <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Valor do reembolso</label>
-        <CurrencyMaskedInput valueCents={amountCents} onChangeCents={setAmountCents} />
+        <CurrencyMaskedInput valueCents={amountCents} onChangeCents={setAmountCents} aria-label="Valor do reembolso" />
       </div>
 
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="manual-refund-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
+          id="manual-refund-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Descreva o motivo do reembolso..."
@@ -160,12 +162,13 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
 
       <div>
         <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Valor</label>
-        <CurrencyMaskedInput valueCents={amountCents} onChangeCents={setAmountCents} />
+        <CurrencyMaskedInput valueCents={amountCents} onChangeCents={setAmountCents} aria-label="Valor do ajuste" />
       </div>
 
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="adjust-balance-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
+          id="adjust-balance-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Descreva o motivo do ajuste..."
@@ -201,17 +204,9 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
 // booster pelo chat do próprio pedido (já embutido em OrderDetail) e resolve
 // os dois lados: reembolso do cliente (reusa o modal de reembolso manual
 // abaixo) e/ou ajuste do saldo do booster.
-function ReviewCaseCard({ item, onOpenRefund }: { item: AdminReviewCase; onOpenRefund: (orderId: string) => void }) {
+function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReviewCase; boosterName?: string | null; onOpenRefund: (orderId: string) => void }) {
   const currency = useCurrency()
   const [adjustOpen, setAdjustOpen] = useState(false)
-  const { data: boosterName } = useQuery({
-    queryKey: ['admin', 'review-case-booster', item.last_assigned_booster_id],
-    queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('username').eq('id', item.last_assigned_booster_id!).maybeSingle()
-      return data?.username ?? null
-    },
-    enabled: !!item.last_assigned_booster_id,
-  })
 
   return (
     <Card variant="operational" padding="md" className="border-danger/30 bg-danger/[0.03]">
@@ -254,8 +249,28 @@ function ReviewCaseCard({ item, onOpenRefund }: { item: AdminReviewCase; onOpenR
   )
 }
 
+// Batch de todos os last_assigned_booster_id de uma vez em vez de uma query
+// por card (N+1) -- mesmo padrão do useBoosterNames usado em Drops.tsx, só
+// que contra profiles.username em vez de booster_profiles.display_name (é o
+// campo que este card já mostrava).
+function useReviewCaseBoosterNames(boosterIds: string[]) {
+  return useQuery({
+    queryKey: ['admin', 'review-case-booster-names', [...boosterIds].sort()],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, username').in('id', boosterIds)
+      return new Map((data ?? []).map((p) => [p.id, p.username as string]))
+    },
+    enabled: boosterIds.length > 0,
+  })
+}
+
 function ReviewCasesSection({ onOpenRefund }: { onOpenRefund: (orderId: string) => void }) {
   const { data: cases, isLoading } = useAdminReviewCases()
+  const boosterIds = useMemo(
+    () => Array.from(new Set((cases ?? []).map((c) => c.last_assigned_booster_id).filter((id): id is string => !!id))),
+    [cases],
+  )
+  const { data: boosterNames } = useReviewCaseBoosterNames(boosterIds)
 
   if (isLoading) return <Skeleton className="h-24 rounded-2xl" />
   if (!cases || cases.length === 0) return null
@@ -264,7 +279,12 @@ function ReviewCasesSection({ onOpenRefund }: { onOpenRefund: (orderId: string) 
     <div className="space-y-3">
       <h2 className="text-sm font-semibold text-ink">Casos em análise ({cases.length})</h2>
       {cases.map((item) => (
-        <ReviewCaseCard key={item.order_id} item={item} onOpenRefund={onOpenRefund} />
+        <ReviewCaseCard
+          key={item.order_id}
+          item={item}
+          boosterName={item.last_assigned_booster_id ? boosterNames?.get(item.last_assigned_booster_id) : undefined}
+          onOpenRefund={onOpenRefund}
+        />
       ))}
     </div>
   )

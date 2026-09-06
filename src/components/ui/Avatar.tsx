@@ -30,6 +30,8 @@ export function Avatar({ src, name, size, className }: AvatarProps) {
       <RadixAvatar.Image
         src={resolvedSrc}
         alt={name}
+        loading="lazy"
+        decoding="async"
         className="h-full w-full object-cover"
       />
       <RadixAvatar.Fallback

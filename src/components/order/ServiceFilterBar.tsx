@@ -25,7 +25,7 @@ const pillCls = (active: boolean) => `${PILL} ${active ? 'bg-brand text-white' :
 // resto dos filtros já aplicados.
 function CountPill({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={pillCls(active)}>
+    <button type="button" onClick={onClick} aria-pressed={active} className={pillCls(active)}>
       {label}
       <span className={cn('text-[10px]', active ? 'text-white/80' : 'text-ink-muted')}>{count}</span>
     </button>
@@ -54,7 +54,7 @@ function FilterGroup({ label, children, nowrap }: { label: string; children: Rea
   return (
     <div>
       <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">{label}</p>
-      <div className={`flex gap-1 bg-bg-raised rounded-lg p-1 ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>{children}</div>
+      <div role="group" aria-label={label} className={`flex gap-1 bg-bg-raised rounded-lg p-1 ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>{children}</div>
     </div>
   )
 }
@@ -103,7 +103,7 @@ export function ServiceFilterBar({
 
         <Popover open={categoryOpen} onClose={() => setCategoryOpen(false)} anchorRef={categoryAnchorRef} align="start" className="min-w-[180px] py-1">
           {SERVICE_CATEGORIES.map(({ value, label, icon: Icon }) => (
-            <button key={value} type="button" onClick={() => { onCategoryChange(value); setCategoryOpen(false) }} className={filterOptionRowClass(category === value)}>
+            <button key={value} type="button" aria-pressed={category === value} onClick={() => { onCategoryChange(value); setCategoryOpen(false) }} className={filterOptionRowClass(category === value)}>
               <Icon className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1">{label}</span>
               <span className="text-[10px] text-ink-muted">{counts[value]}</span>

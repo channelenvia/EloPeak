@@ -41,8 +41,9 @@ function CancelModal({ order, open, onClose }: { order: Order; open: boolean; on
       description="O pedido é cancelado antes de ir pro pool -- o cliente já pagou, o reembolso é tratado manualmente pela equipe."
     >
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="pending-review-cancel-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
+          id="pending-review-cancel-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Justificativa para o cancelamento..."
@@ -95,6 +96,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar booster..."
+          aria-label="Buscar booster"
           className="input-base w-full pl-9 text-sm"
         />
       </div>
@@ -123,8 +125,9 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
       </div>
 
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="pending-review-assign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
+          id="pending-review-assign-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Justificativa para a atribuição..."
@@ -154,7 +157,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
 }
 
 // Painel só aparece quando há pedido em pending_review -- não ocupa espaço
-// à toa no dashboard. Janela é de 1 minuto, então a lista é live (realtime +
+// à toa no dashboard. Janela é de 2 minutos, então a lista é live (realtime +
 // refetch de 10s) e a contagem regressiva atualiza a cada segundo local.
 export function PendingReviewPanel() {
   const { data: orders } = usePendingReviewOrders()
@@ -171,7 +174,7 @@ export function PendingReviewPanel() {
       <Card variant="operational" padding="md" className="border-warning/30 bg-warning/[0.03]">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-ink">Pedidos em revisão ({orders.length})</h3>
-          <span className="text-[10px] text-ink-muted">Janela de 1 minuto antes de ir pro pool</span>
+          <span className="text-[10px] text-ink-muted">Janela de 2 minutos antes de ir pro pool</span>
         </div>
         <div className="space-y-2">
           {orders.map((order) => (
@@ -192,7 +195,7 @@ export function PendingReviewPanel() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  loading={toggleLock.isPending}
+                  loading={toggleLock.isPending && toggleLock.variables?.orderId === order.id}
                   onClick={() => toggleLock.mutate({ orderId: order.id, locked: !order.admin_review_locked })}
                   title={order.admin_review_locked ? 'Destravar (libera agora)' : 'Travar'}
                 >

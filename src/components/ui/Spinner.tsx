@@ -9,7 +9,12 @@ interface SpinnerProps {
 const sizeMap = { sm: 'h-4 w-4', md: 'h-6 w-6', lg: 'h-8 w-8' }
 
 function Spinner({ className, size = 'md' }: SpinnerProps) {
-  return <Loader2 className={cn('animate-spin text-brand', sizeMap[size], className)} />
+  return (
+    <span role="status" aria-live="polite">
+      <Loader2 className={cn('animate-spin text-brand', sizeMap[size], className)} />
+      <span className="sr-only">Carregando</span>
+    </span>
+  )
 }
 
 export function PageLoader() {

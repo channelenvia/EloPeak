@@ -22,7 +22,15 @@ export function OrderHistoryPage() {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
 
-  const { data: orders, isLoading } = useCustomerOrders(profile?.id, statusFilter.tab, 100, statusFilter.includeCanceled)
+  // Capado em ORDERS_FETCH_LIMIT (client-side, não é paginação de servidor de
+  // verdade) -- hasNextPage/maxPage abaixo são computados só sobre esse
+  // array truncado. Um cliente com mais pedidos que o limite nunca vê os
+  // mais antigos nem os encontra pela busca, silenciosamente. Mostra um
+  // aviso quando o limite é batido em vez de implicar que a lista/busca é
+  // completa (fix de verdade seria paginação/busca no servidor).
+  const ORDERS_FETCH_LIMIT = 100
+  const { data: orders, isLoading } = useCustomerOrders(profile?.id, statusFilter.tab, ORDERS_FETCH_LIMIT, statusFilter.includeCanceled)
+  const hitFetchLimit = (orders?.length ?? 0) >= ORDERS_FETCH_LIMIT
   const { data: tabCounts } = useCustomerOrderTabCounts(profile?.id)
   const serviceFilters = useServiceFilters(orders)
   const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
@@ -34,10 +42,16 @@ export function OrderHistoryPage() {
   const pageOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasNextPage = page * PAGE_SIZE < filtered.length
 
-  // Qualquer filtro/busca muda o resultado -- clampa de volta pra última
-  // página válida em vez de deixar o usuário preso numa página vazia.
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  useEffect(() => { if (page > maxPage) setPage(maxPage) }, [maxPage, page])
+  // Reseta pra página 1 em qualquer mudança de filtro/busca -- só clampar
+  // pra maxPage (comportamento anterior) deixava o usuário "preso" na
+  // página 2+ do conjunto ANTIGO ao trocar de filtro, mostrando resultados
+  // do novo filtro só se ele por acaso também tivesse página suficiente.
+  // Mesmo padrão já usado em BoosterOrdersPage (Orders.tsx do booster).
+  useEffect(() => { setPage(1) }, [
+    statusFilter.tab, statusFilter.dropped, statusFilter.overdue, statusFilter.includeCanceled,
+    serviceFilters.category, serviceFilters.queue, serviceFilters.mode,
+    serviceFilters.clashTier, serviceFilters.clashDay, search,
+  ])
 
   return (
     <div className="space-y-6">
@@ -51,6 +65,7 @@ export function OrderHistoryPage() {
             <input
               type="text"
               placeholder={t('customer.history.search')}
+              aria-label={t('customer.history.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-base pl-8 py-1.5 text-xs"
@@ -88,6 +103,12 @@ export function OrderHistoryPage() {
           clashDayCounts={serviceFilters.clashDayCounts}
         />
       </div>
+
+      {hitFetchLimit && (
+        <p className="text-xs text-ink-muted">
+          Mostrando os primeiros {ORDERS_FETCH_LIMIT} pedidos. Filtros e busca não alcançam pedidos além desse limite.
+        </p>
+      )}
 
       {/* Order grid */}
       {isLoading ? (

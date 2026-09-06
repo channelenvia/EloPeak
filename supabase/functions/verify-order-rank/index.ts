@@ -35,6 +35,16 @@ const bodySchema = z.object({
   order_id: z.string().uuid(),
 }).strict()
 
+// Valida o shape de orders.target_rank (jsonb) antes de usar -- sem isso, um
+// valor malformado (dado com aparência confiável mas nunca validado no
+// schema TS) só seria pego quando `rank_step`/comparações downstream
+// produzissem um resultado silenciosamente errado, em vez de falhar alto e
+// claro logo no load do pedido.
+const targetRankSchema = z.object({
+  tier: z.enum(['iron', 'bronze', 'silver', 'gold', 'platinum', 'emerald', 'diamond', 'master', 'grandmaster', 'challenger']),
+  division: z.enum(['I', 'II', 'III', 'IV']).nullable(),
+})
+
 function badRequest(req: Request, message: string) {
   return errorResponse(req, message, 400)
 }
@@ -102,10 +112,15 @@ serve(async (req) => {
     if (!['in_progress', 'paused', 'awaiting_customer'].includes(order.status as string)) {
       return badRequest(req, 'Pedido não está em um status verificável')
     }
-    const targetRank = order.target_rank as { tier: RankTier; division: Division | null } | null
-    if (!targetRank?.tier || !order.riot_id) {
+    if (!order.target_rank || !order.riot_id) {
       return badRequest(req, 'Este pedido não tem rank alvo ou Riot ID cadastrado')
     }
+    const parsedTargetRank = targetRankSchema.safeParse(order.target_rank)
+    if (!parsedTargetRank.success) {
+      console.error('verify-order-rank: target_rank malformado', orderId, order.target_rank)
+      return errorResponse(req, 'Pedido com rank alvo inválido -- contate o suporte', 500)
+    }
+    const targetRank: { tier: RankTier; division: Division | null } = parsedTargetRank.data
 
     const riotId = String(order.riot_id)
     const hashIdx = riotId.lastIndexOf('#')

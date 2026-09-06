@@ -48,15 +48,19 @@ serve(async (req) => {
     if (rpcError || !result?.success) {
       return errorResponse(req, result?.error ?? 'Falha ao expulsar booster', 400)
     }
+    if (!result.user_id) {
+      console.error('expel-booster: RPC succeeded without user_id', boosterId)
+      return errorResponse(req, 'Booster removido, mas o banimento da conta falhou (dado inconsistente). Contate o suporte técnico.', 500, 'BOOSTER_REMOVED_BAN_FAILED')
+    }
 
-    const { error: banError } = await serviceClient.auth.admin.updateUserById(result.user_id!, {
+    const { error: banError } = await serviceClient.auth.admin.updateUserById(result.user_id, {
       ban_duration: PERMANENT_BAN_DURATION,
     })
     if (banError) {
       console.error('expel-booster: status flipped but ban failed', banError.message)
       return errorResponse(
         req,
-        'Booster removido do pedido, mas o banimento no Discord falhou. Tente banir manualmente ou repita a ação.',
+        'Booster removido do pedido, mas o banimento da conta na plataforma falhou. Tente banir manualmente ou repita a ação.',
         500,
         'BOOSTER_REMOVED_BAN_FAILED',
       )

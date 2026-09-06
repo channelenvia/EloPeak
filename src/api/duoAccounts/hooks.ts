@@ -42,7 +42,7 @@ export function useAdminDuoAccounts() {
 
 export function useDuoAccountReservationHistory(accountId: string | undefined) {
   return useQuery({
-    queryKey: ['duo-accounts', 'reservation-history', accountId],
+    queryKey: queryKeys.duoAccounts.reservationHistory(accountId ?? ''),
     queryFn: () => getDuoAccountReservationHistory(accountId!),
     enabled: !!accountId,
   })

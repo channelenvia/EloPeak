@@ -67,7 +67,7 @@ export function OrderStatusFilterDropdown({
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={anchorRef} align="start" className="min-w-[220px] py-1">
         {ORDER_LIST_TABS.map((value) => (
           <div key={value}>
-            <button type="button" onClick={() => { onTabChange(value); setOpen(false) }} className={filterOptionRowClass(tab === value)}>
+            <button type="button" aria-pressed={tab === value} onClick={() => { onTabChange(value); setOpen(false) }} className={filterOptionRowClass(tab === value)}>
               <span className="flex-1">{TAB_LABEL[value]}</span>
               {counts && <span className="text-[10px] text-ink-muted">{counts[value]}</span>}
             </button>

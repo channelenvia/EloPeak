@@ -68,6 +68,12 @@ export type QueueType = 'solo_duo' | 'flex'
 // diferenciação comercial por fila em Elo Boost). Master+ não usa esta
 // tabela — vem de `master_plus_pricing` no banco (ver shared/boostDomain.ts
 // e a migration que cria essa tabela).
+//
+// Única fonte de verdade -- diferente de WIN_PRICE_CENTS/master_plus_pricing,
+// não existe (nem existiu depois da migration 20260906130000, que derrubou a
+// tabela `elo_div_price_cents` órfã) nenhuma tabela no Postgres espelhando
+// este preço; computeOrderPrice roda só na edge function, então não há um
+// segundo lado pra divergir/precisar de teste de seed.
 const ELO_DIV_PRICE_CENTS: Record<QueueType, Record<string, number>> = {
   solo_duo: {
     iron: 1090, bronze: 1290, silver: 1690, gold: 2190,
@@ -375,6 +381,9 @@ export function getWinBoostPrice(queue: QueueType, tier: RankTier, mode: 'solo' 
 // linha grandmaster/challenger própria) — acima disso cai no fallback
 // table.master de getMd5WinPrice logo abaixo; diferente do Win Boost, MD5
 // nunca bloqueia Duo por rank (ver comentário em StepConfigure.tsx).
+//
+// Única fonte de verdade (mesma nota de ELO_DIV_PRICE_CENTS acima): sem
+// tabela espelho no Postgres, sem segundo lado pra divergir.
 const MD5_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Record<string, number> }> = {
   solo_duo: {
     solo: {
@@ -409,7 +418,8 @@ export type ClashDay = 'saturday' | 'sunday'
 // ── Clash — preço fixo por modalidade × tier, em CENTAVOS ──────────────────
 // Diferente do Elo Boost: não há origem/destino, o cliente só escolhe o
 // tier correspondente ao elo atual da conta (ver shared/clashDomain.ts para
-// o mapeamento tier -> faixa de RankTier).
+// o mapeamento tier -> faixa de RankTier). Única fonte de verdade (mesma
+// nota de ELO_DIV_PRICE_CENTS acima) -- sem tabela espelho no Postgres.
 export const CLASH_PRICE_CENTS: Record<'solo' | 'duo', Record<ClashTier, number>> = {
   solo: { tier_4: 2600, tier_3: 4407, tier_2: 5187, tier_1: 8450 },
   duo: { tier_4: 7787, tier_3: 8697, tier_2: 13000, tier_1: 21567 },
@@ -435,11 +445,13 @@ export const PLACEMENT_PRICE: Record<string, number> = {
 }
 
 // ── Elo Boost Master+ — resumo pra página pública de preços ─────────────────
-// Fonte de referência apenas — o preço autoritativo vem da tabela
-// `master_plus_pricing` (pdl_from=0), chaveada por (tier atual, tier alvo,
-// fila). master/grandmaster = preço cheio daquela progressão; challenger =
-// Mestre->Challenger direto (soma dos dois degraus), único caso sem "tier
-// atual == linha", mantido só como referência (não exibido hoje).
+// Usado por PricingPage.tsx (tabela pública). O preço autoritativo pra
+// cobrança continua vindo da tabela `master_plus_pricing` (pdl_from=0),
+// chaveada por (tier atual, tier alvo, fila) -- esta constante é só o espelho
+// exibido na página de preços, fixado em sincronia com o banco pelo teste de
+// seed em boostConfigSeed.test.ts. master/grandmaster = preço cheio daquela
+// progressão; challenger = Mestre->Challenger direto (soma dos dois degraus),
+// único caso sem "tier atual == linha".
 export const MASTER_PLUS_TIER_PRICE_CENTS: Record<'master' | 'grandmaster' | 'challenger', number> = {
   master: 121917,
   grandmaster: 169887,

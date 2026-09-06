@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Package, ChevronDown } from 'lucide-react'
-import { Skeleton } from '@/components/ui'
+import { Button, Modal, Skeleton } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { checkRateLimit, limits } from '@/lib/rateLimit'
 import type { BoosterService } from '@/types'
@@ -16,6 +16,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
   const [adding, setAdding]               = useState(false)
   const [editingId, setEditingId]         = useState<string | null>(null)
   const [deletingId, setDeletingId]       = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [togglingId, setTogglingId]       = useState<string | null>(null)
   const [error, setError]                 = useState<string | null>(null)
 
@@ -67,7 +68,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
     setDeletingId(id)
     remove.mutate({ id, boosterId: userId }, {
       onError: (mutationError) => setError(mutationError instanceof Error ? mutationError.message : 'Erro ao excluir serviço. Tente novamente.'),
-      onSettled: () => setDeletingId(null),
+      onSettled: () => { setDeletingId(null); setConfirmDeleteId(null) },
     })
   }
 
@@ -173,7 +174,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
                 key={service.id}
                 service={service}
                 onEdit={() => { setEditingId(service.id); setAdding(false) }}
-                onDelete={() => handleDelete(service.id)}
+                onDelete={() => setConfirmDeleteId(service.id)}
                 onToggleActive={() => handleToggleActive(service)}
                 deleting={deletingId === service.id}
                 togglingActive={togglingId === service.id}
@@ -184,6 +185,24 @@ export function BoosterServicesList({ userId }: { userId: string }) {
       )}
       </>
       )}
+
+      <Modal
+        open={!!confirmDeleteId}
+        onOpenChange={(next) => { if (!next) setConfirmDeleteId(null) }}
+        title="Excluir serviço"
+        description={`Tem certeza que deseja excluir "${services.find((s) => s.id === confirmDeleteId)?.title ?? 'este serviço'}"? Essa ação não pode ser desfeita.`}
+      >
+        <div className="flex gap-3 justify-end pt-2">
+          <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
+          <Button
+            variant="danger"
+            loading={deletingId === confirmDeleteId}
+            onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+          >
+            Excluir
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

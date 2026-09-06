@@ -5,10 +5,9 @@ import { errorResponse, jsonResponse, rateLimitResponse } from '../_shared/respo
 import { getAuthUser } from '../_shared/authUser.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { fetchWithTimeout, HttpError, readJsonBody } from '../_shared/http.ts'
+import { DISCORD_API, BOT_TOKEN } from '../_shared/discordJobAnnounce.ts'
 
-const DISCORD_API = 'https://discord.com/api/v10'
 const GUILD_ID = Deno.env.get('DISCORD_GUILD_ID') ?? ''
-const BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') ?? ''
 
 const bodySchema = z.object({
   discord_access_token: z.string().min(1).max(4096),

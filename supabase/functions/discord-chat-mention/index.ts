@@ -2,14 +2,11 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { z } from 'https://esm.sh/zod@3.23.8'
 import { jsonResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { fetchWithTimeout } from '../_shared/http.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { eloPeakFooter, escapeDiscordMarkdown } from '../_shared/discordRankFormat.ts'
+import { BOT_TOKEN, APP_URL, sendDirectMessage } from '../_shared/discordJobAnnounce.ts'
 
-const DISCORD_API   = 'https://discord.com/api/v10'
-const BOT_TOKEN      = Deno.env.get('DISCORD_BOT_TOKEN')      ?? ''
 const WEBHOOK_SECRET = Deno.env.get('DISCORD_WEBHOOK_SECRET') ?? ''
-const APP_URL = (Deno.env.get('APP_URL') ?? Deno.env.get('PUBLIC_SITE_URL') ?? 'https://elo-peak.vercel.app').replace(/\/$/, '')
 
 const payloadSchema = z.object({
   user_id: z.string().uuid(),
@@ -43,10 +40,15 @@ serve(async (req) => {
   try {
     const db = supabaseAdmin()
 
-    const [{ data: profile }, { data: order }] = await Promise.all([
+    const [{ data: profile, error: profileError }, { data: order, error: orderError }] = await Promise.all([
       db.from('profiles').select('discord_id').eq('id', userId).single(),
       db.from('orders').select('id, customer_id, assigned_booster_id').eq('id', orderId).single(),
     ])
+    // Uma falha real de banco/rede aqui não pode virar silenciosamente
+    // "usuário sem discord_id" ou "pedido não encontrado" -- sem logar, um
+    // erro transiente vira invisível.
+    if (profileError) console.error('discord-chat-mention: profile lookup failed', profileError.message)
+    if (orderError) console.error('discord-chat-mention: order lookup failed', orderError.message)
 
     // Nem todo usuário tem Discord vinculado -- sem discord_id não tem pra
     // onde mandar o DM, não é um erro, só não se aplica.
@@ -68,24 +70,8 @@ serve(async (req) => {
 
     const shortCode = orderId.slice(0, 8).toUpperCase()
 
-    // Discord exige abrir (ou reaproveitar) o canal de DM antes de mandar
-    // qualquer mensagem direta -- idempotente, sempre retorna o mesmo
-    // channel id pra um par bot/usuário, mesmo que já exista uma DM aberta.
-    const dmRes = await fetchWithTimeout(`${DISCORD_API}/users/@me/channels`, {
-      method: 'POST',
-      headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_id: profile.discord_id }),
-    })
-    if (!dmRes.ok) {
-      console.error(`Discord create DM channel failed ${dmRes.status}:`, await dmRes.text())
-      return jsonResponse(req, { error: 'discord_dm_channel_error' }, 502)
-    }
-    const dmChannel = await dmRes.json() as { id: string }
-
-    const msgRes = await fetchWithTimeout(`${DISCORD_API}/channels/${dmChannel.id}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await sendDirectMessage(profile.discord_id, {
         embeds: [{
           title: '💬 Você foi mencionado',
           url: orderDetailUrl(order, userId),
@@ -98,10 +84,9 @@ serve(async (req) => {
           type: 1,
           components: [{ type: 2, style: 5, label: 'Ver Pedido', url: orderDetailUrl(order, userId) }],
         }],
-      }),
-    })
-    if (!msgRes.ok) {
-      console.error(`Discord send DM failed ${msgRes.status}:`, await msgRes.text())
+      })
+    } catch (dmErr) {
+      console.error('discord-chat-mention: failed to send DM', dmErr instanceof Error ? dmErr.message : dmErr)
       return jsonResponse(req, { error: 'discord_dm_send_error' }, 502)
     }
 

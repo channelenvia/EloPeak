@@ -162,7 +162,7 @@ serve(async (req) => {
     return new Response('ok', { status: 200 })
   } catch (err) {
     if (err instanceof HttpError) return new Response(err.message, { status: err.status })
-    console.error('mercadopago-webhook error')
+    console.error('mercadopago-webhook error', err instanceof Error ? err.message : String(err))
     return new Response('internal error', { status: 500 })
   }
 })

@@ -5,10 +5,7 @@ import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { eloPeakFooter } from '../_shared/discordRankFormat.ts'
-
-const DISCORD_API = 'https://discord.com/api/v10'
-const BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') ?? ''
-const APP_URL = (Deno.env.get('APP_URL') ?? Deno.env.get('PUBLIC_SITE_URL') ?? 'https://elo-peak.vercel.app/boosters').replace(/\/$/, '')
+import { DISCORD_API, BOT_TOKEN, APP_URL } from '../_shared/discordJobAnnounce.ts'
 // Secret dedicado pra esse endpoint só ser chamável pelo cron interno
 // (pg_cron -> pg_net), nunca por qualquer request externa -- mesmo padrão
 // x-webhook-secret já usado em discord-order-channel/discord-init-channels,
@@ -169,7 +166,13 @@ serve(async (req) => {
       body: JSON.stringify({
         embeds: [{
           title: '🏆 Top 3 Boosters atualizado!',
-          url: APP_URL,
+          // Aponta pra página pública de boosters (onde o badge Top3
+          // aparece), não pra raiz do site -- antes, isso só "funcionava"
+          // por acidente em dev (o fallback local de APP_URL tinha /boosters
+          // grudado nele; em produção, com APP_URL setado via env, o link
+          // ia pra raiz mesmo). Composto explicitamente aqui em vez de
+          // embutido no fallback, que agora é o mesmo de todo outro arquivo.
+          url: `${APP_URL}/boosters`,
           description: 'Ranking recalculado automaticamente: **45% Win Rate + 30% KDA + 15% Pedidos Concluídos + 10% Avaliações** (mínimo de 10 pedidos concluídos pra entrar).',
           color: 0xFACC15,
           fields,

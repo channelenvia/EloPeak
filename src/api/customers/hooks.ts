@@ -8,7 +8,7 @@ import {
 
 export function useCustomerDashboardStats(customerId: string | undefined) {
   const query = useQuery({
-    queryKey: queryKeys.customers.profile(customerId ?? '').concat(['dashboard-stats']),
+    queryKey: queryKeys.customers.dashboardStats(customerId ?? ''),
     queryFn: () => getCustomerDashboardStats(customerId!),
     enabled: !!customerId,
     refetchInterval: 30_000,
@@ -17,7 +17,7 @@ export function useCustomerDashboardStats(customerId: string | undefined) {
     channel: `customer-dashboard-stats-${customerId ?? 'none'}`,
     table: 'order_status_events',
     event: 'INSERT',
-    queryKeys: customerId ? [queryKeys.customers.profile(customerId).concat(['dashboard-stats'])] : [],
+    queryKeys: customerId ? [queryKeys.customers.dashboardStats(customerId)] : [],
     enabled: !!customerId,
   })
   return query
@@ -57,7 +57,7 @@ export function useAdminCustomerDetail(customerProfileId: string | undefined) {
 
 export function useAdminCustomerOrders(customerUserId: string | undefined) {
   const query = useQuery({
-    queryKey: queryKeys.customers.adminDetail(customerUserId ?? '').concat(['orders']),
+    queryKey: queryKeys.customers.adminOrders(customerUserId ?? ''),
     queryFn: () => listAdminCustomerOrders(customerUserId!),
     enabled: !!customerUserId,
     refetchInterval: 20_000,
@@ -66,7 +66,7 @@ export function useAdminCustomerOrders(customerUserId: string | undefined) {
     channel: `admin-customer-orders-${customerUserId ?? 'none'}`,
     table: 'order_status_events',
     event: 'INSERT',
-    queryKeys: customerUserId ? [queryKeys.customers.adminDetail(customerUserId).concat(['orders'])] : [],
+    queryKeys: customerUserId ? [queryKeys.customers.adminOrders(customerUserId)] : [],
     enabled: !!customerUserId,
   })
   return query
@@ -74,7 +74,7 @@ export function useAdminCustomerOrders(customerUserId: string | undefined) {
 
 export function useAdminCustomerReviews(customerUserId: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.customers.adminDetail(customerUserId ?? '').concat(['reviews']),
+    queryKey: queryKeys.customers.adminReviews(customerUserId ?? ''),
     queryFn: () => listAdminCustomerReviews(customerUserId!),
     enabled: !!customerUserId,
   })

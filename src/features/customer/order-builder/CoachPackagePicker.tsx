@@ -72,12 +72,15 @@ export function CoachPackagePicker() {
     [boosters],
   )
 
-  const filtered = packages.filter(p =>
-    matchesCoachPackageFilters(
-      p,
-      boosterMap[p.booster_id]?.display_name ?? '',
-      { search, lanes: laneFilters, specialties: specialtyFilters, tempo: tempoFilters, priceMin, priceMax },
+  const filtered = useMemo(
+    () => packages.filter(p =>
+      matchesCoachPackageFilters(
+        p,
+        boosterMap[p.booster_id]?.display_name ?? '',
+        { search, lanes: laneFilters, specialties: specialtyFilters, tempo: tempoFilters, priceMin, priceMax },
+      ),
     ),
+    [packages, boosterMap, search, laneFilters, specialtyFilters, tempoFilters, priceMin, priceMax],
   )
 
   // Qualquer mudança de filtro/busca volta pra primeira página -- manter a
@@ -142,6 +145,7 @@ export function CoachPackagePicker() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome do coach, título, descrição ou champion..."
+            aria-label="Buscar pacotes de coach"
             className="input-base pl-9 w-full text-sm"
           />
         </div>

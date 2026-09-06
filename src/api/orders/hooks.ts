@@ -11,7 +11,7 @@ import {
   listOrderMatches, listOrderStatusHistory,
 } from './queries'
 import {
-  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
+  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
   confirmOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
   revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
@@ -204,7 +204,7 @@ export function useAdminOrderTabCounts() {
 
 export function useOrderStatusHistory(orderId: string | undefined) {
   const query = useQuery({
-    queryKey: queryKeys.orders.detail(orderId ?? '').concat(['history']),
+    queryKey: queryKeys.orders.history(orderId ?? ''),
     queryFn: () => listOrderStatusHistory(orderId!),
     enabled: !!orderId,
   })
@@ -213,7 +213,7 @@ export function useOrderStatusHistory(orderId: string | undefined) {
     table: 'order_status_events',
     event: 'INSERT',
     filter: orderId ? `order_id=eq.${orderId}` : undefined,
-    queryKeys: orderId ? [queryKeys.orders.detail(orderId).concat(['history'])] : [],
+    queryKeys: orderId ? [queryKeys.orders.history(orderId)] : [],
     enabled: !!orderId,
   })
   return query
@@ -271,7 +271,7 @@ export function useSetOrderCoachingTopicDone(orderId: string) {
 
 export function usePendingDropRequest(orderId: string | undefined) {
   const query = useQuery({
-    queryKey: queryKeys.orders.detail(orderId ?? '').concat(['drop-request']),
+    queryKey: queryKeys.orders.dropRequest(orderId ?? ''),
     queryFn: () => getPendingDropRequest(orderId!),
     enabled: !!orderId,
     refetchInterval: 30_000,
@@ -283,7 +283,7 @@ export function usePendingDropRequest(orderId: string | undefined) {
     channel: `order-drop-request-${orderId ?? 'none'}`,
     table: 'order_drop_requests',
     filter: orderId ? `order_id=eq.${orderId}` : undefined,
-    queryKeys: orderId ? [queryKeys.orders.detail(orderId).concat(['drop-request'])] : [],
+    queryKeys: orderId ? [queryKeys.orders.dropRequest(orderId)] : [],
     enabled: !!orderId,
   })
   return query
@@ -313,7 +313,7 @@ export function useCustomerOrderState(orderId: string | undefined) {
 
 export function useBoosterSlotInfo(boosterId: string | undefined, enabled: boolean) {
   return useQuery({
-    queryKey: ['booster-slots', boosterId ?? ''],
+    queryKey: queryKeys.boosters.slots(boosterId ?? ''),
     queryFn: () => getBoosterSlotInfo(boosterId!),
     enabled: !!boosterId && enabled,
     refetchInterval: 20_000,
@@ -371,8 +371,22 @@ export function useAdminReassignBooster(orderId: string) {
     mutationFn: (params: { targetBoosterId: string; reason: string }) => adminReassignBooster({ orderId, ...params }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
-      void queryClient.invalidateQueries({ queryKey: ['booster-slots'] })
-      void queryClient.invalidateQueries({ queryKey: ['boosters', 'with-slots'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
+    },
+  })
+}
+
+export function useAdminFlagOrderUnderReview(orderId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) => adminFlagOrderUnderReview({ orderId, reason }),
+    onSuccess: () => {
+      invalidateOrder(queryClient, orderId)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() })
+      // Se havia booster ativo, ele acabou de perder um slot (apply_order_drop
+      // por baixo, ver migration 20260906190000) -- mesmo motivo de
+      // useAdminReassignBooster invalidar isso.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
     },
   })
 }
@@ -395,7 +409,7 @@ export function useRequestOrderDrop(orderId: string) {
     mutationFn: (reason: string) => requestOrderDrop({ orderId, reason }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId).concat(['drop-request']) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.dropRequest(orderId) })
     },
   })
 }
@@ -406,7 +420,7 @@ export function useRequestCustomerOrderDrop(orderId: string) {
     mutationFn: (reason: string) => requestCustomerOrderDrop({ orderId, reason }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId).concat(['drop-request']) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.dropRequest(orderId) })
     },
   })
 }
@@ -421,7 +435,7 @@ export function useAcceptBoostOrder() {
     mutationFn: acceptBoostOrder,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders.availableJobs() })
-      void queryClient.invalidateQueries({ queryKey: ['booster-slots'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
       void queryClient.invalidateQueries({ queryKey: ['orders', 'booster'] })
     },
   })
@@ -472,11 +486,9 @@ export function useSyncOrderMatches(orderId: string) {
       // remount, enquanto o painel "Cliente" (acima) já refletia a partida
       // nova, quebrando a expectativa de carregamento simultâneo dos dois.
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders.boosterDuoMatches(orderId) })
-      // Partidas sincronizadas podem ter mudado o resultado (wins_played,
-      // vitórias/derrotas) -- o card de Progresso lê a mesma order.detail já
-      // invalidada acima, mas a barra de rank (elo_boost) lê separadamente a
-      // última verificação: invalida aqui também pra nunca ficar com dado velho.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.latestRankVerification(orderId) })
+      // latestRankVerification (['orders','detail',orderId,'rank-verifications','latest'])
+      // já é coberta como prefixo por invalidateOrder(...) acima (que invalida
+      // ['orders','detail',orderId]) -- sem invalidação extra aqui.
     },
   })
 
@@ -487,9 +499,6 @@ export function useVerifyOrderRank(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => verifyOrderRank(orderId),
-    onSuccess: () => {
-      invalidateOrder(queryClient, orderId)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.latestRankVerification(orderId) })
-    },
+    onSuccess: () => invalidateOrder(queryClient, orderId),
   })
 }

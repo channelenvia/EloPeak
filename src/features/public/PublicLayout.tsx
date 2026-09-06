@@ -43,6 +43,7 @@ export function PublicLayout() {
               { href: '/boosters',  label: t('nav.boosters')  },
             ].map(({ href, label }) => (
               <Link key={href} to={href}
+                aria-current={pathname === href ? 'page' : undefined}
                 className={cn('px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   pathname === href ? 'text-ink bg-bg-raised' : 'text-ink-secondary hover:text-ink hover:bg-bg-raised/60'
                 )}
@@ -69,6 +70,9 @@ export function PublicLayout() {
           <button
             className="lg:hidden ml-auto p-2 rounded-lg text-ink-secondary hover:bg-bg-raised"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Menu"
+            aria-expanded={mobileOpen}
+            aria-controls="public-mobile-nav"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -76,7 +80,7 @@ export function PublicLayout() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="lg:hidden border-t border-border-subtle bg-bg-surface/90 backdrop-blur-xl px-5 py-5 space-y-1 animate-slide-down">
+          <div id="public-mobile-nav" className="lg:hidden border-t border-border-subtle bg-bg-surface/90 backdrop-blur-xl px-5 py-5 space-y-1 animate-slide-down">
             {[
               { href: '/services',  label: t('nav.services')      },
               { href: '/pricing',   label: t('nav.pricing')       },
@@ -86,6 +90,7 @@ export function PublicLayout() {
               { href: '/apply?booster=1', label: t('nav.applyBooster')  },
             ].map(({ href, label }) => (
               <Link key={href} to={href} onClick={() => setMobileOpen(false)}
+                aria-current={pathname === href ? 'page' : undefined}
                 className="block px-3 py-2.5 rounded-xl text-sm text-ink-secondary hover:text-ink hover:bg-bg-raised"
               >
                 {label}

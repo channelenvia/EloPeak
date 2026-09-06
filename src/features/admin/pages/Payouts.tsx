@@ -138,8 +138,9 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
 
             {canReject && (
               <div className="space-y-2">
-                <p className="text-xs font-bold uppercase text-ink-secondary">Rejeitar</p>
+                <label htmlFor="payout-reject-reason" className="text-xs font-bold uppercase text-ink-secondary block">Rejeitar</label>
                 <textarea
+                  id="payout-reject-reason"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Motivo da rejeição (obrigatório)"

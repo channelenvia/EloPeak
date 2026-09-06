@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, History, Lock, Search, Sparkles, Swords, Users } from 'lucide-react'
+import { Briefcase, History, Lock, Search, Sparkles } from 'lucide-react'
 import { Button, Card, EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,103 +12,13 @@ import { useCurrency } from '@/hooks/useCurrency'
 import { useAvailableJobs, useBoosterSlotInfo, useAcceptBoostOrder } from '@/api/orders'
 import { useBoosterServicesByIds } from '@/api/coaching'
 import { OrderSoundSettings } from '@/features/booster/components/OrderSoundSettings'
+import { SlotIndicator, type SlotInfo } from '@/features/booster/components/SlotIndicator'
+import { exclusiveBadge, exclusiveTimeLeft, isReassignedToMe, reassignedBadge } from '@/features/booster/utils/exclusiveJobBadges'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { CaptchaChallenge } from '@/components/captcha/CaptchaChallenge'
-
-
-interface SlotInfo {
-  solo_count: number
-  duo_count: number
-  total_count: number
-  max_total: number
-  is_top3: boolean
-  exclusive_slot_used: boolean
-  max_exclusive: number
-}
-
-function SlotIndicator({ slots }: { slots: SlotInfo }) {
-  const { solo_count, duo_count, total_count, max_total, is_top3, exclusive_slot_used } = slots
-  const remaining = max_total - total_count
-  const color = remaining === 0 ? 'text-danger' : remaining === 1 ? 'text-warning' : 'text-success'
-
-  return (
-    <div className="flex items-center gap-3 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl px-4 py-2.5">
-      {is_top3 && (
-        <span className="text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">
-          TOP 3
-        </span>
-      )}
-      <div className="flex items-center gap-1.5 text-xs">
-        <span className="text-ink-muted">Slots:</span>
-        <span className={`font-bold ${color}`}>{total_count}/{max_total}</span>
-      </div>
-      <div className="h-3 w-px bg-bg-raised" />
-      <div className="flex items-center gap-2 text-[11px] text-ink-secondary">
-        <span className="flex items-center gap-1">
-          <Swords className="h-3 w-3" />
-          Solo: {solo_count}
-        </span>
-        <span className="flex items-center gap-1">
-          <Users className="h-3 w-3" />
-          Duo: {duo_count}
-        </span>
-      </div>
-      <div className="h-3 w-px bg-bg-raised" />
-      <span className={`flex items-center gap-1 text-[11px] font-medium ${exclusive_slot_used ? 'text-ink-muted' : 'text-accent'}`}>
-        <Sparkles className="h-3 w-3" />
-        Exclusivo: {exclusive_slot_used ? 1 : 0}/1
-      </span>
-    </div>
-  )
-}
-
-// Só o booster para quem o pedido foi vinculado vê o rótulo — para todos os
-// outros o pedido simplesmente não aparece (filtrado no available_boost_orders).
-function exclusiveTimeLeft(job: Order, myUserId?: string): string | null {
-  if (!myUserId || job.preferred_booster_id !== myUserId || !job.exclusive_until) return null
-  const msLeft = new Date(job.exclusive_until).getTime() - Date.now()
-  if (msLeft <= 0) return null
-  const hours = Math.floor(msLeft / 3_600_000)
-  const minutes = Math.floor((msLeft % 3_600_000) / 60_000)
-  return hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`
-}
-
-// Texto completo do badge "Exclusivo" -- coaching é sempre exclusivo do
-// booster dono do pacote, permanentemente (nunca cai no pool geral, ver
-// available_boost_orders), então não tem contagem regressiva nenhuma. Pedido
-// vinculado normal ainda mostra o tempo restante da janela de 12h. Pedido
-// reatribuído pelo admin usa o badge roxo próprio (reassignedBadge) em vez
-// deste -- excluído aqui pra não duplicar badge no mesmo card.
-function exclusiveBadge(job: Order, myUserId?: string): string | null {
-  if (!myUserId || job.preferred_booster_id !== myUserId || job.reassigned_by_admin) return null
-  if (job.service_type === 'coaching') return 'Exclusivo'
-  const timeLeft = exclusiveTimeLeft(job, myUserId)
-  return timeLeft ? `Exclusivo · ${timeLeft}` : null
-}
-
-// Coaching reatribuído nunca expira (exclusive_until fica null pra sempre,
-// ver admin_reassign_booster) -- pra qualquer outro serviço, passada a
-// janela de 12h o backend (accept_boost_order) para de tratar como
-// exclusivo e cai nas regras normais de slot, então o front tem que parar
-// de bypassar o limite também, senão o botão "Aceitar" fica habilitado pro
-// backend rejeitar em seguida.
-function isReassignedToMe(job: Order, myUserId?: string): boolean {
-  if (!myUserId || job.preferred_booster_id !== myUserId || !job.reassigned_by_admin) return false
-  return !job.exclusive_until || new Date(job.exclusive_until).getTime() > Date.now()
-}
-
-// Roxo em vez do amarelo de "Exclusivo" -- visualmente distingue "o admin me
-// entregou esse pedido" de "eu escolhi/comprei esse pedido exclusivo". Ainda
-// usa a mesma janela de 12h (accept_boost_order trata os dois com a mesma
-// regra de prazo), só o rótulo e a cor mudam.
-function reassignedBadge(job: Order, myUserId?: string): string | null {
-  if (!isReassignedToMe(job, myUserId)) return null
-  const timeLeft = exclusiveTimeLeft(job, myUserId)
-  return timeLeft ? `Reatribuído · ${timeLeft}` : 'Reatribuído'
-}
 
 export function AvailableJobsPage() {
   const { profile } = useAuthStore()
@@ -146,13 +56,16 @@ export function AvailableJobsPage() {
 
   // Pacotes de coaching referenciados pelos jobs da página -- 1 query em lote
   // (não 1 por card) pra enriquecer o card com título/descrição/duração.
-  const coachingServiceIds = Array.from(new Set(
+  const coachingServiceIds = useMemo(() => Array.from(new Set(
     (jobs ?? [])
       .filter((j) => j.service_type === 'coaching' && j.booster_service_id)
       .map((j) => j.booster_service_id as string)
-  ))
+  )), [jobs])
   const { data: coachingPackages } = useBoosterServicesByIds(coachingServiceIds)
-  const coachingPackageById = new Map((coachingPackages ?? []).map((p) => [p.id, p]))
+  const coachingPackageById = useMemo(
+    () => new Map((coachingPackages ?? []).map((p) => [p.id, p])),
+    [coachingPackages],
+  )
 
   // Mensagens de erro já vêm traduzidas de src/api/orders/mutations.ts (ACCEPT_ORDER_MESSAGES).
   const acceptJobMutation = useAcceptBoostOrder()
@@ -187,18 +100,19 @@ export function AvailableJobsPage() {
   }
 
   const serviceFilters = useServiceFilters(jobs)
-  const filtered = serviceFilters.filtered.filter((j) =>
-    !search || j.id.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () => serviceFilters.filtered.filter((j) => !search || j.id.toLowerCase().includes(search.toLowerCase())),
+    [serviceFilters.filtered, search],
   )
 
   // Pedidos atribuídos a este booster (vínculo exclusivo, badge "Exclusivo")
   // aparecem primeiro -- sort é estável, então a ordem original (created_at)
   // se mantém dentro de cada grupo.
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
     const aMine = (exclusiveBadge(a, profile?.id) || reassignedBadge(a, profile?.id)) ? 1 : 0
     const bMine = (exclusiveBadge(b, profile?.id) || reassignedBadge(b, profile?.id)) ? 1 : 0
     return bMine - aMine
-  })
+  }), [filtered, profile?.id])
 
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
@@ -256,6 +170,7 @@ export function AvailableJobsPage() {
           <input
             type="text"
             placeholder="Buscar por código do pedido..."
+            aria-label="Buscar por código do pedido"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input-base pl-8 py-1.5 text-xs"

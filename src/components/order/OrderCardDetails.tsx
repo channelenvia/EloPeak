@@ -102,7 +102,7 @@ export function OrderCardDetails({ order, viewerRole }: OrderCardDetailsProps) {
         </div>
       ))}
 
-      {order.extras?.length > 0 && (
+      {order.extras.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
           {sortOrderExtras(order.extras).map((extra) => (
             <span key={extra.extra_id} className="text-[10px] font-bold bg-bg-raised text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">

@@ -27,16 +27,34 @@ export const queryKeys = {
     boosterDuoMatches: (orderId: string) => ['orders', 'booster-duo-matches', orderId] as const,
     topics: (orderId: string) => ['orders', 'topics', orderId] as const,
     latestRankVerification: (orderId: string) => ['orders', 'detail', orderId, 'rank-verifications', 'latest'] as const,
+    history: (orderId: string) => ['orders', 'detail', orderId, 'history'] as const,
+    dropRequest: (orderId: string) => ['orders', 'detail', orderId, 'drop-request'] as const,
   },
   boosters: {
+    all: ['boosters'] as const,
     profile: (userId: string) => ['boosters', 'profile', userId] as const,
     publicProfile: (boosterId: string) => ['boosters', 'public-profile', boosterId] as const,
     publicList: (filters?: Record<string, unknown>) => ['boosters', 'public-list', filters ?? {}] as const,
-    top: () => ['boosters', 'top'] as const,
+    top: (limit?: number) => (limit != null ? ['boosters', 'top', limit] as const : ['boosters', 'top'] as const),
     status: (userId: string) => ['boosters', 'status', userId] as const,
     services: (boosterId: string) => ['boosters', 'services', boosterId] as const,
     adminList: (filters?: Record<string, unknown>) => ['boosters', 'admin-list', filters ?? {}] as const,
     adminDetail: (boosterId: string) => ['boosters', 'admin-detail', boosterId] as const,
+    assignedProfile: (boosterUserId: string) => ['boosters', 'assigned-profile', boosterUserId] as const,
+    ownDisplayName: (userId: string) => ['boosters', 'own-display-name', userId] as const,
+    ownTop3Status: (userId: string) => ['boosters', 'own-top3-status', userId] as const,
+    performance: (boosterUserIds: string[]) => ['boosters', 'performance', [...boosterUserIds].sort()] as const,
+    performanceByRank: (boosterUserId: string) => ['boosters', 'performance-by-rank', boosterUserId] as const,
+    names: (boosterUserIds: string[]) => ['boosters', 'names', [...boosterUserIds].sort()] as const,
+    adminNotes: () => ['boosters', 'admin-notes'] as const,
+    // Consolida a disponibilidade de slot num único namespace -- antes,
+    // useBoosterSlotInfo (um booster) e useBoostersWithSlots (lista) viviam
+    // em chaves ad hoc incompatíveis (['booster-slots', id] e
+    // ['boosters','with-slots']), então toda mutation que muda uso de slot
+    // (aceitar pedido, reatribuir, atribuir-durante-revisão) tinha que
+    // lembrar de invalidar as duas na mão. Uma mutation nova invalidando só
+    // `slots()` (sem argumento) agora cobre as duas por prefixo.
+    slots: (boosterId?: string) => (boosterId ? ['boosters', 'slots', boosterId] as const : ['boosters', 'slots'] as const),
   },
   payouts: {
     totals: (boosterId: string) => ['payouts', 'totals', boosterId] as const,
@@ -47,11 +65,13 @@ export const queryKeys = {
   duoAccounts: {
     list: () => ['duo-accounts', 'list'] as const,
     adminList: () => ['duo-accounts', 'admin-list'] as const,
+    reservationHistory: (accountId: string) => ['duo-accounts', 'reservation-history', accountId] as const,
   },
   coaching: {
     packages: (filters?: Record<string, unknown>) => ['coaching', 'packages', filters ?? {}] as const,
     boosterService: (id: string) => ['coaching', 'booster-service', id] as const,
     boosterServicesByIds: (ids: string[]) => ['coaching', 'booster-services', [...ids].sort()] as const,
+    boosterInfo: (boosterIds: string[]) => ['coaching', 'booster-info', [...boosterIds].sort()] as const,
   },
   notifications: {
     list: (userId: string) => ['notifications', 'list', userId] as const,
@@ -61,6 +81,9 @@ export const queryKeys = {
     profile: (userId: string) => ['customers', 'profile', userId] as const,
     adminList: (filters?: Record<string, unknown>) => ['customers', 'admin-list', filters ?? {}] as const,
     adminDetail: (customerId: string) => ['customers', 'admin-detail', customerId] as const,
+    dashboardStats: (customerId: string) => ['customers', 'profile', customerId, 'dashboard-stats'] as const,
+    adminOrders: (customerId: string) => ['customers', 'admin-detail', customerId, 'orders'] as const,
+    adminReviews: (customerId: string) => ['customers', 'admin-detail', customerId, 'reviews'] as const,
   },
   admin: {
     dashboardStats: () => ['admin', 'dashboard-stats'] as const,

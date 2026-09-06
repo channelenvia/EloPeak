@@ -5,11 +5,9 @@ import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout } from '../_shared/http.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { coreServiceFields, rankIconTier, cardThumbnailUrl, eloPeakFooter, escapeDiscordMarkdown } from '../_shared/discordRankFormat.ts'
+import { DISCORD_API, BOT_TOKEN, APP_URL } from '../_shared/discordJobAnnounce.ts'
 
-const DISCORD_API   = 'https://discord.com/api/v10'
-const BOT_TOKEN      = Deno.env.get('DISCORD_BOT_TOKEN')      ?? ''
 const WEBHOOK_SECRET = Deno.env.get('DISCORD_WEBHOOK_SECRET') ?? ''
-const APP_URL = (Deno.env.get('APP_URL') ?? Deno.env.get('PUBLIC_SITE_URL') ?? 'https://elo-peak.vercel.app').replace(/\/$/, '')
 // ID de canal não é credencial -- mesmo padrão de CHANNEL_TOP3 em
 // discord-top3-announcement, só o bot precisa ter permissão de enviar
 // mensagem lá.
@@ -41,36 +39,49 @@ serve(async (req) => {
   try {
     const db = supabaseAdmin()
 
-    const { data: review } = await db
+    const { data: review, error: reviewError } = await db
       .from('reviews')
       .select('id, order_id, customer_id, booster_id, rating, content, created_at')
       .eq('id', reviewId)
       .maybeSingle()
+    if (reviewError) console.error('discord-review-announcement: review lookup failed', reviewError.message)
     if (!review) {
       return jsonResponse(req, { ok: false, reason: 'review not found' })
     }
 
-    const [{ data: customerProfile }, { data: boosterProfile }, { data: boosterRow }, { data: orderRow }] = await Promise.all([
+    const [
+      { data: customerProfile, error: customerProfileError },
+      { data: boosterProfile, error: boosterProfileError },
+      { data: boosterRow, error: boosterRowError },
+      { data: orderRow, error: orderRowError },
+    ] = await Promise.all([
       db.from('profiles').select('username, discord_id').eq('id', review.customer_id).maybeSingle(),
       review.booster_id
         ? db.from('profiles').select('discord_id').eq('id', review.booster_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       review.booster_id
         ? db.from('booster_profiles').select('display_name').eq('user_id', review.booster_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       db.from('orders')
         .select('service_type, boost_mode, queue_type, current_rank, target_rank, clash_tier, clash_day, wins_purchased, sessions_purchased, booster_service_id')
         .eq('id', review.order_id)
         .maybeSingle(),
     ])
+    // Um erro real de banco/rede aqui não pode virar silenciosamente "review
+    // não encontrada"/dado de perfil ausente sem deixar rastro nos logs.
+    if (customerProfileError) console.error('discord-review-announcement: customer profile lookup failed', customerProfileError.message)
+    if (boosterProfileError) console.error('discord-review-announcement: booster profile lookup failed', boosterProfileError.message)
+    if (boosterRowError) console.error('discord-review-announcement: booster_profiles lookup failed', boosterRowError.message)
+    if (orderRowError) console.error('discord-review-announcement: order lookup failed', orderRowError.message)
 
     // coach_package_title só existe pra coaching (booster_service_id sempre
     // null nos outros service_types) -- mesmo padrão de fetchOrderProfiles
     // em discord-order-channel, serviceDetail() (dentro de coreServiceFields)
     // precisa dele pro campo "🎓 Pacote".
-    const { data: coachPackage } = orderRow?.booster_service_id
+    const { data: coachPackage, error: coachPackageError } = orderRow?.booster_service_id
       ? await db.from('booster_services').select('title').eq('id', orderRow.booster_service_id).maybeSingle()
-      : { data: null as { title: string } | null }
+      : { data: null as { title: string } | null, error: null }
+    if (coachPackageError) console.error('discord-review-announcement: coach package lookup failed', coachPackageError.message)
     const order = orderRow ? { ...orderRow, coach_package_title: coachPackage?.title ?? null } : null
 
     // Cliente nunca é @mencionado (marcado) na review -- só o booster, que é

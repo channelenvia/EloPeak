@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
@@ -8,11 +8,14 @@ import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false)
+  const answerId = useId()
 
   return (
     <div className="border-b border-border-subtle last:border-0">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={answerId}
         className="w-full flex items-start justify-between gap-4 py-5 text-left"
       >
         <span className="text-sm font-semibold text-ink">{q}</span>
@@ -21,7 +24,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         />
       </button>
       {open && (
-        <p className="pb-5 text-sm text-ink-secondary leading-relaxed -mt-1">{a}</p>
+        <p id={answerId} className="pb-5 text-sm text-ink-secondary leading-relaxed -mt-1">{a}</p>
       )}
     </div>
   )

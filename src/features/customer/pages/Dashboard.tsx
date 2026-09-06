@@ -40,7 +40,7 @@ export function CustomerDashboard() {
   const navigate = useNavigate()
   const currency = useCurrency()
   const { data: orders, isLoading } = useCustomerOrders(profile?.id, 'all', 20)
-  const { data: stats } = useCustomerDashboardStats(profile?.id)
+  const { data: stats, isLoading: statsLoading } = useCustomerDashboardStats(profile?.id)
 
   const activeCount = stats?.activeOrders ?? 0
   const recentOrders = sortByPriority(orders ?? [])
@@ -82,13 +82,24 @@ export function CustomerDashboard() {
           { label: t('customer.dashboard.stats.completed'), value: stats?.completedOrders ?? 0,           icon: ShoppingBag,   color: 'text-success bg-success/10' },
           { label: t('customer.dashboard.stats.spent'),     value: currency(stats?.totalSpent ?? 0),      icon: MessageCircle, color: 'text-info bg-info/10' },
         ].map(({ label, value, icon, color }) => (
-          <StatCard key={label} label={label} value={value} icon={icon} color={color} valueSize="lg" />
+          <StatCard
+            key={label}
+            label={label}
+            // activeCount vem de stats também (activeCount = stats?.activeOrders
+            // ?? 0) -- enquanto a query carrega, os 4 cards mostrariam "0" real
+            // por um instante antes do valor de verdade chegar. Mesmo padrão de
+            // Skeleton já usado no grid de pedidos logo abaixo.
+            value={statsLoading ? <Skeleton className="h-6 w-12" /> : value}
+            icon={icon}
+            color={color}
+            valueSize="lg"
+          />
         ))}
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-ink">Pedidos recentes</h3>
+          <h2 className="text-base font-semibold text-ink">Pedidos recentes</h2>
           <Button asChild variant="link" size="sm">
             <Link to="/orders">{t('customer.dashboard.viewAll')}</Link>
           </Button>

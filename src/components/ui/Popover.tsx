@@ -57,6 +57,21 @@ export function Popover({ open, onClose, anchorRef, children, className, align =
     }
   }, [open, anchorRef, align])
 
+  // Move o foco pro painel ao abrir e devolve pro gatilho ao fechar (clique-
+  // fora, Escape, seleção de uma opção, ou fechamento por estado externo) --
+  // sem isso, um usuário de teclado abrindo o popover ficava com o foco
+  // "preso" no botão-gatilho enquanto o painel (fora da ordem DOM natural,
+  // via portal) já estava visível, e fechar deixava o foco perdido no body.
+  const wasOpenRef = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      panelRef.current?.focus()
+    } else if (!open && wasOpenRef.current) {
+      anchorRef.current?.focus()
+    }
+    wasOpenRef.current = open
+  }, [open, anchorRef])
+
   useEffect(() => {
     if (!open) return
     function handlePointerDown(event: MouseEvent) {
@@ -81,8 +96,9 @@ export function Popover({ open, onClose, anchorRef, children, className, align =
   return createPortal(
     <div
       ref={panelRef}
+      tabIndex={-1}
       style={pos ? { position: 'fixed', top: pos.top, left: pos.left } : { position: 'fixed', top: -9999, left: -9999 }}
-      className={cn('z-[100] bg-bg-surface border border-border-subtle rounded-xl shadow-2xl', className)}
+      className={cn('z-[100] bg-bg-surface border border-border-subtle rounded-xl shadow-2xl focus:outline-none', className)}
     >
       {children}
     </div>,

@@ -204,10 +204,11 @@ export function AdminDropsPage() {
           : 'O pedido volta ao status anterior.'}
       >
         <div>
-          <label className="text-xs font-semibold text-ink-secondary block mb-1.5">
+          <label htmlFor="drop-resolve-admin-note" className="text-xs font-semibold text-ink-secondary block mb-1.5">
             Nota para o booster (opcional)
           </label>
           <textarea
+            id="drop-resolve-admin-note"
             value={adminNote}
             onChange={(e) => setAdminNote(e.target.value)}
             placeholder="Justificativa ou observação..."

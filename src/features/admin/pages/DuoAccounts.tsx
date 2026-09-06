@@ -136,6 +136,7 @@ function accountToForm(a: AdminDuoAccount): AccountForm {
 
 export function AdminDuoAccountsPage() {
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; account?: AdminDuoAccount } | null>(null)
+  const [showPasswordField, setShowPasswordField] = useState(false)
   const [form, setForm] = useState<AccountForm>(EMPTY_FORM)
   const [revealed, setRevealed] = useState<Record<string, { login: string; password: string } | 'loading' | 'error'>>({})
   const [riotVerified, setRiotVerified] = useState(false)
@@ -185,6 +186,7 @@ export function AdminDuoAccountsPage() {
     setRiotVerified(modal.mode === 'edit')
     setRiotLookupError(null)
     setRiotLookupMessage(null)
+    setShowPasswordField(false)
   }, [modal])
 
   const saveMutation = useAdminSaveDuoAccount()
@@ -216,10 +218,11 @@ export function AdminDuoAccountsPage() {
     mutate: (a: AdminDuoAccount) => toggleActiveMutation.mutate({ accountId: a.id, isActive: !a.is_active }),
   }
 
+  const [releaseTarget, setReleaseTarget] = useState<AdminDuoAccount | null>(null)
   const releaseReservationMutation = useAdminReleaseDuoAccount()
   const releaseReservation = {
     isPending: releaseReservationMutation.isPending,
-    mutate: (accountId: string) => releaseReservationMutation.mutate(accountId),
+    mutate: (accountId: string) => releaseReservationMutation.mutate(accountId, { onSuccess: () => setReleaseTarget(null) }),
   }
 
   const [historyTarget, setHistoryTarget] = useState<AdminDuoAccount | null>(null)
@@ -305,7 +308,7 @@ export function AdminDuoAccountsPage() {
                     <TableCell>
                       <button
                         onClick={() => toggleActive.mutate(a)}
-                        disabled={toggleActive.isPending}
+                        disabled={toggleActiveMutation.isPending && toggleActiveMutation.variables?.accountId === a.id}
                         className={`badge text-xs disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
                       >
                         {a.is_active ? 'Ativa' : 'Inativa'}
@@ -322,7 +325,7 @@ export function AdminDuoAccountsPage() {
                           >
                             Reservada
                           </button>
-                          <Button size="xs" variant="ghost" loading={releaseReservation.isPending} onClick={() => releaseReservation.mutate(a.id)}>
+                          <Button size="xs" variant="ghost" loading={releaseReservationMutation.isPending && releaseReservationMutation.variables === a.id} onClick={() => setReleaseTarget(a)}>
                             Liberar
                           </Button>
                         </div>
@@ -376,11 +379,13 @@ export function AdminDuoAccountsPage() {
         <div className="space-y-6">
           <FormField
             label="Riot ID"
+            id="duo-account-riot-id"
             required
             hint="Consulta rank, divisão e PDL/LP atuais na Riot — nenhum campo de rank é preenchido manualmente."
           >
             <div className="flex flex-col sm:flex-row gap-3">
               <input
+                id="duo-account-riot-id"
                 value={form.riot_id}
                 onChange={(e) => {
                   setForm((f) => ({ ...f, riot_id: e.target.value }))
@@ -441,28 +446,41 @@ export function AdminDuoAccountsPage() {
             </p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-5">
-              <FormField label={`Login${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`}>
+              <FormField label={`Login${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`} id="duo-account-login">
                 <input
+                  id="duo-account-login"
                   value={form.login}
                   onChange={(e) => setForm((f) => ({ ...f, login: e.target.value }))}
                   className="input-base w-full py-3"
                   autoComplete="off"
                 />
               </FormField>
-              <FormField label={`Senha${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`}>
-                <input
-                  type="text"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  className="input-base w-full py-3"
-                  autoComplete="off"
-                />
+              <FormField label={`Senha${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`} id="duo-account-password">
+                <div className="relative">
+                  <input
+                    id="duo-account-password"
+                    type={showPasswordField ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    className="input-base w-full py-3 pr-10"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordField((v) => !v)}
+                    aria-label={showPasswordField ? 'Ocultar senha' : 'Mostrar senha'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink transition-colors"
+                  >
+                    {showPasswordField ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </FormField>
             </div>
           )}
 
-          <FormField label="Notas internas">
+          <FormField label="Notas internas" id="duo-account-notes">
             <textarea
+              id="duo-account-notes"
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               rows={3}
@@ -511,6 +529,24 @@ export function AdminDuoAccountsPage() {
               Excluir
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!releaseTarget}
+        onOpenChange={(open) => !open && setReleaseTarget(null)}
+        title="Liberar reserva"
+        description={`Isso força a liberação da conta "${releaseTarget?.riot_id ?? releaseTarget?.label}", mesmo que um booster esteja usando ela agora no meio de um boost.`}
+      >
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={() => setReleaseTarget(null)}>Cancelar</Button>
+          <Button
+            variant="danger"
+            loading={releaseReservation.isPending}
+            onClick={() => releaseTarget && releaseReservation.mutate(releaseTarget.id)}
+          >
+            Liberar
+          </Button>
         </div>
       </Modal>
     </div>

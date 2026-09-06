@@ -1383,6 +1383,7 @@ export type Database = {
           created_at: string
           id: string
           is_read: boolean
+          mentioned_user_ids: string[]
           order_id: string
           sender_id: string
           sender_role: Database["public"]["Enums"]["user_role"]
@@ -1393,6 +1394,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean
+          mentioned_user_ids?: string[]
           order_id: string
           sender_id: string
           sender_role: Database["public"]["Enums"]["user_role"]
@@ -1403,6 +1405,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean
+          mentioned_user_ids?: string[]
           order_id?: string
           sender_id?: string
           sender_role?: Database["public"]["Enums"]["user_role"]
@@ -1617,6 +1620,7 @@ export type Database = {
           discord_voice_channel_id: string | null
           discount_price: number
           drop_count: number
+          duo_current_rank: Json | null
           duo_own_riot_id: string | null
           estimated_hours: number | null
           exclusive_expired_announced_at: string | null
@@ -1684,6 +1688,7 @@ export type Database = {
           discord_voice_channel_id?: string | null
           discount_price?: number
           drop_count?: number
+          duo_current_rank?: Json | null
           duo_own_riot_id?: string | null
           estimated_hours?: number | null
           exclusive_expired_announced_at?: string | null
@@ -1751,6 +1756,7 @@ export type Database = {
           discord_voice_channel_id?: string | null
           discount_price?: number
           drop_count?: number
+          duo_current_rank?: Json | null
           duo_own_riot_id?: string | null
           estimated_hours?: number | null
           exclusive_expired_announced_at?: string | null
@@ -2043,6 +2049,7 @@ export type Database = {
           discord_id: string | null
           email: string
           id: string
+          last_inactivity_dm_sent_at: string | null
           legal_version: string | null
           privacy_accepted_at: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -2056,6 +2063,7 @@ export type Database = {
           discord_id?: string | null
           email: string
           id: string
+          last_inactivity_dm_sent_at?: string | null
           legal_version?: string | null
           privacy_accepted_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -2069,6 +2077,7 @@ export type Database = {
           discord_id?: string | null
           email?: string
           id?: string
+          last_inactivity_dm_sent_at?: string | null
           legal_version?: string | null
           privacy_accepted_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -2561,6 +2570,10 @@ export type Database = {
         Args: { p_order_id: string; p_reason: string }
         Returns: Json
       }
+      admin_flag_order_under_review: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: Json
+      }
       admin_list_boosters_with_slots: {
         Args: never
         Returns: {
@@ -2978,6 +2991,15 @@ export type Database = {
         Returns: Json
       }
       update_order_current_rank: {
+        Args: {
+          p_division: string
+          p_lp: number
+          p_order_id: string
+          p_tier: string
+        }
+        Returns: Json
+      }
+      update_order_duo_current_rank: {
         Args: {
           p_division: string
           p_lp: number

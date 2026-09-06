@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -22,9 +22,29 @@ export function InlineFieldSelect<T extends string>({
 }) {
   const [expanded, setExpanded] = useState(false)
   const other = options[0] === value ? options[1] : options[0]
+  const containerRef = useRef<HTMLDivElement>(null)
+  const optionsId = useId()
+
+  // Sem isso, o dropdown só fechava pelo próprio toggle/clique de opção --
+  // diferente do Popover compartilhado, que já fecha em clique-fora/Escape.
+  useEffect(() => {
+    if (!expanded) return
+    function handlePointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setExpanded(false)
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setExpanded(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [expanded])
 
   return (
-    <div className="relative w-[5.5rem] shrink-0">
+    <div className="relative w-[5.5rem] shrink-0" ref={containerRef}>
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
@@ -33,12 +53,14 @@ export function InlineFieldSelect<T extends string>({
           expanded ? 'rounded-t-lg border-b-0' : 'rounded-lg',
         )}
         aria-label={expanded ? `Fechar ${fieldLabel}` : `Trocar ${fieldLabel}`}
+        aria-expanded={expanded}
+        aria-controls={optionsId}
       >
         <span className="text-xs font-bold text-brand whitespace-nowrap">{label(value)}</span>
         <ChevronDown className={cn('h-3 w-3 text-ink-muted transition-transform shrink-0', expanded && 'rotate-180')} />
       </button>
       {expanded && (
-        <div className="absolute inset-x-0 top-full z-20 rounded-b-lg border border-t-0 border-border-subtle bg-bg-surface shadow-sm overflow-hidden animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        <div id={optionsId} className="absolute inset-x-0 top-full z-20 rounded-b-lg border border-t-0 border-border-subtle bg-bg-surface shadow-sm overflow-hidden animate-in fade-in-0 slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={() => {

@@ -67,6 +67,12 @@ verify_jwt = false
 [functions.discord-chat-mention]
 verify_jwt = false
 
+# Acionada inline por process_mp_payment_event/release_paid_order_after_
+# credentials (net.http_post, migration 20260906190000) quando um pedido
+# entra em pending_review -- mesmo gate x-webhook-secret dos demais.
+[functions.discord-admin-review-alert]
+verify_jwt = false
+
 # Mesmo caso acima: acionada só pelo trigger notify_discord_review (pg_net,
 # migration 20260824070000), nunca por um usuário logado.
 [functions.discord-review-announcement]
@@ -83,4 +89,21 @@ verify_jwt = false
 # com uma sessão do projeto remoto, use o script functions:serve, que passa
 # --no-verify-jwt e deixa a validação explícita de cada função ativa.
 [functions.riot-profile-icons]
+verify_jwt = false
+
+# Invocadas só pelos Cron Jobs do Supabase (net.http_post), nunca por um
+# usuário logado -- mesmo padrão de announce-expired-exclusive-jobs acima,
+# cada uma com seu próprio secret.
+[functions.discord-payout-window-reminder]
+verify_jwt = false
+
+[functions.discord-customer-inactivity-reminder]
+verify_jwt = false
+
+# Invocada só pelo Cron Job do Supabase (net.http_post) a cada 30min, nunca
+# por um usuário logado -- gate próprio via x-webhook-secret
+# (CRON_SYNC_ORDER_MATCHES_SECRET), mesmo padrão dos outros cron webhooks
+# acima. Varre pedidos ativos sem sync recente com a Riot (ver migration
+# 20260906250000).
+[functions.cron-sync-order-matches]
 verify_jwt = false

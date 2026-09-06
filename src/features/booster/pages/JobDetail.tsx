@@ -66,10 +66,10 @@ function BoosterDropModal({ order, open, onClose }: { order: Order; open: boolea
         Você ainda possui {remainingDrops} drop{remainingDrops === 1 ? '' : 's'} disponíve{remainingDrops === 1 ? 'l' : 'is'} para este pedido.
       </p>
       <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">
+        <label htmlFor="booster-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo para abandonar o pedido..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="booster-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo para abandonar o pedido..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
@@ -127,7 +127,11 @@ export function JobDetailPage() {
   const markChatRead = useMarkOrderChatRead(id ?? '')
   useEffect(() => {
     if (unreadChatCount > 0) markChatRead.mutate()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // markChatRead (objeto de useMutation) muda de identidade a cada render
+    // independente de unreadChatCount -- incluí-lo disparava mutate() de
+    // novo em qualquer re-render não relacionado enquanto ainda houvesse
+    // mensagem não lida, não só quando o count muda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadChatCount])
 
   const updateStatus = useUpdateOrderStatus(id ?? '')
@@ -145,6 +149,11 @@ export function JobDetailPage() {
     maybeSync()
     const intervalId = setInterval(maybeSync, AUTO_SYNC_INTERVAL_MS)
     return () => clearInterval(intervalId)
+    // syncMatches (objeto de useMutation) muda de identidade a cada render;
+    // incluí-lo recriaria o interval a cada render em vez de só quando o
+    // pedido muda de fato -- orderRef acima já resolve o mesmo problema pra
+    // `order`, syncMatches.mutate() lido no momento do tick continua válido
+    // (mutation não fica "presa" numa config antiga).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id, order?.status])
   const verifyRank = useVerifyOrderRank(id ?? '')

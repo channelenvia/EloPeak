@@ -148,8 +148,9 @@ export function BoosterServiceForm({
   return (
     <div className="card border-brand/30 p-5 space-y-4">
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Título <span className="text-danger">*</span></label>
+        <label htmlFor="booster-service-title" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Título <span className="text-danger">*</span></label>
         <input
+          id="booster-service-title"
           value={data.title}
           onChange={field('title')}
           maxLength={60}
@@ -160,10 +161,11 @@ export function BoosterServiceForm({
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Descrição <span className="text-danger">*</span></label>
+          <label htmlFor="booster-service-description" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Descrição <span className="text-danger">*</span></label>
           <span className="text-[10px] text-ink-muted">{data.description.length}/300</span>
         </div>
         <textarea
+          id="booster-service-description"
           value={data.description}
           onChange={field('description')}
           maxLength={300}
@@ -175,8 +177,9 @@ export function BoosterServiceForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Duração <span className="text-danger">*</span></label>
+          <label htmlFor="booster-service-tempo" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Duração <span className="text-danger">*</span></label>
           <select
+            id="booster-service-tempo"
             value={data.tempo}
             onChange={e => setData(d => ({ ...d, tempo: e.target.value }))}
             className="input-base w-full text-sm"

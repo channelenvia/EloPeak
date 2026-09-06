@@ -31,7 +31,24 @@ export async function confirmOrderCompletion(orderId: string) {
   return assertRpcSuccess(data as { success: boolean; error?: string })
 }
 
+// wins_played/losses_played (gate de "objetivo atingido" aqui, e a base do
+// cálculo de penalidade em apply_order_drop pros RPCs de drop abaixo) só
+// ficam corretos com o sync da Riot mais recente possível -- sem isso, uma
+// vitória/derrota já jogada mas ainda não sincronizada fica de fora da conta
+// no exato momento em que ela é lida pra decidir dinheiro ou destravar o
+// status. Best-effort de propósito: falha de sync (Riot fora do ar, rate
+// limit etc.) não pode bloquear a ação em si, só significa que ela roda com
+// o que já estava sincronizado antes.
+async function bestEffortSyncBeforeAction(orderId: string): Promise<void> {
+  try {
+    await syncOrderMatches(orderId)
+  } catch (err) {
+    console.error('bestEffortSyncBeforeAction failed', orderId, err)
+  }
+}
+
 export async function updateOrderStatus(params: { orderId: string; newStatus: OrderStatus }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('update_order_status', {
     p_order_id: params.orderId, p_new_status: params.newStatus,
   })
@@ -83,6 +100,7 @@ const ADMIN_DROP_ORDER_MESSAGES: Record<string, string> = {
 }
 
 export async function adminDropOrder(params: { orderId: string; reason: string }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_drop_order', { p_order_id: params.orderId, p_reason: params.reason })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES)
@@ -104,6 +122,7 @@ const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
 }
 
 export async function adminReassignBooster(params: { orderId: string; targetBoosterId: string; reason: string }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_reassign_booster', {
     p_order_id: params.orderId, p_target_booster_id: params.targetBoosterId, p_reason: params.reason,
   })
@@ -113,7 +132,7 @@ export async function adminReassignBooster(params: { orderId: string; targetBoos
 
 const PENDING_REVIEW_MESSAGES: Record<string, string> = {
   order_not_found: 'Pedido não encontrado.',
-  order_not_pending_review: 'Este pedido não está mais na janela de revisão.',
+  order_not_pending_review: 'Este pedido não está mais em um status que aceita esta ação.',
   invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
   target_booster_not_found: 'Booster não encontrado.',
   target_booster_not_approved: 'Este booster não está com status aprovado -- não é possível atribuir o pedido a ele.',
@@ -141,6 +160,25 @@ export async function adminAssignPendingReviewOrder(params: { orderId: string; t
   })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccess(data as { success: boolean; error?: string }, PENDING_REVIEW_MESSAGES)
+}
+
+const FLAG_UNDER_REVIEW_MESSAGES: Record<string, string> = {
+  invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
+  order_not_found: 'Pedido não encontrado.',
+  order_not_active: 'Este pedido não está mais em um status que aceita esta ação.',
+  // Repassados de apply_order_drop quando havia booster ativo (ver
+  // migration 20260906190000).
+  order_not_found_or_unassigned: 'Não foi possível calcular o valor do progresso -- pedido não encontrado ou sem booster atribuído.',
+  order_status_mismatch: 'O status do pedido mudou -- atualize a página e tente novamente.',
+  missing_rank_data: 'Este pedido está sem rank atual/alvo definido -- não é possível calcular o valor do progresso.',
+}
+
+export async function adminFlagOrderUnderReview(params: { orderId: string; reason: string }) {
+  const { data, error } = await supabase.rpc('admin_flag_order_under_review', {
+    p_order_id: params.orderId, p_reason: params.reason,
+  })
+  if (error) throw normalizeApiError(error)
+  return assertRpcSuccess(data as { success: boolean; error?: string }, FLAG_UNDER_REVIEW_MESSAGES)
 }
 
 const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
@@ -172,6 +210,7 @@ const REQUEST_ORDER_DROP_MESSAGES: Record<string, string> = {
 }
 
 export async function requestOrderDrop(params: { orderId: string; reason: string }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('request_order_drop', { p_order_id: params.orderId, p_reason: params.reason })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccess(
@@ -192,6 +231,7 @@ const REQUEST_CUSTOMER_ORDER_DROP_MESSAGES: Record<string, string> = {
 }
 
 export async function requestCustomerOrderDrop(params: { orderId: string; reason: string }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('request_customer_order_drop', {
     p_order_id: params.orderId, p_reason: params.reason,
   })

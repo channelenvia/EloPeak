@@ -7,7 +7,7 @@ import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { rankIconTier, cardThumbnailUrl, eloPeakFooter } from '../_shared/discordRankFormat.ts'
 import {
   DISCORD_API, BOT_TOKEN, CHANNEL_JOBS, APP_URL,
-  fetchOrderProfiles, buildOrderFields, buildPublicJobEmbed, jobsButton, sendChannelMessage,
+  fetchOrderProfiles, buildOrderFields, buildPublicJobEmbed, jobsButton, sendChannelMessage, sendDirectMessage,
 } from '../_shared/discordJobAnnounce.ts'
 
 const GUILD_ID                = Deno.env.get('DISCORD_GUILD_ID')              ?? ''
@@ -35,6 +35,27 @@ const VOICE_ALLOW   = String(VIEW_CHANNEL + CONNECT + SPEAK)
 const DENY_EVERYONE = String(VIEW_CHANNEL) // deny VIEW_CHANNEL for @everyone
 
 const TERMINAL = ['completed', 'canceled', 'refunded', 'disputed', 'drop_requested']
+
+// Mirrors ORDER_STATUS_LABEL em src/lib/utils.ts -- não importável aqui
+// (runtime Deno separado do bundle Vite, mesmo motivo de LANE_LABEL em
+// discordJobAnnounce.ts).
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  draft: 'Rascunho',
+  awaiting_payment: 'Aguardando Pagamento',
+  paid: 'Pagamento Confirmado',
+  pending_review: 'Em Revisão',
+  awaiting_assignment: 'Esperando Booster',
+  assigned: 'Booster Atribuído',
+  in_progress: 'Em Andamento',
+  paused: 'Pausado',
+  drop_requested: 'Solicitação de Drop',
+  awaiting_customer: 'Aguardando Cliente',
+  completed: 'Concluído',
+  disputed: 'Disputado',
+  under_review: 'Em Análise',
+  refunded: 'Reembolsado',
+  canceled: 'Cancelado',
+}
 
 const orderRecordSchema = z.object({
   id: z.string().uuid(),
@@ -174,21 +195,50 @@ function buildExclusiveJobDM(order: any) {
   }
 }
 
-// DM direto -- Discord exige abrir (ou reaproveitar) o canal de DM com o
-// usuário antes de mandar qualquer mensagem direta (idempotente, sempre
-// retorna o mesmo channel id pra um par bot/usuário).
-async function sendDirectMessage(discordUserId: string, payload: object) {
-  const dmRes = await fetchWithTimeout(`${DISCORD_API}/users/@me/channels`, {
-    method: 'POST',
-    headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient_id: discordUserId }),
-  })
-  if (!dmRes.ok) {
-    console.error(`Discord create DM channel failed ${dmRes.status}:`, await dmRes.text())
-    throw new Error(`Discord create DM channel ${dmRes.status}`)
+// DM genérico de "seu pedido mudou de status" -- pro cliente e pro booster
+// atribuído, em toda transição (menos a de entrada em awaiting_assignment,
+// que já tem mensagem própria e mais específica: buildExclusiveJobDM só pro
+// booster preferido, ou o post público no canal de jobs -- um segundo DM
+// genérico ali seria ruído duplicado só pro booster; o cliente nunca recebe
+// nada específico nessa transição, então continua incluído normalmente).
+function buildStatusChangeDm(orderId: string, newStatus: string, forRole: 'customer' | 'booster') {
+  const shortCode = orderId.slice(0, 8).toUpperCase()
+  const label = ORDER_STATUS_LABEL[newStatus] ?? newStatus
+  const path = forRole === 'customer' ? `/orders/${orderId}` : `/booster/orders/${orderId}`
+  return {
+    embeds: [{
+      title: '🔔 Status do pedido atualizado',
+      url: `${APP_URL}${path}`,
+      description: `Pedido #${shortCode} agora está: **${label}**.`,
+      color: 0x3B82F6,
+      footer: eloPeakFooter(APP_URL),
+    }],
+    components: [{
+      type: 1,
+      components: [{ type: 2, style: 5, label: 'Ver pedido', url: `${APP_URL}${path}` }],
+    }],
   }
-  const dmChannel = await dmRes.json() as { id: string }
-  await sendChannelMessage(dmChannel.id, payload)
+}
+
+async function notifyStatusChangeDms(orderId: string, newStatus: string, skipBoosterDm: boolean) {
+  const { customer, booster } = await fetchOrderProfiles(orderId)
+
+  const sends: Promise<void>[] = []
+  if (customer?.discord_id) {
+    sends.push(sendDirectMessage(customer.discord_id, buildStatusChangeDm(orderId, newStatus, 'customer')))
+  }
+  if (!skipBoosterDm && booster?.discord_id) {
+    sends.push(sendDirectMessage(booster.discord_id, buildStatusChangeDm(orderId, newStatus, 'booster')))
+  }
+
+  // Um DM falhando (usuário bloqueou o bot, Discord fora do ar) não pode
+  // derrubar a resposta do webhook inteira -- best-effort, só loga.
+  const results = await Promise.allSettled(sends)
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('discord-order-channel: status change DM failed', result.reason)
+    }
+  }
 }
 
 // discord_text_channel_id nunca é setado por esse fluxo (só canal de voz,
@@ -223,13 +273,19 @@ serve(async (req) => {
   // validados pelo Zod acima. Cast explícito pro formato que o Zod garantiu.
   const payload = parsedPayload.data
   const record = ('record' in payload ? payload.record : payload) as z.infer<typeof orderRecordSchema>
-  const oldRecord = ('record' in payload ? payload.old_record ?? {} : {}) as { status?: string }
+  const oldRecord = ('record' in payload ? payload.old_record ?? {} : {}) as { status?: string | null }
 
   const orderId:               string        = record.id
   const newStatus:              string        = record.status
+  // null explícito (todo INSERT) vira '' -- distinto de uma UPDATE real que
+  // troque pra um status vazio (não existe) -- '' só acontece em criação.
   const oldStatus:              string        = oldRecord.status ?? ''
   const existingVoiceChannelId: string | null = record.discord_voice_channel_id ?? null
   const existingTextChannelId:  string | null = record.discord_text_channel_id ?? null
+
+  // Nunca dispara em criação de pedido (oldStatus vazio) nem quando o status
+  // de fato não mudou (payload duplicado/replay).
+  const isRealStatusChange = oldStatus !== '' && oldStatus !== newStatus
 
   try {
     // ── Cria canal de voz quando o pedido entra em execução e precisa ──────────
@@ -250,22 +306,19 @@ serve(async (req) => {
       const extras: { code?: string }[] = order.extras ?? []
       const needsVoiceChannel = order.service_type === 'coaching'
         || extras.some((extra) => VOICE_ADDON_CODES.includes(extra.code ?? ''))
-      if (!needsVoiceChannel) {
-        return jsonResponse(req, { ok: true, action: 'skipped_no_voice_addon' })
+
+      if (needsVoiceChannel && (customer?.discord_id || booster?.discord_id)) {
+        const { voiceChannelId } = await createOrderVoiceChannel(
+          order.id,
+          customer?.discord_id ?? null,
+          booster?.discord_id  ?? null,
+        )
+        await saveChannelIds(orderId, voiceChannelId, null)
       }
 
-      if (!customer?.discord_id && !booster?.discord_id) {
-        return jsonResponse(req, { ok: false, reason: 'no discord_ids found for customer or booster' })
-      }
+      if (isRealStatusChange) await notifyStatusChangeDms(orderId, newStatus, false)
 
-      const { voiceChannelId } = await createOrderVoiceChannel(
-        order.id,
-        customer?.discord_id ?? null,
-        booster?.discord_id  ?? null,
-      )
-      await saveChannelIds(orderId, voiceChannelId, null)
-
-      return jsonResponse(req, { ok: true, action: 'created', voiceChannelId })
+      return jsonResponse(req, { ok: true, action: 'in_progress_handled' })
     }
 
     // ── Anuncia quando o pedido fica disponível ───────────────────────────────
@@ -286,18 +339,19 @@ serve(async (req) => {
       }
 
       if (order.preferred_booster_id) {
-        if (!preferredBooster?.discord_id) {
-          return jsonResponse(req, { ok: true, action: 'skipped_no_discord_id' })
+        if (preferredBooster?.discord_id) {
+          await sendDirectMessage(preferredBooster.discord_id, buildExclusiveJobDM(order))
         }
-        await sendDirectMessage(preferredBooster.discord_id, buildExclusiveJobDM(order))
-        return jsonResponse(req, { ok: true, action: 'exclusive_job_dm_sent' })
+      } else if (CHANNEL_JOBS) {
+        await sendChannelMessage(CHANNEL_JOBS, buildPublicJobEmbed(order))
       }
 
-      if (!CHANNEL_JOBS) {
-        return jsonResponse(req, { ok: false, reason: 'DISCORD_CHANNEL_JOBS not configured' })
-      }
-      await sendChannelMessage(CHANNEL_JOBS, buildPublicJobEmbed(order))
-      return jsonResponse(req, { ok: true, action: 'job_announced' })
+      // O booster já recebeu a mensagem específica (exclusiva) ou não tem
+      // nenhum ainda (pool público, ninguém aceitou) -- só o cliente recebe o
+      // DM genérico aqui, pra não duplicar/adiantar aviso pro booster errado.
+      if (isRealStatusChange) await notifyStatusChangeDms(orderId, newStatus, true)
+
+      return jsonResponse(req, { ok: true, action: 'awaiting_assignment_handled' })
     }
 
     // ── Apaga os canais quando o pedido é encerrado ───────────────────────────
@@ -310,7 +364,17 @@ serve(async (req) => {
       await deleteOrderChannels(existingVoiceChannelId, existingTextChannelId)
       await saveChannelIds(orderId, null, null)
 
-      return jsonResponse(req, { ok: true, action: 'deleted' })
+      if (isRealStatusChange) await notifyStatusChangeDms(orderId, newStatus, false)
+
+      return jsonResponse(req, { ok: true, action: 'terminal_handled' })
+    }
+
+    // ── Qualquer outra transição de status (assigned, paused, awaiting_customer,
+    // completed/canceled sem canal pra apagar, under_review, etc.) -- só o DM
+    // genérico, sem efeito colateral de canal/anúncio nenhum.
+    if (isRealStatusChange) {
+      await notifyStatusChangeDms(orderId, newStatus, false)
+      return jsonResponse(req, { ok: true, action: 'status_dm_sent' })
     }
 
     return jsonResponse(req, { ok: true, action: 'skipped' })

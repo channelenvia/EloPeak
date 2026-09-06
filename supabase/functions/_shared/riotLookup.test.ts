@@ -4,7 +4,10 @@
 // parseMatchDetail.
 //   deno test --allow-env supabase/functions/_shared/riotLookup.test.ts
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
-import { isRemakeMatch, causedRemake, parseMatchDetail } from './riotLookup.ts'
+import {
+  isRemakeMatch, causedRemake, parseMatchDetail, rankOrdinal, resolveMatchResult,
+  type RankOrdinal, type RankOrdinalResult,
+} from './riotLookup.ts'
 
 const PUUID = 'booster-puuid'
 
@@ -163,4 +166,144 @@ Deno.test('parseMatchDetail — empate no topo conta como MVP (>=, não > estrit
   const result = parseMatchDetail(body, PUUID, 'MATCH_1')
   if (!result.ok) throw new Error('expected ok')
   assertEquals(result.detail.isMvp, true)
+})
+
+Deno.test('rankOrdinal — promoção de divisão pesa mais que LP dentro da mesma divisão', () => {
+  // Gold IV 90 LP -> Gold III 0 LP é uma PROMOÇÃO (subiu), mesmo o LP cru
+  // caindo de 90 pra 0 -- é exatamente o caso que rankOrdinal precisa
+  // acertar (ver resolveMatchResult, que decide win/loss comparando isso).
+  const beforePromotion = rankOrdinal('gold', 'IV', 90)
+  const afterPromotion = rankOrdinal('gold', 'III', 0)
+  assertEquals(afterPromotion > beforePromotion, true)
+})
+
+Deno.test('rankOrdinal — LP crescente dentro da mesma divisão sempre aumenta o ordinal', () => {
+  assertEquals(rankOrdinal('platinum', 'II', 40) > rankOrdinal('platinum', 'II', 10), true)
+})
+
+function ordinalResult(value: number): RankOrdinalResult {
+  return { ok: true, ordinal: { ordinal: value, tier: 'gold', division: 'III', lp: value } }
+}
+
+function makeTracker(initial: number | null) {
+  return { value: initial }
+}
+
+Deno.test('resolveMatchResult — fora de RANK_TRACKED usa a heurística antiga sem chamar a Riot', async () => {
+  let fetchCalls = 0
+  const body = { info: { gameDuration: 100, participants: [{ puuid: PUUID, timePlayed: 95 }] } }
+  const result = await resolveMatchResult({
+    isRankTracked: false,
+    isRemake: true,
+    rawResult: 'win',
+    body,
+    puuid: PUUID,
+    tracker: makeTracker(null),
+    fetchOrdinal: async () => { fetchCalls++; return ordinalResult(100) },
+    persist: async () => {},
+  })
+  assertEquals(fetchCalls, 0)
+  // timePlayed (95) >= 50% de gameDuration (100) -> não causou o remake.
+  assertEquals(result, 'remake')
+})
+
+Deno.test('resolveMatchResult — remake com PDL maior depois vira win pro lado rastreado', async () => {
+  const tracker = makeTracker(1000)
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: true,
+    rawResult: 'win',
+    body: { info: {} },
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ordinalResult(1010),
+    persist: async () => {},
+  })
+  assertEquals(result, 'win')
+  assertEquals(tracker.value, 1010)
+})
+
+Deno.test('resolveMatchResult — remake com PDL menor depois vira loss pro lado que kitou', async () => {
+  const tracker = makeTracker(1000)
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: true,
+    rawResult: 'loss',
+    body: { info: {} },
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ordinalResult(980),
+    persist: async () => {},
+  })
+  assertEquals(result, 'loss')
+})
+
+Deno.test('resolveMatchResult — remake com PDL inalterado continua remake', async () => {
+  const tracker = makeTracker(1000)
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: true,
+    rawResult: 'loss',
+    body: { info: {} },
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ordinalResult(1000),
+    persist: async () => {},
+  })
+  assertEquals(result, 'remake')
+})
+
+Deno.test('resolveMatchResult — partida normal usa participant.win mesmo com RANK_TRACKED (não a comparação de PDL)', async () => {
+  const tracker = makeTracker(1000)
+  const persisted: { value: RankOrdinal | null } = { value: null }
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: false,
+    rawResult: 'win',
+    body: { info: {} },
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ordinalResult(970), // caiu, mas não é remake -- resultado real manda
+    persist: async (ordinal) => { persisted.value = ordinal },
+  })
+  assertEquals(result, 'win')
+  assertEquals(tracker.value, 970)
+  assertEquals(persisted.value?.ordinal, 970)
+})
+
+Deno.test('resolveMatchResult — Riot indisponível degrada pra heurística antiga sem tocar no checkpoint', async () => {
+  const tracker = makeTracker(1000)
+  const body = { info: { gameDuration: 100, participants: [{ puuid: PUUID, timePlayed: 10 }] } }
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: true,
+    rawResult: 'loss',
+    body,
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ({ ok: false, reason: 'rate_limited', status: 429 }),
+    persist: async () => { throw new Error('não deveria persistir sem ordinal fresco') },
+  })
+  // timePlayed (10) bem abaixo de 50% de gameDuration (100) -> causou o remake.
+  assertEquals(result, 'loss')
+  assertEquals(tracker.value, 1000)
+})
+
+Deno.test('resolveMatchResult — sem checkpoint prévio (primeira partida do lote) cai pra heurística antiga só pra ESSE remake', async () => {
+  const tracker = makeTracker(null)
+  const body = { info: { gameDuration: 100, participants: [{ puuid: PUUID, timePlayed: 95 }] } }
+  const result = await resolveMatchResult({
+    isRankTracked: true,
+    isRemake: true,
+    rawResult: 'loss',
+    body,
+    puuid: PUUID,
+    tracker,
+    fetchOrdinal: async () => ordinalResult(500),
+    persist: async () => {},
+  })
+  assertEquals(result, 'remake')
+  // O checkpoint avança mesmo sem "antes" pra comparar -- fica pronto pro
+  // próximo remake do mesmo lote.
+  assertEquals(tracker.value, 500)
 })

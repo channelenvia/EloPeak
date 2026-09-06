@@ -141,8 +141,9 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       <div className="card p-6 space-y-6">
       {/* Nome de exibição */}
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição <span className="text-danger">*</span></label>
+        <label htmlFor="booster-display-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição <span className="text-danger">*</span></label>
         <input
+          id="booster-display-name"
           value={displayName}
           onChange={e => setDisplayName(e.target.value.slice(0, 32))}
           maxLength={32}
@@ -160,10 +161,11 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       {/* Bio */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Apresentação / Bio <span className="text-danger">*</span></label>
+          <label htmlFor="booster-bio" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Apresentação / Bio <span className="text-danger">*</span></label>
           <span className="text-[10px] text-ink-muted">{bio.length}/256</span>
         </div>
         <textarea
+          id="booster-bio"
           value={bio}
           onChange={e => setBio(e.target.value.slice(0, 256))}
           rows={3}
@@ -196,8 +198,9 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
       {/* OP.GG */}
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Link do OP.GG <span className="text-danger">*</span></label>
+        <label htmlFor="booster-opgg-link" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Link do OP.GG <span className="text-danger">*</span></label>
         <input
+          id="booster-opgg-link"
           value={opggLink}
           onChange={e => setOpggLink(e.target.value)}
           placeholder="https://op.gg/summoners/br/SeuNome"
@@ -239,12 +242,12 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
         </div>
         <div className="grid grid-cols-2 gap-3 max-w-xs">
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Horas mín. / dia</label>
-            <input type="number" min={1} max={24} value={hoursMin} onChange={e => setHoursMin(e.target.value)} className="input-base w-full text-sm" />
+            <label htmlFor="booster-hours-min" className="text-xs text-ink-muted">Horas mín. / dia</label>
+            <input id="booster-hours-min" type="number" min={1} max={24} value={hoursMin} onChange={e => setHoursMin(e.target.value)} className="input-base w-full text-sm" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Horas máx. / dia</label>
-            <input type="number" min={1} max={24} value={hoursMax} onChange={e => setHoursMax(e.target.value)} className="input-base w-full text-sm" />
+            <label htmlFor="booster-hours-max" className="text-xs text-ink-muted">Horas máx. / dia</label>
+            <input id="booster-hours-max" type="number" min={1} max={24} value={hoursMax} onChange={e => setHoursMax(e.target.value)} className="input-base w-full text-sm" />
           </div>
         </div>
       </div>
@@ -252,7 +255,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       {error && <p className="text-xs text-danger">{error}</p>}
 
       <div className="flex items-center justify-end gap-3 pt-1">
-        {saved && <span className="text-xs text-success">Perfil salvo!</span>}
+        {saved && <span className="text-xs text-success" role="status" aria-live="polite">Perfil salvo!</span>}
         <button
           type="button"
           onClick={handleSave}

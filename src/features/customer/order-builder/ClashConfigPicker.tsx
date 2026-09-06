@@ -139,12 +139,14 @@ export function ClashConfigPicker() {
           sozinho a partir do rank atual na fila solo/duo. */}
       <FormField
         label="Riot ID"
+        id="clash-riot-id-input"
         required
         error={stepAttempted && !riotId.trim() ? 'Campo obrigatório' : undefined}
       >
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <input
+              id="clash-riot-id-input"
               type="text"
               value={riotId}
               onChange={e => {

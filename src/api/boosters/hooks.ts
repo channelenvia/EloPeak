@@ -22,7 +22,7 @@ export function useBoosterStatus(userId: string | undefined) {
 
 export function useAssignedBooster(boosterUserId: string | null | undefined) {
   return useQuery({
-    queryKey: ['boosters', 'assigned-profile', boosterUserId ?? ''],
+    queryKey: queryKeys.boosters.assignedProfile(boosterUserId ?? ''),
     queryFn: () => getAssignedBoosterProfile(boosterUserId!),
     enabled: !!boosterUserId,
   })
@@ -38,7 +38,7 @@ export function useOwnProfessionalProfile(userId: string | undefined) {
 
 export function useOwnBoosterDisplayName(userId: string | undefined) {
   return useQuery({
-    queryKey: ['boosters', 'own-display-name', userId ?? ''],
+    queryKey: queryKeys.boosters.ownDisplayName(userId ?? ''),
     queryFn: () => getOwnBoosterDisplayName(userId!),
     enabled: !!userId,
   })
@@ -46,7 +46,7 @@ export function useOwnBoosterDisplayName(userId: string | undefined) {
 
 export function useOwnBoosterTop3Status(userId: string | undefined) {
   return useQuery({
-    queryKey: ['boosters', 'own-top3-status', userId ?? ''],
+    queryKey: queryKeys.boosters.ownTop3Status(userId ?? ''),
     queryFn: () => getOwnBoosterTop3Status(userId!),
     enabled: !!userId,
   })
@@ -94,7 +94,7 @@ export function usePublicBooster(displayName: string | undefined) {
 
 export function useBoostersPerformance(boosterUserIds: string[]) {
   return useQuery({
-    queryKey: ['boosters', 'performance', boosterUserIds],
+    queryKey: queryKeys.boosters.performance(boosterUserIds),
     queryFn: () => listBoostersPerformance(boosterUserIds),
     enabled: boosterUserIds.length > 0,
     staleTime: 60_000,
@@ -103,7 +103,7 @@ export function useBoostersPerformance(boosterUserIds: string[]) {
 
 export function useBoosterPerformanceByRank(boosterUserId: string | undefined) {
   return useQuery({
-    queryKey: ['boosters', 'performance-by-rank', boosterUserId ?? ''],
+    queryKey: queryKeys.boosters.performanceByRank(boosterUserId ?? ''),
     queryFn: () => getBoosterPerformanceByRank(boosterUserId!),
     enabled: !!boosterUserId,
   })
@@ -111,7 +111,7 @@ export function useBoosterPerformanceByRank(boosterUserId: string | undefined) {
 
 export function useTopBoosters(limit: number) {
   const query = useQuery({
-    queryKey: ['boosters', 'top', limit] as const,
+    queryKey: queryKeys.boosters.top(limit),
     queryFn: () => getTopBoosters({ limit }),
     staleTime: 60_000,
   })
@@ -119,7 +119,7 @@ export function useTopBoosters(limit: number) {
     channel: `top-boosters-${limit}`,
     table: 'booster_profile_events',
     event: 'INSERT',
-    queryKeys: [['boosters', 'top', limit]],
+    queryKeys: [queryKeys.boosters.top(limit)],
   })
   return query
 }
@@ -144,7 +144,7 @@ export function useAdminBoosters(status?: string) {
 // que a página de detalhes do pedido monta.
 export function useBoostersWithSlots(enabled: boolean) {
   return useQuery({
-    queryKey: ['boosters', 'with-slots'] as const,
+    queryKey: queryKeys.boosters.slots(),
     queryFn: listBoostersWithSlots,
     enabled,
   })
@@ -169,7 +169,7 @@ export function useAdminBoosterDetail(boosterId: string | undefined) {
 
 export function useBoosterNames(boosterUserIds: string[]) {
   return useQuery({
-    queryKey: ['boosters', 'names', boosterUserIds],
+    queryKey: queryKeys.boosters.names(boosterUserIds),
     queryFn: () => listBoosterNames(boosterUserIds),
     enabled: boosterUserIds.length > 0,
   })
@@ -203,7 +203,10 @@ export function useUpdateProfessionalProfile(userId: string | undefined) {
     mutationFn: updateProfessionalProfile,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.profile(userId ?? '') })
-      void queryClient.invalidateQueries({ queryKey: ['boosters', 'public'] })
+      // ['boosters','public'] invalidado antes daqui não corresponde a
+      // nenhuma query real (a chave de fato usada pela listagem pública é
+      // publicList() -- 'public-list', não 'public') -- invalidação morta
+      // sobrando de um rename, removida; a chamada abaixo já cobre a lista.
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.publicList() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.top() })
     },
@@ -214,7 +217,7 @@ export function useAdminApproveBooster() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminApproveBooster,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['boosters'] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.all }),
   })
 }
 
@@ -222,13 +225,13 @@ export function useExpelBooster() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: expelBooster,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['boosters'] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.all }),
   })
 }
 
 export function useBoosterAdminNotes() {
   return useQuery({
-    queryKey: ['boosters', 'admin-notes'] as const,
+    queryKey: queryKeys.boosters.adminNotes(),
     queryFn: listBoosterAdminNotes,
   })
 }
@@ -237,6 +240,6 @@ export function useSetBoosterAdminNote() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: setBoosterAdminNote,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['boosters', 'admin-notes'] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.adminNotes() }),
   })
 }

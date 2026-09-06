@@ -56,6 +56,7 @@ export function BoosterOrdersPage() {
             <input
               type="text"
               placeholder="Buscar por ID do pedido..."
+              aria-label="Buscar por ID do pedido"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-base pl-8 py-1.5 text-xs"

@@ -96,10 +96,12 @@ export function StepService({ fullWidth }: { fullWidth?: boolean }) {
           colunas). O "widgetzão" vem principalmente da lista de features
           abaixo (só aparece com fullWidth), não de inflar fonte/ícone --
           um padding levemente maior já basta pra não ficar enxuto. */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4" role="group" aria-label="Selecionar serviço">
         {SERVICES.map(({ type, name, desc, features, icon: Icon, badge }) => (
           <button
             key={type}
+            type="button"
+            aria-pressed={serviceType === type}
             onClick={() => handleSelectService(type)}
             className={cn(
               'relative flex flex-col items-start gap-3 rounded-2xl border-2 text-left transition-all duration-150',

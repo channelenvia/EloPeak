@@ -21,6 +21,7 @@ export function AdminLayout() {
   const { profile } = useAuthStore()
   const [panelOpen, setPanelOpen] = useState(false)
   useChatMentionSound()
+  useChatMentionSound('order_pending_review')
 
   const NAV_SECTIONS: SidebarNavSection[] = [
     {

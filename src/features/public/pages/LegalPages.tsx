@@ -115,22 +115,7 @@ export function TermsPage() {
           />
         </LegalSection>
 
-        <LegalSection title="7. Reserva exclusiva de pedidos (12 horas)">
-          <p>
-            Quando um booster aceita um pedido disponível na fila geral, ou quando a administração atribui um pedido
-            diretamente a um booster específico, o pedido passa a contar com uma reserva de exclusividade de 12
-            (doze) horas para aquele booster, funcionando como um pedido exclusivo.
-          </p>
-          <LegalList
-            items={[
-              'Durante essa janela, apenas o booster reservado pode confirmar o aceite do pedido; nenhum outro booster tem acesso a ele.',
-              'Caso as 12 horas se esgotem sem confirmação de aceite, o pedido retorna automaticamente à fila geral, ficando disponível para qualquer booster elegível.',
-              'A mesma regra de reserva e prazo se aplica tanto a pedidos aceitos espontaneamente quanto a atribuições diretas feitas pela administração.',
-            ]}
-          />
-        </LegalSection>
-
-        <LegalSection title="8. Execução dos serviços">
+        <LegalSection title="7. Execução dos serviços">
           <p>
             Após confirmação do pagamento e liberação do pedido, o serviço será executado conforme as informações
             configuradas. Em serviços que exigirem acesso à conta de jogo, o usuário fornece voluntariamente as
@@ -149,7 +134,7 @@ export function TermsPage() {
           />
         </LegalSection>
 
-        <LegalSection title="9. Interferência de acesso e partidas pelo cliente">
+        <LegalSection title="8. Interferência de acesso e partidas pelo cliente">
           <p>
             O usuário concorda em não acessar a conta de jogo ou jogar partidas na mesma fila/modo contratado durante
             o período em que o pedido estiver em andamento. Caso o usuário acesse a conta e jogue partidas na
@@ -163,7 +148,7 @@ export function TermsPage() {
           />
         </LegalSection>
 
-        <LegalSection title="10. Ajuste por ganho de LP (MMR da conta)">
+        <LegalSection title="9. Ajuste por ganho de LP (MMR da conta)">
           <p>
             Para pedidos configurados em elos abaixo de Mestre, os preços base da plataforma consideram uma média de
             ganho igual ou superior a 20 LP (PDL) por vitória. Caso seja verificado durante a execução que a conta do
@@ -172,39 +157,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="11. Duo Boost — conta registrada e apuração de partidas">
-          <p>
-            Em pedidos de Duo Boost, apenas as vitórias e derrotas registradas em partidas nas quais a conta de
-            duo/booster cadastrada para aquele pedido efetivamente participou são contabilizadas para o progresso e a
-            meta contratada. Partidas jogadas fora dessa conta registrada, ou por conta de duo diversa da vinculada ao
-            pedido, não são computadas no resultado do serviço.
-          </p>
-          <p>
-            Em pedidos Solo, a(s) lane(s) informada(s) no pedido corresponde(m) à(s) posição(ões) que o booster deve
-            jogar na conta do cliente. Em pedidos Duo, a(s) lane(s) informada(s) corresponde(m) à(s) posição(ões) que o
-            próprio cliente pretende jogar; a(s) posição(ões) complementar(es) ficam disponíveis para o booster jogar
-            na conta de duo registrada para a execução do serviço.
-          </p>
-        </LegalSection>
-
-        <LegalSection title="12. Drops, cancelamento antecipado e reatribuição">
-          <p>
-            Considera-se &quot;drop&quot; a interrupção antecipada da execução de um pedido antes da conclusão da meta
-            contratada. O cliente tem direito a solicitar até 2 (dois) drops por pedido, e o booster designado ao
-            pedido também pode solicitar drop dentro desse mesmo limite.
-          </p>
-          <LegalList
-            items={[
-              'Toda solicitação de drop feita pelo cliente ou pelo booster deve vir acompanhada de justificativa e depende de aprovação da administração da EloPeak antes de produzir qualquer efeito; a administração também pode determinar um drop de forma unilateral, sem necessidade de aprovação adicional, quando identificar violação destes Termos, fraude ou outra situação que exija intervenção imediata.',
-              'Quando um drop é aprovado, o pedido é reaberto para reatribuição a outro booster disponível, preservando o progresso já entregue até aquele momento.',
-              'O progresso entregue até o drop é liquidado proporcionalmente: se o booster avançou mais vitórias do que derrotas durante o período em que esteve responsável pelo pedido, ele recebe o pagamento proporcional ao progresso entregue; se o resultado for negativo (mais derrotas do que vitórias), aplica-se um desconto sobre o saldo do booster relativo àquele pedido, sendo o valor integral quando o próprio booster solicitou o drop, e um valor reduzido quando o drop foi solicitado pelo cliente ou determinado pela administração.',
-              'Pedidos de Elo Boost ou Duo Boost com resultado negativo no momento do drop distinguem quem solicitou a interrupção para fins do cálculo da penalidade aplicável, conforme descrito acima.',
-              'Ao atingir o limite de 2 drops em um mesmo pedido, uma terceira interrupção não reabre automaticamente o pedido para outro booster: o pedido é cancelado e movido para análise manual da equipe (centro de resolução), sem reatribuição automática, até que a administração defina o desfecho.',
-            ]}
-          />
-        </LegalSection>
-
-        <LegalSection title="13. Centro de resolução e pedidos em análise">
+        <LegalSection title="10. Centro de resolução e pedidos em análise">
           <p>
             Pedidos que atingem o limite de drops, ou que apresentem qualquer outra inconsistência que exija
             intervenção manual, são colocados em status de análise (&quot;em revisão&quot;) e tratados individualmente
@@ -218,7 +171,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="14. Riscos assumidos pelo usuário">
+        <LegalSection title="11. Riscos assumidos pelo usuário">
           <p>
             O usuário reconhece que desenvolvedoras, publicadoras ou administradoras de jogos podem proibir boosting,
             compartilhamento de conta ou práticas semelhantes. O uso desses serviços pode gerar advertências,
@@ -232,7 +185,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="15. Pagamento">
+        <LegalSection title="12. Pagamento">
           <p>
             Os pagamentos são feitos via PIX, processados pela Mercado Pago, de forma antecipada, e o pedido só é
             processado após confirmação. Os valores são apresentados no checkout conforme serviço, rank, fila, extras
@@ -241,7 +194,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="16. Direito de arrependimento e reembolso">
+        <LegalSection title="13. Direito de arrependimento e reembolso">
           <p>
             Nos termos do art. 49 do Código de Defesa do Consumidor, o cliente tem até 7 dias corridos após a
             contratação para desistir do serviço sem justificativa, com reembolso integral, desde que a execução ainda
@@ -251,17 +204,16 @@ export function TermsPage() {
           </p>
           <LegalList
             items={[
-              'Se houver execução parcial, o reembolso poderá ser proporcional à parte não executada.',
               'Não há reembolso por desistência após a conclusão do serviço.',
               'Não há reembolso por suspensão, banimento ou penalidade aplicada pela administradora do jogo, pois esse risco é assumido pelo usuário.',
               'Pedidos abandonados por falta de credenciais corretas ou regularização de acesso por 7 dias corridos podem ser cancelados sem reembolso.',
-              'Pedidos cancelados por atingirem o limite de drops seguem o desfecho definido pelo centro de resolução, conforme a Seção 13.',
+              'Pedidos cancelados por atingirem o limite de drops seguem o desfecho definido pelo centro de resolução, conforme a Seção 10.',
               'Solicitações devem ser abertas no suporte oficial da EloPeak, com análise em até 5 dias úteis e estorno em até 15 dias úteis após aprovação, processado pela Mercado Pago.',
             ]}
           />
         </LegalSection>
 
-        <LegalSection title="17. Obrigações do usuário">
+        <LegalSection title="14. Obrigações do usuário">
           <LegalList
             items={[
               'Fornecer informações, credenciais e códigos temporários corretos quando necessários.',
@@ -274,7 +226,7 @@ export function TermsPage() {
           />
         </LegalSection>
 
-        <LegalSection title="18. Limitação de responsabilidade">
+        <LegalSection title="15. Limitação de responsabilidade">
           <p>
             A responsabilidade máxima da EloPeak, quando comprovadamente aplicável, fica limitada ao valor pago pelo
             serviço contratado. A EloPeak não se responsabiliza por danos indiretos, lucros cessantes, instabilidades
@@ -283,7 +235,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="19. Propriedade intelectual, marcas e alterações">
+        <LegalSection title="16. Propriedade intelectual, marcas e alterações">
           <p>
             Textos, marcas, layout, imagens e software da plataforma pertencem à EloPeak ou a seus licenciantes. Nomes,
             logotipos, marcas, marcas registradas e materiais de jogos de terceiros pertencem às suas respectivas
@@ -296,7 +248,7 @@ export function TermsPage() {
           </p>
         </LegalSection>
 
-        <LegalSection title="20. Lei aplicável e foro">
+        <LegalSection title="17. Lei aplicável e foro">
           <p>
             Estes Termos são regidos pelas leis da República Federativa do Brasil, em especial o Código de Defesa do
             Consumidor e a Lei Geral de Proteção de Dados (Lei nº 13.709/2018). Fica eleito o foro do domicílio do

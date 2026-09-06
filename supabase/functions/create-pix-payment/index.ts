@@ -199,6 +199,11 @@ serve(async (req) => {
           } else {
             return errorResponse(req, 'Order creation conflict', 409)
           }
+        } else if (insertErr?.code === 'P0001' && insertErr.message.includes('pending_order_limit_reached')) {
+          // Trigger trg_cap_pending_orders (fonte da verdade, atômica) rejeitou
+          // -- mesma mensagem do pre-check acima, só que cobrindo a corrida
+          // entre o count() e este insert.
+          return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
         } else {
           // Keep database details out of the HTTP response, but retain enough
           // structured context in Edge Function logs to diagnose constraints.
@@ -280,9 +285,14 @@ serve(async (req) => {
       headers: {
         Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        // Idempotency key is scoped to the order itself — each order only
-        // ever creates one MP payment through this path.
-        'X-Idempotency-Key': orderId,
+        // Idempotency key is scoped to the order itself on the first attempt.
+        // If we reach this point with order.mp_payment_id already set, the
+        // block above already returned early for pending/in_process/approved
+        // -- so a set mp_payment_id here means the previous MP payment ended
+        // up rejected/cancelled. Reusing the same key would make MP replay
+        // that dead payment object forever instead of creating a fresh one,
+        // so the retry key is derived from the failed payment's own id.
+        'X-Idempotency-Key': order.mp_payment_id ? `${orderId}:${order.mp_payment_id}` : orderId,
       },
       body: JSON.stringify({
         transaction_amount: amountBrl,

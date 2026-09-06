@@ -142,8 +142,11 @@ export function StepReview() {
 
         {/* Notes — editable before payment */}
         <div>
-          <p className="section-label mb-3">Observações para o Booster <span className="font-normal normal-case text-ink-muted">(opcional)</span></p>
+          <label htmlFor="order-customer-notes" className="section-label mb-3 block">
+            Observações para o Booster <span className="font-normal normal-case text-ink-muted">(opcional)</span>
+          </label>
           <textarea
+            id="order-customer-notes"
             value={customerNotes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="ex: Só jogar com Jinx ADC, preferência pela manhã, lane específica..."

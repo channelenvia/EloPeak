@@ -145,8 +145,9 @@ export function BoosterApplicationForm({
         <p className="text-xs text-ink-muted mb-4">Usados para pagamentos via PIX. Não serão exibidos publicamente.</p>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Nome completo (como no CPF)</label>
+            <label htmlFor="booster-application-full-name" className="text-xs text-ink-muted">Nome completo (como no CPF)</label>
             <input
+              id="booster-application-full-name"
               {...register('full_name')}
               placeholder="João da Silva"
               maxLength={120}
@@ -155,8 +156,9 @@ export function BoosterApplicationForm({
             {errors.full_name && <p className="text-xs text-danger">{errors.full_name.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-xs text-ink-muted">CPF</label>
+            <label htmlFor="booster-application-cpf" className="block text-xs text-ink-muted">CPF</label>
             <input
+              id="booster-application-cpf"
               value={cpfValue}
               onChange={(event) => handleCpfChange(event.target.value)}
               placeholder="000.000.000-00"
@@ -171,8 +173,9 @@ export function BoosterApplicationForm({
         <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-4">Conta de Jogo</p>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Link do OP.GG</label>
+            <label htmlFor="booster-application-opgg-link" className="text-xs text-ink-muted">Link do OP.GG</label>
             <input
+              id="booster-application-opgg-link"
               {...register('opgg_link')}
               placeholder="https://op.gg/summoners/br/SeuNome"
               className="input-base w-full text-sm"
@@ -180,8 +183,9 @@ export function BoosterApplicationForm({
             {errors.opgg_link && <p className="text-xs text-danger">{errors.opgg_link.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Sobre você (aparece no perfil público, máx. 256 chars)</label>
+            <label htmlFor="booster-application-bio" className="text-xs text-ink-muted">Sobre você (aparece no perfil público, máx. 256 chars)</label>
             <textarea
+              id="booster-application-bio"
               {...register('bio')}
               rows={3}
               placeholder="Jogador GM há 2 temporadas, especialista em mid-lane..."
@@ -248,8 +252,9 @@ export function BoosterApplicationForm({
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Horas mínimas / dia</label>
+            <label htmlFor="booster-application-hours-min" className="text-xs text-ink-muted">Horas mínimas / dia</label>
             <input
+              id="booster-application-hours-min"
               type="number" min={1} max={24}
               {...register('hours_per_day_min')}
               className="input-base w-full text-sm"
@@ -257,8 +262,9 @@ export function BoosterApplicationForm({
             {errors.hours_per_day_min && <p className="text-xs text-danger">{errors.hours_per_day_min.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-ink-muted">Horas máximas / dia</label>
+            <label htmlFor="booster-application-hours-max" className="text-xs text-ink-muted">Horas máximas / dia</label>
             <input
+              id="booster-application-hours-max"
               type="number" min={1} max={24}
               {...register('hours_per_day_max')}
               className="input-base w-full text-sm"

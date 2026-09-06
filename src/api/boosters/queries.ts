@@ -14,7 +14,15 @@ export async function getBoosterAccessState(userId: string): Promise<BoosterAcce
     .select('status, display_name, suspended_until')
     .eq('user_id', userId)
     .maybeSingle()
-  if (error) return { state: 'error', suspendedUntil: null }
+  if (error) {
+    // Loga a causa real em vez de engolir silenciosamente -- o estado
+    // {state:'error'} continua sendo retornado (não relançado) porque a UI
+    // já trata esse estado como um caso normal de dado, não como falha do
+    // React Query; sem o log, uma falha real de rede/RLS ficava indistinguível
+    // de qualquer outro motivo de erro nos logs.
+    console.error('getBoosterAccessState failed', error.message)
+    return { state: 'error', suspendedUntil: null }
+  }
   if (!data) return { state: 'no_application', suspendedUntil: null }
   if (data.status === 'approved') return { state: 'approved', suspendedUntil: null }
   if (data.status === 'rejected') return { state: 'rejected', suspendedUntil: null }

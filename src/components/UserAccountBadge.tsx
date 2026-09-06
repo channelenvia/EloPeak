@@ -24,6 +24,7 @@ export function UserAccountBadge({ showNotifications = true, avatarSize = 'sm' }
       {showNotifications && <NotificationBell />}
       <button
         onClick={() => setPanelOpen(true)}
+        aria-label="Abrir menu da conta"
         className="rounded-full hover:ring-2 hover:ring-brand/40 transition-all"
       >
         <Avatar src={profile?.avatar_url} name={profile?.username} size={avatarSize} />

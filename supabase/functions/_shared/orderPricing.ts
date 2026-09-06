@@ -320,6 +320,312 @@ async function fetchMasterPlusPrice(
   return data?.price != null ? Number(data.price) : null
 }
 
+// Resultado comum dos 5 handlers de normalização por fluxo abaixo — extraídos
+// de dentro de validateAndPriceIntent (que passava de 650 linhas) num
+// dispatcher fino + um handler por fluxo, cada um focado só na forma daquele
+// fluxo. Mesma lógica de antes, sem mudança de comportamento -- só corte.
+interface NormalizedFlowResult {
+  normalized: NormalizedIntent
+  masterPlusPrice: number | null
+  masterPlusCutoffs: MasterPlusCutoffs | undefined
+  pdlBracket: string | null
+}
+
+type NormalizeFlowOutcome = { ok: true; result: NormalizedFlowResult } | { ok: false; response: Response }
+
+// Master+ (rank atual já Master/Grão-Mestre): preço vem da tabela comercial
+// (fetchMasterPlusPrice), nunca de fórmula por divisão.
+async function normalizeMasterPlusIntent(
+  req: Request,
+  mp: z.infer<typeof masterPlusIntentSchema>,
+  serviceClient: ReturnType<typeof supabaseAdmin>,
+): Promise<NormalizeFlowOutcome> {
+  // Mesma regra de bloqueio de rank do fluxo padrão (rankStep) — Master+ não
+  // precisa de uma lista de progressões separada, o degrau alvo só precisa
+  // ser maior que o degrau atual (Master=28, Grão-Mestre=29, Challenger=30).
+  if (rankStep(mp.target_rank.tier, null) <= rankStep(mp.current_rank.tier, null)) {
+    return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
+  }
+  // pdlBracket é só informativo (gravado em orders.pdl_bracket) — não entra
+  // mais na chave de preço, que agora é um valor fixo por tier alvo.
+  const pdlBracket = getPdlBracket(mp.current_pdl)
+
+  let masterPlusPrice: number | null
+  try {
+    masterPlusPrice = await fetchMasterPlusPrice(
+      serviceClient, mp.current_rank.tier, mp.target_rank.tier, mp.queue_type, mp.current_pdl, mp.boost_mode,
+    )
+  } catch {
+    return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
+  }
+  if (masterPlusPrice == null) {
+    return { ok: false, response: badRequest(req, 'Preço ainda não configurado para essa combinação de tiers. Fale com o suporte.') }
+  }
+
+  // Corte atual de GM/Challenger, se já cacheado (riot-league-cutoffs) --
+  // afeta tanto a estimativa de horas quanto o desconto do trecho
+  // Mestre->alvo (applyMasterPlusPdlDiscount, via masterPlusTargetLp).
+  // Sem cache ainda: computeOrderPrice cai pros alvos fixos default.
+  const { data: cutoffRows } = await serviceClient
+    .from('riot_league_cutoffs')
+    .select('tier, cutoff_lp')
+    .eq('queue', mp.queue_type)
+  const masterPlusCutoffs: MasterPlusCutoffs | undefined = cutoffRows?.length
+    ? {
+      grandmaster: cutoffRows.find((r) => r.tier === 'grandmaster')?.cutoff_lp ?? null,
+      challenger: cutoffRows.find((r) => r.tier === 'challenger')?.cutoff_lp ?? null,
+    }
+    : undefined
+
+  const normalized: NormalizedIntent = {
+    serviceType: 'elo_boost',
+    serviceId: mp.service_id,
+    gameId: mp.game_id,
+    queueType: mp.queue_type,
+    boostMode: mp.boost_mode,
+    server: mp.server,
+    currentRank: { tier: mp.current_rank.tier, division: null },
+    targetRank: { tier: mp.target_rank.tier, division: null },
+    currentLp: 0,
+    avgLpGain: 20,
+    avgLpLoss: 15,
+    winsPurchased: null,
+    sessionsPurchased: null,
+    addonCodes: mp.addon_codes,
+    winPackage: null,
+    customerNotes: mp.customer_notes,
+    currentPdl: mp.current_pdl,
+    // Regra comercial da estimativa Master+: progressão fixa de 30 PDL
+    // por partida. Valores enviados pelo cliente não viram autoridade.
+    avgPdlGain: 30,
+    avgPdlLoss: 30,
+    riotId: mp.riot_id,
+    boosterServiceId: null,
+    couponCode: mp.coupon_code,
+    clashTier: null,
+    clashDay: null,
+    customerLanes: mp.customer_lanes,
+  }
+
+  return { ok: true, result: { normalized, masterPlusPrice, masterPlusCutoffs, pdlBracket } }
+}
+
+// Elo Boost/Duo Boost padrão (Iron-Diamond, ou mirando GM/Challenger a partir
+// de Diamond-) — preço por divisão, exceto o trecho Mestre->alvo quando o
+// alvo é Grão-Mestre/Challenger, que usa a mesma tabela comercial do Master+.
+async function normalizeStandardEloIntent(
+  req: Request,
+  std: z.infer<typeof standardEloIntentSchema>,
+  serviceClient: ReturnType<typeof supabaseAdmin>,
+): Promise<NormalizeFlowOutcome> {
+  if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
+    return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
+  }
+  // Duo Boost chega em Master como alvo normalmente na Solo/Duo (a subida
+  // toda acontece abaixo de Master, terminando exatamente na promoção) --
+  // só Grão-Mestre/Challenger como alvo exige jogar DENTRO do Master+ (sem
+  // divisão, só PDL), trecho que a Riot restringe a solo. Flex não tem essa
+  // restrição em nenhum alvo.
+  if (
+    std.boost_mode === 'duo' && std.queue_type !== 'flex'
+    && isDuoBlockedAtTier(std.target_rank.tier)
+  ) {
+    return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Grão-Mestre/Challenger na fila Solo/Duo — escolha Flex ou mire até Mestre') }
+  }
+  const normalized: NormalizedIntent = {
+    serviceType: 'elo_boost',
+    serviceId: std.service_id,
+    gameId: std.game_id,
+    queueType: std.queue_type,
+    boostMode: std.boost_mode,
+    server: std.server,
+    currentRank: { tier: std.current_rank.tier, division: std.current_rank.division ?? null },
+    targetRank: { tier: std.target_rank.tier, division: std.target_rank.division ?? null },
+    currentLp: std.current_lp,
+    avgLpGain: 22,
+    avgLpLoss: 22,
+    winsPurchased: null,
+    sessionsPurchased: null,
+    addonCodes: std.addon_codes,
+    winPackage: std.win_package,
+    customerNotes: std.customer_notes,
+    currentPdl: null,
+    avgPdlGain: null,
+    avgPdlLoss: null,
+    riotId: std.riot_id,
+    boosterServiceId: null,
+    couponCode: std.coupon_code,
+    clashTier: null,
+    clashDay: null,
+    customerLanes: std.customer_lanes,
+  }
+
+  let masterPlusPrice: number | null = null
+  let masterPlusCutoffs: MasterPlusCutoffs | undefined
+
+  // Diamond- mirando Grão-Mestre/Challenger direto: o trecho Mestre->alvo
+  // usa o mesmo preço por PDL do fluxo Master+, sempre a partir do PDL=0
+  // (quem vem do fluxo padrão entra em Mestre do zero). "master" como alvo
+  // exato não entra aqui -- já fica totalmente coberto pelo preço por
+  // divisão (calcEloPrice) em computeOrderPrice.
+  if (std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger') {
+    try {
+      masterPlusPrice = await fetchMasterPlusPrice(serviceClient, 'master', std.target_rank.tier, std.queue_type, 0, std.boost_mode)
+    } catch {
+      return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
+    }
+    if (masterPlusPrice == null) {
+      return { ok: false, response: badRequest(req, 'Preço ainda não configurado para essa combinação de tiers. Fale com o suporte.') }
+    }
+
+    // Mesmo corte ao vivo (riot-league-cutoffs) usado pelo fluxo Master+ --
+    // afeta a estimativa de horas E o desconto do trecho Mestre->alvo
+    // (applyMasterPlusPdlDiscount). Sem cache ainda: cai pros alvos fixos
+    // default (MASTER_PLUS_TARGET_LP).
+    const { data: cutoffRows } = await serviceClient
+      .from('riot_league_cutoffs')
+      .select('tier, cutoff_lp')
+      .eq('queue', std.queue_type)
+    if (cutoffRows?.length) {
+      masterPlusCutoffs = {
+        grandmaster: cutoffRows.find((r) => r.tier === 'grandmaster')?.cutoff_lp ?? null,
+        challenger: cutoffRows.find((r) => r.tier === 'challenger')?.cutoff_lp ?? null,
+      }
+    }
+  }
+
+  return { ok: true, result: { normalized, masterPlusPrice, masterPlusCutoffs, pdlBracket: null } }
+}
+
+// MD5 ("rank da última temporada") — nunca falha nesta etapa (elegibilidade
+// de verdade só é reconfirmada mais tarde, contra a Riot).
+function normalizeMd5Intent(md5: z.infer<typeof md5IntentSchema>): NormalizeFlowOutcome {
+  // MD5 nunca bloqueia Duo por rank, mesmo em Grão-Mestre/Challenger --
+  // diferente de Elo Boost/Vitórias, o rank aqui é "da última temporada"
+  // (informado pelo cliente, nunca reverificado ao vivo) e a partida real
+  // de MD5 acontece bem abaixo desse elo, então Duo sempre é viável.
+  const normalized: NormalizedIntent = {
+    serviceType: 'md5',
+    serviceId: md5.service_id,
+    gameId: md5.game_id,
+    queueType: md5.queue_type,
+    boostMode: md5.boost_mode,
+    server: md5.server,
+    currentRank: { tier: md5.current_rank.tier, division: md5.current_rank.division ?? null },
+    targetRank: null,
+    currentLp: 0,
+    avgLpGain: 20,
+    avgLpLoss: 15,
+    winsPurchased: md5.wins_purchased,
+    sessionsPurchased: null,
+    addonCodes: md5.addon_codes,
+    winPackage: null,
+    customerNotes: md5.customer_notes,
+    currentPdl: null,
+    avgPdlGain: null,
+    avgPdlLoss: null,
+    riotId: md5.riot_id,
+    boosterServiceId: null,
+    couponCode: md5.coupon_code,
+    clashTier: null,
+    clashDay: null,
+    customerLanes: md5.customer_lanes,
+  }
+  return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
+}
+
+// Clash — preço e elegibilidade dependem só do tier (faixa); rank/LP são só
+// informativos. Nunca falha nesta etapa (o próprio schema já validou tier/
+// dia).
+function normalizeClashIntent(clash: z.infer<typeof clashIntentSchema>): NormalizeFlowOutcome {
+  const normalized: NormalizedIntent = {
+    serviceType: 'clash',
+    serviceId: clash.service_id,
+    gameId: clash.game_id,
+    // Clash não usa fila ranqueada -- 'solo_duo' é só o valor default de
+    // orders.queue_type (coluna NOT NULL com default), nunca lido de
+    // volta pra nada específico de Clash.
+    queueType: 'solo_duo',
+    boostMode: clash.boost_mode,
+    server: clash.server,
+    currentRank: clash.current_rank ? { tier: clash.current_rank.tier, division: clash.current_rank.division ?? null } : null,
+    targetRank: null,
+    currentLp: clash.current_lp ?? 0,
+    avgLpGain: 20,
+    avgLpLoss: 15,
+    winsPurchased: null,
+    sessionsPurchased: null,
+    addonCodes: clash.addon_codes,
+    winPackage: null,
+    customerNotes: clash.customer_notes,
+    currentPdl: null,
+    avgPdlGain: null,
+    avgPdlLoss: null,
+    riotId: clash.riot_id,
+    boosterServiceId: null,
+    couponCode: clash.coupon_code,
+    clashTier: clash.clash_tier,
+    clashDay: clash.clash_day,
+    customerLanes: clash.customer_lanes,
+  }
+  return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
+}
+
+// Win Boost / Placement Matches / Coaching — cada um com suas próprias
+// regras de campo obrigatório/proibido, validadas aqui antes de normalizar.
+function normalizeOtherIntent(req: Request, other: z.infer<typeof otherServiceIntentSchema>): NormalizeFlowOutcome {
+  if (other.service_type === 'win_boost') {
+    if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank atual é obrigatório para Vitórias') }
+    if (!other.wins_purchased) return { ok: false, response: badRequest(req, 'Quantidade de vitórias é obrigatória') }
+    if (other.win_package) return { ok: false, response: badRequest(req, 'Pacote de vitórias extras não é aceito em Vitórias') }
+    if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em Vitórias') }
+    if (!other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID é obrigatório para Vitórias') }
+  }
+  if (other.service_type === 'placement_matches') {
+    if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank final da última temporada é obrigatório para MD5 Completo') }
+    if (other.wins_purchased || other.win_package) return { ok: false, response: badRequest(req, 'Vitórias não são aceitas em MD5 Completo') }
+    if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em MD5 Completo') }
+    if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em MD5 Completo') }
+    if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em MD5 Completo') }
+  }
+  if (other.service_type === 'coaching') {
+    if (!other.booster_service_id) return { ok: false, response: badRequest(req, 'Selecione um pacote de coach') }
+    if (other.current_rank || other.target_rank || other.wins_purchased || other.win_package) {
+      return { ok: false, response: badRequest(req, 'Ranks e vitórias não são aceitos em Coaching') }
+    }
+    if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em Coaching') }
+    if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em Coaching') }
+  }
+  const normalized: NormalizedIntent = {
+    serviceType: other.service_type,
+    serviceId: other.service_id,
+    gameId: other.game_id,
+    queueType: other.queue_type,
+    boostMode: other.boost_mode,
+    server: other.server,
+    currentRank: other.current_rank as RankValue,
+    targetRank: other.target_rank as RankValue | null,
+    currentLp: other.current_lp,
+    avgLpGain: 22,
+    avgLpLoss: 22,
+    winsPurchased: other.wins_purchased,
+    sessionsPurchased: other.sessions_purchased,
+    addonCodes: other.addon_codes,
+    winPackage: other.win_package,
+    customerNotes: other.customer_notes,
+    currentPdl: null,
+    avgPdlGain: null,
+    avgPdlLoss: null,
+    riotId: other.riot_id,
+    boosterServiceId: other.booster_service_id,
+    couponCode: other.coupon_code,
+    clashTier: null,
+    clashDay: null,
+    customerLanes: other.customer_lanes,
+  }
+  return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
+}
+
 // Valida (schema por fluxo + regras de negócio), reconfere elegibilidade MD5
 // direto na Riot, valida pacote de coach/addons e calcula o preço
 // autoritativo — tudo que create-pix-payment e order-quote têm em comum.
@@ -405,273 +711,22 @@ export async function validateAndPriceIntent(
     }
   }
 
-  let normalized: NormalizedIntent
-  let pdlBracket: string | null = null
-  let masterPlusPrice: number | null = null
-  let masterPlusCutoffs: MasterPlusCutoffs | undefined
+  const flowOutcome: NormalizeFlowOutcome = flow === 'master_plus'
+    ? await normalizeMasterPlusIntent(req, parsedIntent.data as z.infer<typeof masterPlusIntentSchema>, serviceClient)
+    : flow
+      ? await normalizeStandardEloIntent(req, parsedIntent.data as z.infer<typeof standardEloIntentSchema>, serviceClient)
+      : routed.data.service_type === 'md5'
+        ? normalizeMd5Intent(parsedIntent.data as z.infer<typeof md5IntentSchema>)
+        : routed.data.service_type === 'clash'
+          ? normalizeClashIntent(parsedIntent.data as z.infer<typeof clashIntentSchema>)
+          : normalizeOtherIntent(req, parsedIntent.data as z.infer<typeof otherServiceIntentSchema>)
 
-  if (flow === 'master_plus') {
-    const mp = parsedIntent.data as z.infer<typeof masterPlusIntentSchema>
-    // Mesma regra de bloqueio de rank do fluxo padrão (rankStep) — Master+ não
-    // precisa de uma lista de progressões separada, o degrau alvo só precisa
-    // ser maior que o degrau atual (Master=28, Grão-Mestre=29, Challenger=30).
-    if (rankStep(mp.target_rank.tier, null) <= rankStep(mp.current_rank.tier, null)) {
-      return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
-    }
-    // pdlBracket é só informativo (gravado em orders.pdl_bracket) — não entra
-    // mais na chave de preço, que agora é um valor fixo por tier alvo.
-    pdlBracket = getPdlBracket(mp.current_pdl)
+  if (!flowOutcome.ok) return flowOutcome
 
-    let masterPlusPriceValue: number | null
-    try {
-      masterPlusPriceValue = await fetchMasterPlusPrice(
-        serviceClient, mp.current_rank.tier, mp.target_rank.tier, mp.queue_type, mp.current_pdl, mp.boost_mode,
-      )
-    } catch {
-      return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
-    }
-    if (masterPlusPriceValue == null) {
-      return { ok: false, response: badRequest(req, 'Preço ainda não configurado para essa combinação de tiers. Fale com o suporte.') }
-    }
-    masterPlusPrice = masterPlusPriceValue
-
-    // Corte atual de GM/Challenger, se já cacheado (riot-league-cutoffs) --
-    // afeta tanto a estimativa de horas quanto o desconto do trecho
-    // Mestre->alvo (applyMasterPlusPdlDiscount, via masterPlusTargetLp).
-    // Sem cache ainda: computeOrderPrice cai pros alvos fixos default.
-    const { data: cutoffRows } = await serviceClient
-      .from('riot_league_cutoffs')
-      .select('tier, cutoff_lp')
-      .eq('queue', mp.queue_type)
-    if (cutoffRows?.length) {
-      masterPlusCutoffs = {
-        grandmaster: cutoffRows.find((r) => r.tier === 'grandmaster')?.cutoff_lp ?? null,
-        challenger: cutoffRows.find((r) => r.tier === 'challenger')?.cutoff_lp ?? null,
-      }
-    }
-
-    normalized = {
-      serviceType: 'elo_boost',
-      serviceId: mp.service_id,
-      gameId: mp.game_id,
-      queueType: mp.queue_type,
-      boostMode: mp.boost_mode,
-      server: mp.server,
-      currentRank: { tier: mp.current_rank.tier, division: null },
-      targetRank: { tier: mp.target_rank.tier, division: null },
-      currentLp: 0,
-      avgLpGain: 20,
-      avgLpLoss: 15,
-      winsPurchased: null,
-      sessionsPurchased: null,
-      addonCodes: mp.addon_codes,
-      winPackage: null,
-      customerNotes: mp.customer_notes,
-      currentPdl: mp.current_pdl,
-      // Regra comercial da estimativa Master+: progressão fixa de 30 PDL
-      // por partida. Valores enviados pelo cliente não viram autoridade.
-      avgPdlGain: 30,
-      avgPdlLoss: 30,
-      riotId: mp.riot_id,
-      boosterServiceId: null,
-      couponCode: mp.coupon_code,
-      clashTier: null,
-      clashDay: null,
-      customerLanes: mp.customer_lanes,
-    }
-  } else if (flow) {
-    const std = parsedIntent.data as z.infer<typeof standardEloIntentSchema>
-    if (rankStep(std.target_rank.tier, std.target_rank.division ?? null) <= rankStep(std.current_rank.tier, std.current_rank.division ?? null)) {
-      return { ok: false, response: badRequest(req, 'Rank de destino precisa ser maior que o rank atual') }
-    }
-    // Duo Boost chega em Master como alvo normalmente na Solo/Duo (a subida
-    // toda acontece abaixo de Master, terminando exatamente na promoção) --
-    // só Grão-Mestre/Challenger como alvo exige jogar DENTRO do Master+ (sem
-    // divisão, só PDL), trecho que a Riot restringe a solo. Flex não tem essa
-    // restrição em nenhum alvo.
-    if (
-      std.boost_mode === 'duo' && std.queue_type !== 'flex'
-      && isDuoBlockedAtTier(std.target_rank.tier)
-    ) {
-      return { ok: false, response: badRequest(req, 'Duo Boost não é aceito para rank alvo Grão-Mestre/Challenger na fila Solo/Duo — escolha Flex ou mire até Mestre') }
-    }
-    normalized = {
-      serviceType: 'elo_boost',
-      serviceId: std.service_id,
-      gameId: std.game_id,
-      queueType: std.queue_type,
-      boostMode: std.boost_mode,
-      server: std.server,
-      currentRank: { tier: std.current_rank.tier, division: std.current_rank.division ?? null },
-      targetRank: { tier: std.target_rank.tier, division: std.target_rank.division ?? null },
-      currentLp: std.current_lp,
-      avgLpGain: 22,
-      avgLpLoss: 22,
-      winsPurchased: null,
-      sessionsPurchased: null,
-      addonCodes: std.addon_codes,
-      winPackage: std.win_package,
-      customerNotes: std.customer_notes,
-      currentPdl: null,
-      avgPdlGain: null,
-      avgPdlLoss: null,
-      riotId: std.riot_id,
-      boosterServiceId: null,
-      couponCode: std.coupon_code,
-      clashTier: null,
-      clashDay: null,
-      customerLanes: std.customer_lanes,
-    }
-
-    // Diamond- mirando Grão-Mestre/Challenger direto: o trecho Mestre->alvo
-    // usa o mesmo preço por PDL do fluxo Master+, sempre a partir do PDL=0
-    // (quem vem do fluxo padrão entra em Mestre do zero). "master" como alvo
-    // exato não entra aqui -- já fica totalmente coberto pelo preço por
-    // divisão (calcEloPrice) em computeOrderPrice.
-    if (std.target_rank.tier === 'grandmaster' || std.target_rank.tier === 'challenger') {
-      let priceValue: number | null
-      try {
-        priceValue = await fetchMasterPlusPrice(serviceClient, 'master', std.target_rank.tier, std.queue_type, 0, std.boost_mode)
-      } catch {
-        return { ok: false, response: errorResponse(req, 'Falha ao carregar preço', 500) }
-      }
-      if (priceValue == null) {
-        return { ok: false, response: badRequest(req, 'Preço ainda não configurado para essa combinação de tiers. Fale com o suporte.') }
-      }
-      masterPlusPrice = priceValue
-
-      // Mesmo corte ao vivo (riot-league-cutoffs) usado pelo fluxo Master+ --
-      // afeta a estimativa de horas E o desconto do trecho Mestre->alvo
-      // (applyMasterPlusPdlDiscount). Sem cache ainda: cai pros alvos fixos
-      // default (MASTER_PLUS_TARGET_LP).
-      const { data: cutoffRows } = await serviceClient
-        .from('riot_league_cutoffs')
-        .select('tier, cutoff_lp')
-        .eq('queue', std.queue_type)
-      if (cutoffRows?.length) {
-        masterPlusCutoffs = {
-          grandmaster: cutoffRows.find((r) => r.tier === 'grandmaster')?.cutoff_lp ?? null,
-          challenger: cutoffRows.find((r) => r.tier === 'challenger')?.cutoff_lp ?? null,
-        }
-      }
-    }
-  } else if (routed.data.service_type === 'md5') {
-    const md5 = parsedIntent.data as z.infer<typeof md5IntentSchema>
-    // MD5 nunca bloqueia Duo por rank, mesmo em Grão-Mestre/Challenger --
-    // diferente de Elo Boost/Vitórias, o rank aqui é "da última temporada"
-    // (informado pelo cliente, nunca reverificado ao vivo) e a partida real
-    // de MD5 acontece bem abaixo desse elo, então Duo sempre é viável.
-    normalized = {
-      serviceType: 'md5',
-      serviceId: md5.service_id,
-      gameId: md5.game_id,
-      queueType: md5.queue_type,
-      boostMode: md5.boost_mode,
-      server: md5.server,
-      currentRank: { tier: md5.current_rank.tier, division: md5.current_rank.division ?? null },
-      targetRank: null,
-      currentLp: 0,
-      avgLpGain: 20,
-      avgLpLoss: 15,
-      winsPurchased: md5.wins_purchased,
-      sessionsPurchased: null,
-      addonCodes: md5.addon_codes,
-      winPackage: null,
-      customerNotes: md5.customer_notes,
-      currentPdl: null,
-      avgPdlGain: null,
-      avgPdlLoss: null,
-      riotId: md5.riot_id,
-      boosterServiceId: null,
-      couponCode: md5.coupon_code,
-      clashTier: null,
-      clashDay: null,
-      customerLanes: md5.customer_lanes,
-    }
-  } else if (routed.data.service_type === 'clash') {
-    const clash = parsedIntent.data as z.infer<typeof clashIntentSchema>
-    normalized = {
-      serviceType: 'clash',
-      serviceId: clash.service_id,
-      gameId: clash.game_id,
-      // Clash não usa fila ranqueada -- 'solo_duo' é só o valor default de
-      // orders.queue_type (coluna NOT NULL com default), nunca lido de
-      // volta pra nada específico de Clash.
-      queueType: 'solo_duo',
-      boostMode: clash.boost_mode,
-      server: clash.server,
-      currentRank: clash.current_rank ? { tier: clash.current_rank.tier, division: clash.current_rank.division ?? null } : null,
-      targetRank: null,
-      currentLp: clash.current_lp ?? 0,
-      avgLpGain: 20,
-      avgLpLoss: 15,
-      winsPurchased: null,
-      sessionsPurchased: null,
-      addonCodes: clash.addon_codes,
-      winPackage: null,
-      customerNotes: clash.customer_notes,
-      currentPdl: null,
-      avgPdlGain: null,
-      avgPdlLoss: null,
-      riotId: clash.riot_id,
-      boosterServiceId: null,
-      couponCode: clash.coupon_code,
-      clashTier: clash.clash_tier,
-      clashDay: clash.clash_day,
-      customerLanes: clash.customer_lanes,
-    }
-  } else {
-    const other = parsedIntent.data as z.infer<typeof otherServiceIntentSchema>
-    if (other.service_type === 'win_boost') {
-      if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank atual é obrigatório para Vitórias') }
-      if (!other.wins_purchased) return { ok: false, response: badRequest(req, 'Quantidade de vitórias é obrigatória') }
-      if (other.win_package) return { ok: false, response: badRequest(req, 'Pacote de vitórias extras não é aceito em Vitórias') }
-      if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em Vitórias') }
-      if (!other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID é obrigatório para Vitórias') }
-    }
-    if (other.service_type === 'placement_matches') {
-      if (!other.current_rank) return { ok: false, response: badRequest(req, 'Rank final da última temporada é obrigatório para MD5 Completo') }
-      if (other.wins_purchased || other.win_package) return { ok: false, response: badRequest(req, 'Vitórias não são aceitas em MD5 Completo') }
-      if (other.booster_service_id) return { ok: false, response: badRequest(req, 'Pacote de coach não é aceito em MD5 Completo') }
-      if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em MD5 Completo') }
-      if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em MD5 Completo') }
-    }
-    if (other.service_type === 'coaching') {
-      if (!other.booster_service_id) return { ok: false, response: badRequest(req, 'Selecione um pacote de coach') }
-      if (other.current_rank || other.target_rank || other.wins_purchased || other.win_package) {
-        return { ok: false, response: badRequest(req, 'Ranks e vitórias não são aceitos em Coaching') }
-      }
-      if (other.riot_id) return { ok: false, response: badRequest(req, 'Riot ID não é aceito em Coaching') }
-      if (other.customer_lanes.length) return { ok: false, response: badRequest(req, 'Rotas não são aceitas em Coaching') }
-    }
-    normalized = {
-      serviceType: other.service_type,
-      serviceId: other.service_id,
-      gameId: other.game_id,
-      queueType: other.queue_type,
-      boostMode: other.boost_mode,
-      server: other.server,
-      currentRank: other.current_rank as RankValue,
-      targetRank: other.target_rank as RankValue | null,
-      currentLp: other.current_lp,
-      avgLpGain: 22,
-      avgLpLoss: 22,
-      winsPurchased: other.wins_purchased,
-      sessionsPurchased: other.sessions_purchased,
-      addonCodes: other.addon_codes,
-      winPackage: other.win_package,
-      customerNotes: other.customer_notes,
-      currentPdl: null,
-      avgPdlGain: null,
-      avgPdlLoss: null,
-      riotId: other.riot_id,
-      boosterServiceId: other.booster_service_id,
-      couponCode: other.coupon_code,
-      clashTier: null,
-      clashDay: null,
-      customerLanes: other.customer_lanes,
-    }
-  }
+  let normalized: NormalizedIntent = flowOutcome.result.normalized
+  let pdlBracket: string | null = flowOutcome.result.pdlBracket
+  let masterPlusPrice: number | null = flowOutcome.result.masterPlusPrice
+  let masterPlusCutoffs: MasterPlusCutoffs | undefined = flowOutcome.result.masterPlusCutoffs
 
   // A consulta do navegador é somente uma prévia. No fechamento, Elo Boost
   // e Vitórias são consultados novamente e os dados sensíveis são
@@ -969,7 +1024,20 @@ export async function validateAndPriceIntent(
     couponCode: normalized.couponCode,
   }
 
-  const priced = computeOrderPrice(priceInput)
+  // computeOrderPrice/moneyToCents lançam RangeError em input não-finito/
+  // negativo (ex. um master_plus_pricing.price corrompido) -- sem este
+  // try/catch local, essa função dependeria inteiramente do try/catch
+  // externo do chamador pra não vazar um 500 cru; hoje isso é pego com
+  // segurança em create-pix-payment/index.ts, mas essa função é
+  // compartilhada (também usada por order-quote) e deve ser segura de
+  // reusar por conta própria.
+  let priced: ReturnType<typeof computeOrderPrice>
+  try {
+    priced = computeOrderPrice(priceInput)
+  } catch (err) {
+    console.error('computeOrderPrice failed', err instanceof Error ? err.message : String(err))
+    return { ok: false, response: errorResponse(req, 'Falha ao calcular o preço do pedido', 500) }
+  }
   if (priced.totalPrice <= 0) return { ok: false, response: badRequest(req, 'Invalid order amount') }
 
   return {

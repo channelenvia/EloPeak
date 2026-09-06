@@ -57,8 +57,12 @@ export type NotificationType =
   | 'drop_payout_credited'
   | 'payment_amount_mismatch'
   | 'order_reassigned'
+  | 'order_reassigned_by_admin'
   | 'order_dropped_by_admin'
   | 'customer_requested_drop'
+  | 'order_pending_review'
+  | 'payout_window_open'
+  | 'customer_inactivity_reminder'
 
 // ─── Rank / Tier system ───────────────────────────────────────────────────────
 
@@ -249,7 +253,7 @@ export interface Order {
   // Card na aba Jobs é roxo "Reatribuído" em vez de amarelo "Exclusivo", e
   // accept_boost_order ignora o limite de 1 slot exclusivo pra esse caso.
   reassigned_by_admin: boolean
-  // Janela de revisão de 1 minuto do admin logo após o pagamento (ou envio
+  // Janela de revisão de 2 minutos do admin logo após o pagamento (ou envio
   // de credenciais) -- só preenchido enquanto status === 'pending_review'.
   review_release_at: string | null
   admin_review_locked: boolean

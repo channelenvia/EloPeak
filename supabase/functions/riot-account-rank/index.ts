@@ -88,6 +88,12 @@ serve(async (req) => {
           account.puuid, RIOT_API_KEY, REGIONAL_ROUTE, queue, SPLIT_START_TIMESTAMP,
         )
         if (matchResult.ok) matchesRemaining = Math.max(0, 5 - matchResult.matchIds.length)
+      } else {
+        // LOL_SPLIT_START_TIMESTAMP ausente/mal configurado é um problema de
+        // config, não um dado real de placement -- sem log, isso passa
+        // silenciosamente como "5 partidas restantes" pra todo mundo em
+        // placement, mascarando a env var quebrada.
+        console.error('riot-account-rank: LOL_SPLIT_START_TIMESTAMP ausente/inválido, matches_remaining é um placeholder')
       }
       return jsonResponse(req, {
         found: true,

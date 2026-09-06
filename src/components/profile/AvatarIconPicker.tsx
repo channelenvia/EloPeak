@@ -56,7 +56,7 @@ export function AvatarIconPicker({ currentUrl, onSelect, maxIcons = 240, gridCla
               type="button"
               onClick={() => handleSelect(id)}
               className={cn(
-                'aspect-square rounded-lg overflow-hidden border-2 transition-all hover:scale-110 focus:outline-none',
+                'aspect-square rounded-lg overflow-hidden border-2 transition-all hover:scale-110 focus-ring',
                 selectedId === id ? 'border-brand shadow-sm' : 'border-transparent',
               )}
             >

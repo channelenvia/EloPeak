@@ -68,15 +68,19 @@ serve(async (req) => {
     const { order_id } = parsedBody.data
     const admin = supabaseAdmin()
 
+    // Filtra por customer_id na própria query em vez de checar dono depois de
+    // buscar só por id -- do contrário um id de outro cliente responde 403 e
+    // um id inexistente responde 404, dando um pequeno oráculo de existência
+    // sobre o espaço de UUIDv4. Os dois casos agora colapsam no mesmo 404.
     const { data: order, error: orderError } = await admin
       .from('orders')
       .select('id, customer_id, status, mp_payment_id')
       .eq('id', order_id)
+      .eq('customer_id', auth.user.id)
       .maybeSingle()
 
     if (orderError) return errorResponse(req, 'Failed to load order', 500, 'ORDER_LOAD_FAILED')
     if (!order) return errorResponse(req, 'Order not found', 404, 'ORDER_NOT_FOUND')
-    if (order.customer_id !== auth.user.id) return errorResponse(req, 'Forbidden', 403, 'ORDER_FORBIDDEN')
     if (order.status !== 'awaiting_payment') {
       return errorResponse(req, 'Only awaiting payment orders can be cancelled here', 409, 'ORDER_NOT_AWAITING_PAYMENT')
     }

@@ -15,6 +15,8 @@ export function OrderSoundSettings() {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const previewContextRef = useRef<AudioContext | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const wasOpenRef = useRef(false)
 
   const { soundId, volume, muted, setSoundId, setVolume, toggleMuted } = useBoosterSoundStore()
 
@@ -24,8 +26,17 @@ export function OrderSoundSettings() {
         setOpen(false)
       }
     }
-    if (open) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [open])
 
   useEffect(() => {
@@ -35,6 +46,15 @@ export function OrderSoundSettings() {
       if (context && context.state !== 'closed') void context.close()
     }
   }, [])
+
+  // Devolve o foco pro botão-gatilho ao fechar (clique-fora, Escape, ou
+  // reclique no próprio botão) -- sem isso, fechar via clique-fora ou Escape
+  // deixava o foco "perdido" no documento em vez de voltar pra um elemento
+  // focável coerente com o que o usuário estava interagindo.
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus()
+    wasOpenRef.current = open
+  }, [open])
 
   function preview(id: typeof soundId) {
     if (!previewContextRef.current) previewContextRef.current = new AudioContext()
@@ -46,6 +66,7 @@ export function OrderSoundSettings() {
   return (
     <div className="relative" ref={containerRef}>
       <button
+        ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
         className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors"
         aria-label="Som de novo pedido"

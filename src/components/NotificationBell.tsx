@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle } from 'lucide-react'
+import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle, Search, UserX } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 import { Popover } from '@/components/ui'
@@ -27,8 +27,12 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   drop_payout_credited: Wallet,
   payment_amount_mismatch: AlertTriangle,
   order_reassigned: RefreshCw,
+  order_reassigned_by_admin: RefreshCw,
   order_dropped_by_admin: AlertTriangle,
   customer_requested_drop: AlertTriangle,
+  order_pending_review: Search,
+  payout_window_open: Wallet,
+  customer_inactivity_reminder: UserX,
 }
 
 function timeAgo(iso: string): string {
@@ -47,6 +51,25 @@ function orderPathForRole(role: string | undefined, orderId: string): string {
   if (role === 'admin') return `/admin/orders/${orderId}`
   if (role === 'booster') return `/booster/orders/${orderId}`
   return `/orders/${orderId}`
+}
+
+// Nem toda notificação carrega order_id -- payout_request_* só tem
+// payout_request_id (sem link pra um pedido nenhum), e alguns tipos são só
+// um lembrete geral sem entidade nenhuma. Pra esses, o destino é fixo por
+// tipo em vez de derivado do payload.
+function fallbackPathForType(type: NotificationType): string | null {
+  switch (type) {
+    case 'payout_request_created':
+      return '/admin/payouts'
+    case 'payout_request_paid':
+    case 'payout_request_rejected':
+    case 'payout_window_open':
+      return '/booster/payments'
+    case 'customer_inactivity_reminder':
+      return '/orders/new'
+    default:
+      return null
+  }
 }
 
 export function NotificationBell() {
@@ -74,6 +97,9 @@ export function NotificationBell() {
         ? '#credentials'
         : ''
       navigate(`${orderPathForRole(profile?.role, orderId)}${credentialsHash}`)
+    } else {
+      const fallbackPath = fallbackPathForType(n.type)
+      if (fallbackPath) navigate(fallbackPath)
     }
     setOpen(false)
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { useShallow } from 'zustand/react/shallow'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { useAuthStore } from '@/stores/authStore'
 import { EdgeFunctionError, invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
@@ -67,7 +68,40 @@ function useCountdown(expiresAt: string | null) {
 
 export function StepPayment({ insideModal = false }: { insideModal?: boolean } = {}) {
   const { profile } = useAuthStore()
-  const store = useOrderBuilderStore()
+  // Seletor direcionado (useShallow) só nos campos de fato lidos por este
+  // componente -- StepPayment agora abre como modal por cima de StepReview
+  // (ver comentário em OrderBuilder.tsx), então os dois ficam montados ao
+  // mesmo tempo. Assinar a store inteira sem seletor fazia StepPayment
+  // re-renderizar inteiro a cada campo digitado em StepReview (ex.:
+  // customerNotes), mesmo sem nenhum dos campos abaixo ter mudado.
+  const store = useOrderBuilderStore(useShallow((s) => ({
+    basePrice: s.basePrice,
+    boostMode: s.boostMode,
+    clashDay: s.clashDay,
+    clashTier: s.clashTier,
+    couponCode: s.couponCode,
+    currentLp: s.currentLp,
+    currentRank: s.currentRank,
+    customerLanes: s.customerLanes,
+    customerNotes: s.customerNotes,
+    extrasPrice: s.extrasPrice,
+    gameId: s.gameId,
+    preferredBoosterId: s.preferredBoosterId,
+    prevStep: s.prevStep,
+    queueType: s.queueType,
+    reset: s.reset,
+    riotId: s.riotId,
+    selectedCoachPackage: s.selectedCoachPackage,
+    selectedExtraIds: s.selectedExtraIds,
+    server: s.server,
+    serviceId: s.serviceId,
+    serviceType: s.serviceType,
+    sessionsPurchased: s.sessionsPurchased,
+    setStep: s.setStep,
+    targetRank: s.targetRank,
+    winPackage: s.winPackage,
+    winsPurchased: s.winsPurchased,
+  })))
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
