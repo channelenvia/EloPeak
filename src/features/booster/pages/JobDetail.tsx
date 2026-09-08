@@ -350,9 +350,11 @@ export function JobDetailPage() {
           !showDuoAccountWidget && !showAccessTokenWidget
             ? order.status === 'completed'
               ? 'O acesso à conta fica indisponível após a conclusão do pedido.'
-              : order.assigned_booster_id !== profile?.id
-                ? 'A conta fica disponível quando o pedido for aceito.'
-                : 'A conta fica disponível quando o pedido estiver em andamento.'
+              : order.status === 'under_review'
+                ? 'Este pedido está em análise pela equipe -- o acesso à conta fica pausado até ser liberado de novo.'
+                : order.assigned_booster_id !== profile?.id
+                  ? 'A conta fica disponível quando o pedido for aceito.'
+                  : 'A conta fica disponível quando o pedido estiver em andamento.'
             : undefined
         }
         accountContent={

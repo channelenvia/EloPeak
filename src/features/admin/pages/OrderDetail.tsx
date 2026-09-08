@@ -516,7 +516,7 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
             {isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
           </button>
         )}
-        {(isPendingReview || isUnderReview) && (
+        {(isPendingReview || (isUnderReview && !order.assigned_booster_id)) && (
           <button
             type="button"
             onClick={() => { setMenuOpen(false); setAssignPendingReviewOpen(true) }}
@@ -574,7 +574,7 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
         title="Colocar pedido em análise"
         description={isPendingReview
           ? 'O pedido fica travado em análise -- ninguém vê nem aceita até você disponibilizar, atribuir ou cancelar.'
-          : 'O booster é removido e pago proporcionalmente pelo progresso entregue (mesma fórmula de um drop) -- o pedido fica travado em análise até você disponibilizar, atribuir ou cancelar.'}
+          : 'O pedido fica travado com o mesmo booster e cliente vinculados -- sem novas partidas contabilizadas nem acesso à conta liberado -- até você disponibilizar (retoma de onde parou, com o prazo de entrega ajustado pelo tempo parado) ou cancelar.'}
         confirmLabel="Colocar em análise"
         variant="primary"
         isPending={flagUnderReview.isPending}
