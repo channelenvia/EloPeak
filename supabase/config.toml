@@ -73,6 +73,12 @@ verify_jwt = false
 [functions.discord-admin-review-alert]
 verify_jwt = false
 
+# Acionada inline por onboard_booster (net.http_post, migration
+# 20260908020000) quando um candidato a booster entra em 'pending' --
+# mesmo gate x-webhook-secret dos demais.
+[functions.discord-admin-booster-alert]
+verify_jwt = false
+
 # Mesmo caso acima: acionada só pelo trigger notify_discord_review (pg_net,
 # migration 20260824070000), nunca por um usuário logado.
 [functions.discord-review-announcement]

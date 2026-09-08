@@ -63,6 +63,7 @@ export type NotificationType =
   | 'order_pending_review'
   | 'payout_window_open'
   | 'customer_inactivity_reminder'
+  | 'booster_pending_review'
 
 // ─── Rank / Tier system ───────────────────────────────────────────────────────
 

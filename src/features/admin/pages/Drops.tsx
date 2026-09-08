@@ -197,11 +197,6 @@ export function AdminDropsPage() {
         open={!!resolving}
         onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote('') } }}
         title={resolving?.approve ? 'Aprovar solicitação de drop' : 'Rejeitar solicitação de drop'}
-        description={resolving?.approve
-          ? ((pendingRequests.find(r => r.id === resolving.id)?.order?.drop_count ?? 0) >= 2
-              ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui CANCELA o pedido em vez de devolvê-lo pro painel. Trate o pagamento do booster e o cliente manualmente depois.'
-              : 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.')
-          : 'O pedido volta ao status anterior.'}
       >
         <div>
           <label htmlFor="drop-resolve-admin-note" className="text-xs font-semibold text-ink-secondary block mb-1.5">
@@ -215,6 +210,16 @@ export function AdminDropsPage() {
             className="input-base w-full min-h-[80px] resize-none text-sm"
           />
         </div>
+        {(() => {
+          const willCancel = resolving?.approve
+            && (pendingRequests.find(r => r.id === resolving.id)?.order?.drop_count ?? 0) >= 2
+          const note = !resolving?.approve
+            ? 'O pedido volta ao status anterior.'
+            : willCancel
+              ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui CANCELA o pedido em vez de devolvê-lo pro painel. Trate o pagamento do booster e o cliente manualmente depois.'
+              : 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'
+          return <p className={`text-xs ${willCancel ? 'text-danger' : 'text-ink-secondary'}`}>{note}</p>
+        })()}
         <div className="flex gap-3 justify-end pt-2">
           <Button variant="ghost" onClick={() => { setResolving(null); setAdminNote('') }}>
             Cancelar

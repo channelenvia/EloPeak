@@ -145,7 +145,6 @@ function BoosterActionsMenu({
         open={expelOpen}
         onOpenChange={(open) => { if (!open) { setExpelOpen(false); setExpelReason('') } }}
         title={`Expulsar ${booster.display_name}`}
-        description="Ação permanente: o login é banido e não pode ser reativado."
       >
         <div>
           <label htmlFor="booster-expel-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
@@ -160,6 +159,7 @@ function BoosterActionsMenu({
             maxLength={500}
           />
         </div>
+        <p className="text-xs text-danger">Ação permanente: o login é banido e não pode ser reativado.</p>
         <div className="flex gap-3 justify-end pt-2">
           <Button variant="ghost" onClick={() => { setExpelOpen(false); setExpelReason('') }}>Cancelar</Button>
           <Button
@@ -206,6 +206,13 @@ export function AdminBoostersPage() {
   }
 
   const { data: boosters, isLoading } = useAdminBoosters(filter)
+  // Independente do filtro ativo, pra alimentar o pontinho vermelho na aba
+  // "Pendentes" -- o admin precisa ver que há candidatura nova mesmo
+  // olhando outra aba. Mesma queryKey de useAdminBoosters('pending'),
+  // então quando o filtro já é 'pending' os dois hooks dividem o cache
+  // (sem fetch duplicado).
+  const { data: pendingBoosters } = useAdminBoosters('pending')
+  const pendingCount = pendingBoosters?.length ?? 0
   const { data: boosterNotes } = useBoosterAdminNotes()
   const updateBoosterStatusMutation = useAdminApproveBooster()
   const updateBoosterStatus = {
@@ -222,10 +229,13 @@ export function AdminBoostersPage() {
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex gap-1 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl p-1 w-fit">
-          {(['all', 'pending', 'approved', 'suspended'] as const).map((s) => (
+          {(['approved', 'pending', 'suspended', 'all'] as const).map((s) => (
             <button key={s} onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${filter === s ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'}`}>
+              className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${filter === s ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'}`}>
               {filterLabels[s] ?? s}
+              {s === 'pending' && pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-danger ring-2 ring-bg-surface" />
+              )}
             </button>
           ))}
         </div>

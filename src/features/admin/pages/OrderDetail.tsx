@@ -87,9 +87,6 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
       open={open}
       onOpenChange={(next) => { if (!next) { onClose(); setDropReason('') } }}
       title="Dropar Pedido"
-      description={willCancel
-        ? 'Este pedido já foi dropado 2 vezes -- o limite pra voltar pro painel automaticamente foi atingido. Confirmar aqui CANCELA o pedido; o pagamento do booster e o cliente precisam ser tratados manualmente depois.'
-        : 'O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'}
     >
       <div>
         <label htmlFor="admin-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
@@ -98,6 +95,11 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
       {dropOrder.isError && (
         <ErrorAlert message={dropOrder.error instanceof Error ? dropOrder.error.message : 'Erro'} className="mt-2" />
       )}
+      <p className={cn('text-xs', willCancel ? 'text-danger' : 'text-ink-secondary')}>
+        {willCancel
+          ? 'Este pedido já foi dropado 2 vezes -- o limite pra voltar pro painel automaticamente foi atingido. Confirmar aqui CANCELA o pedido; o pagamento do booster e o cliente precisam ser tratados manualmente depois.'
+          : 'O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'}
+      </p>
       <div className="flex gap-3 justify-end pt-2">
         <Button variant="ghost" onClick={() => { onClose(); setDropReason('') }}>Cancelar</Button>
         <Button
@@ -148,9 +150,6 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
       onOpenChange={(next) => { if (!next) close() }}
       title={isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
       maxWidth="lg"
-      description={isNewAssignment
-        ? 'Reserva o pedido pro booster escolhido -- ele some da aba Jobs dos outros e aparece só pra ele, marcado como "Reatribuído" (roxo). Ele recebe uma notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'
-        : 'Reserva o pedido pro booster escolhido, ignorando o limite de slots -- ação exclusiva do admin, use só em casos bem específicos. Ele recebe uma notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'}
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
@@ -190,12 +189,12 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
       </div>
 
       <div>
-        <label htmlFor="admin-reassign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="admin-reassign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (opcional)</label>
         <textarea
           id="admin-reassign-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder={isNewAssignment ? 'Justificativa para a atribuição...' : 'Justificativa para a reatribuição...'}
+          placeholder="Só preencha se quiser registrar algo -- normalmente o combinado já foi direto com o booster..."
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -205,12 +204,18 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
         <ErrorAlert message={reassign.error instanceof Error ? reassign.error.message : 'Erro'} className="mt-2" />
       )}
 
+      <p className="text-xs text-ink-secondary">
+        {isNewAssignment
+          ? 'Ele some da aba Jobs dos outros e aparece só pra ele, marcado como "Reatribuído" (roxo). Recebe notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'
+          : 'Ignora o limite de slots -- ação exclusiva do admin, use só em casos bem específicos. Ele recebe notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'}
+      </p>
+
       <div className="flex gap-3 justify-end pt-2">
         <Button variant="ghost" onClick={close}>Cancelar</Button>
         <Button
           variant="primary"
           loading={reassign.isPending}
-          disabled={!selectedBoosterId || reason.trim().length < 10}
+          disabled={!selectedBoosterId}
           onClick={() => {
             if (!selectedBoosterId) return
             reassign.mutate({ targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
@@ -271,7 +276,7 @@ function ReasonPromptModal({
   function close() { onClose(); setReason('') }
 
   return (
-    <Modal open={open} onOpenChange={(next) => { if (!next) close() }} title={title} description={description}>
+    <Modal open={open} onOpenChange={(next) => { if (!next) close() }} title={title}>
       <div>
         <label htmlFor="reason-prompt-input" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
@@ -286,6 +291,7 @@ function ReasonPromptModal({
       {!!error && (
         <ErrorAlert message={error instanceof Error ? error.message : 'Erro'} className="mt-2" />
       )}
+      <p className={cn('text-xs', variant === 'danger' ? 'text-danger' : 'text-ink-secondary')}>{description}</p>
       <div className="flex gap-3 justify-end pt-2">
         <Button variant="ghost" onClick={close}>Voltar</Button>
         <Button
@@ -329,7 +335,6 @@ function PendingReviewAssignModal({ order, open, onClose }: { order: Order; open
       onOpenChange={(next) => { if (!next) close() }}
       title="Atribuir a um booster"
       maxWidth="lg"
-      description="Reserva o pedido só pra esse booster -- ele tem 12h pra aceitar, sem passar pelo pool público."
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
@@ -366,12 +371,12 @@ function PendingReviewAssignModal({ order, open, onClose }: { order: Order; open
       </div>
 
       <div>
-        <label htmlFor="pending-review-order-detail-assign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
+        <label htmlFor="pending-review-order-detail-assign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (opcional)</label>
         <textarea
           id="pending-review-order-detail-assign-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Justificativa para a atribuição..."
+          placeholder="Só preencha se quiser registrar algo -- normalmente o combinado já foi direto com o booster..."
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -379,12 +384,15 @@ function PendingReviewAssignModal({ order, open, onClose }: { order: Order; open
       {assignOrder.isError && (
         <ErrorAlert message={assignOrder.error instanceof Error ? assignOrder.error.message : 'Erro'} className="mt-2" />
       )}
+      <p className="text-xs text-ink-secondary">
+        Reserva o pedido só pra esse booster -- ele tem 12h pra aceitar, sem passar pelo pool público.
+      </p>
       <div className="flex gap-3 justify-end pt-2">
         <Button variant="ghost" onClick={close}>Cancelar</Button>
         <Button
           variant="primary"
           loading={assignOrder.isPending}
-          disabled={!selectedBoosterId || reason.trim().length < 10}
+          disabled={!selectedBoosterId}
           onClick={() => {
             if (!selectedBoosterId) return
             assignOrder.mutate({ orderId: order.id, targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
@@ -528,16 +536,6 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             Marcar como concluído
           </button>
-        )}
-        {!isPendingReview && !isUnderReview && order.status !== 'refunded' && (
-          <Link
-            to={`/admin/refunds?order_id=${order.id}`}
-            onClick={() => setMenuOpen(false)}
-            className={cn(itemClass, STATUS_ACTION_TONE_CLASS.neutral)}
-          >
-            <Undo2 className="h-4 w-4 shrink-0" />
-            Marcar pra reembolsar
-          </Link>
         )}
         {!isPendingReview && !isUnderReview && order.status !== 'canceled' && (
           <button

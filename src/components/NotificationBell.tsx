@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle, Search, UserX } from 'lucide-react'
+import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle, Search, UserX, UserPlus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 import { Popover } from '@/components/ui'
@@ -33,6 +33,7 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   order_pending_review: Search,
   payout_window_open: Wallet,
   customer_inactivity_reminder: UserX,
+  booster_pending_review: UserPlus,
 }
 
 function timeAgo(iso: string): string {
@@ -90,13 +91,16 @@ export function NotificationBell() {
 
   function handleItemClick(n: Notification) {
     if (!n.is_read) markAsRead([n.id])
-    const notificationData = n.data as { order_id?: string; requires_credentials?: boolean }
+    const notificationData = n.data as { order_id?: string; requires_credentials?: boolean; booster_id?: string }
     const orderId = notificationData?.order_id
+    const boosterId = notificationData?.booster_id
     if (orderId) {
       const credentialsHash = profile?.role === 'customer' && notificationData.requires_credentials
         ? '#credentials'
         : ''
       navigate(`${orderPathForRole(profile?.role, orderId)}${credentialsHash}`)
+    } else if (boosterId && profile?.role === 'admin') {
+      navigate(`/admin/boosters/${boosterId}`)
     } else {
       const fallbackPath = fallbackPathForType(n.type)
       if (fallbackPath) navigate(fallbackPath)

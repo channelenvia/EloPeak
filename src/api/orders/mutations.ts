@@ -129,7 +129,7 @@ export async function adminDropOrder(params: { orderId: string; reason: string }
 }
 
 const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
-  invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
+  invalid_reason: 'O motivo pode ter no máximo 500 caracteres.',
   order_not_found: 'Pedido não encontrado.',
   order_not_active: 'Este pedido não está mais em um status que aceita atribuição de booster.',
   sync_required_before_reassign: 'Sincronize as partidas do pedido antes de reatribuir.',
