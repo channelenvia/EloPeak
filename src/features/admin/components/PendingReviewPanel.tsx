@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Lock, LockOpen, Search, UserPlus, X } from 'lucide-react'
+import { Lock, LockOpen, Search, UserCheck, UserPlus, X } from 'lucide-react'
 import { Button, Card, ErrorAlert, Modal } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -75,6 +75,10 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
   const [reason, setReason] = useState('')
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const assignOrder = useAdminAssignPendingReviewOrder()
+  // preferred_booster_id já setado = uma atribuição anterior reservou esse
+  // pedido -- reabrir o mesmo modal aqui troca pra outro booster, então o
+  // texto muda pra "reatribuir" em vez de "atribuir" (mesma RPC dos dois).
+  const isReassign = !!order.preferred_booster_id
 
   const filtered = (boosters ?? [])
     .filter((b: BoosterWithSlots) => b.status === 'approved')
@@ -86,7 +90,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
     <Modal
       open={open}
       onOpenChange={(next) => { if (!next) close() }}
-      title="Atribuir a um booster"
+      title={isReassign ? 'Reatribuir a outro booster' : 'Atribuir a um booster'}
       maxWidth="lg"
       description="Reserva o pedido só pra esse booster -- ele tem 12h pra aceitar, sem passar pelo pool público."
     >
@@ -149,7 +153,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
             assignOrder.mutate({ orderId: order.id, targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
           }}
         >
-          Atribuir
+          {isReassign ? 'Reatribuir' : 'Atribuir'}
         </Button>
       </div>
     </Modal>
@@ -194,15 +198,23 @@ export function PendingReviewPanel() {
                 </span>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
+                  className={order.admin_review_locked
+                    ? 'bg-danger/10 text-danger hover:bg-danger/20'
+                    : 'bg-success/10 text-success hover:bg-success/20'}
                   loading={toggleLock.isPending && toggleLock.variables?.orderId === order.id}
                   onClick={() => toggleLock.mutate({ orderId: order.id, locked: !order.admin_review_locked })}
-                  title={order.admin_review_locked ? 'Destravar (libera agora)' : 'Travar'}
+                  title={order.admin_review_locked ? 'Travado -- clique para destravar (libera agora)' : 'Liberado -- clique para travar'}
                 >
-                  {order.admin_review_locked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                  {order.admin_review_locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
                 </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setAssignOrder(order)} title="Atribuir a um booster">
-                  <UserPlus className="h-3.5 w-3.5" />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setAssignOrder(order)}
+                  title={order.preferred_booster_id ? 'Reatribuir a outro booster' : 'Atribuir a um booster'}
+                >
+                  {order.preferred_booster_id ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
                 </Button>
                 <Button variant="ghost" size="icon-sm" onClick={() => setCancelOrder(order)} title="Cancelar pedido">
                   <X className="h-3.5 w-3.5" />

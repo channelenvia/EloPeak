@@ -51,7 +51,10 @@ serve(async (req) => {
       .select('id, status, customer_id, assigned_booster_id, riot_id, boost_mode, queue_type, match_sync_started_at, wins_purchased, duo_own_riot_id, service_type, current_rank, duo_current_rank')
       .eq('id', orderId)
       .maybeSingle()
-    if (orderErr) return errorResponse(req, 'Failed to load order', 500)
+    if (orderErr) {
+      console.error('sync-order-matches: failed to load order', orderId, orderErr.message)
+      return errorResponse(req, 'Falha ao carregar o pedido para sincronizar', 500)
+    }
     if (!order) return errorResponse(req, 'Order not found', 404)
 
     const serviceClient = supabaseAdmin()

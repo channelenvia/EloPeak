@@ -38,13 +38,35 @@ export async function confirmOrderCompletion(orderId: string) {
 // no exato momento em que ela é lida pra decidir dinheiro ou destravar o
 // status. Best-effort de propósito: falha de sync (Riot fora do ar, rate
 // limit etc.) não pode bloquear a ação em si, só significa que ela roda com
-// o que já estava sincronizado antes.
-async function bestEffortSyncBeforeAction(orderId: string): Promise<void> {
+// o que já estava sincronizado antes. Devolve o erro (em vez de só logar) pra
+// quem chamou poder explicar um eventual sync_required_before_* do RPC
+// seguinte -- sem isso esse erro ficava mudo e reatribuir/dropar parecia
+// travado num loop sem explicação (histórico "nunca sincroniza sozinho").
+async function bestEffortSyncBeforeAction(orderId: string): Promise<Error | null> {
   try {
     await syncOrderMatches(orderId)
+    return null
   } catch (err) {
     console.error('bestEffortSyncBeforeAction failed', orderId, err)
+    return err instanceof Error ? err : new Error('Falha desconhecida ao sincronizar partidas')
   }
+}
+
+// Códigos que o RPC só devolve quando o sync automático acima deveria ter
+// resolvido a pendência sozinho -- se ele falhou (syncError não nulo), o
+// motivo real está ali, não em "sincronize antes" genérico.
+const SYNC_REQUIRED_ERROR_CODES = new Set(['sync_required_before_reassign', 'sync_required_before_drop'])
+
+export function assertRpcSuccessAfterSync<T extends { success?: boolean; error?: string }>(
+  result: T,
+  messages: Record<string, string>,
+  syncError: Error | null,
+): T {
+  if (result.success === false && syncError && result.error && SYNC_REQUIRED_ERROR_CODES.has(result.error)) {
+    const base = messages[result.error] ?? 'Sincronize as partidas antes de continuar.'
+    throw new ApiError(`${base} A sincronização automática falhou: ${syncError.message}`, { code: result.error, cause: syncError })
+  }
+  return assertRpcSuccess(result, messages)
 }
 
 export async function updateOrderStatus(params: { orderId: string; newStatus: OrderStatus }) {
@@ -100,10 +122,10 @@ const ADMIN_DROP_ORDER_MESSAGES: Record<string, string> = {
 }
 
 export async function adminDropOrder(params: { orderId: string; reason: string }) {
-  await bestEffortSyncBeforeAction(params.orderId)
+  const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_drop_order', { p_order_id: params.orderId, p_reason: params.reason })
   if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES)
+  return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES, syncError)
 }
 
 const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
@@ -122,12 +144,12 @@ const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
 }
 
 export async function adminReassignBooster(params: { orderId: string; targetBoosterId: string; reason: string }) {
-  await bestEffortSyncBeforeAction(params.orderId)
+  const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_reassign_booster', {
     p_order_id: params.orderId, p_target_booster_id: params.targetBoosterId, p_reason: params.reason,
   })
   if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_REASSIGN_BOOSTER_MESSAGES)
+  return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_REASSIGN_BOOSTER_MESSAGES, syncError)
 }
 
 const PENDING_REVIEW_MESSAGES: Record<string, string> = {
@@ -210,12 +232,13 @@ const REQUEST_ORDER_DROP_MESSAGES: Record<string, string> = {
 }
 
 export async function requestOrderDrop(params: { orderId: string; reason: string }) {
-  await bestEffortSyncBeforeAction(params.orderId)
+  const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('request_order_drop', { p_order_id: params.orderId, p_reason: params.reason })
   if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(
+  return assertRpcSuccessAfterSync(
     data as { success: boolean; error?: string; penalty_pct?: number; penalty_amount?: number },
     REQUEST_ORDER_DROP_MESSAGES,
+    syncError,
   )
 }
 
@@ -231,14 +254,15 @@ const REQUEST_CUSTOMER_ORDER_DROP_MESSAGES: Record<string, string> = {
 }
 
 export async function requestCustomerOrderDrop(params: { orderId: string; reason: string }) {
-  await bestEffortSyncBeforeAction(params.orderId)
+  const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('request_customer_order_drop', {
     p_order_id: params.orderId, p_reason: params.reason,
   })
   if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(
+  return assertRpcSuccessAfterSync(
     data as { success: boolean; error?: string; penalty_pct?: number; penalty_amount?: number },
     REQUEST_CUSTOMER_ORDER_DROP_MESSAGES,
+    syncError,
   )
 }
 
