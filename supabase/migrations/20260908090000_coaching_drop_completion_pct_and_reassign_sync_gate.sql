@@ -1,37 +1,51 @@
--- Correção consolidada do fluxo de drop/reatribuição e da janela de
--- revisão administrativa. Esta migration é forward-only: as migrations
--- 2026090314/15 já foram aplicadas no banco remoto e não devem ser editadas.
+-- Duas coisas de coaching relacionadas a drop/reatribuição de pedido ativo:
 --
--- Critério positivo/negativo (comum aos 3 tipos abaixo): wins_played >=
--- losses_played é "positivo" (booster progrediu, recebe proporcional);
--- losses_played > wins_played é "negativo" (booster atrapalhou, paga uma
--- penalidade). Não há mais bucket de "leve/pesado" nem advertência/bloqueio/
--- suspensão automática -- isso passa a ser inteiramente decisão manual do
--- admin (ver centro de resolução).
+-- 1. admin_reassign_booster tinha a MESMA guarda que já corrigimos em
+--    request_order_drop (migration 20260908080000): bloqueava reatribuição
+--    de um pedido 'in_progress' sem last_match_synced_at. Coaching nunca
+--    sincroniza partida (sem riot_id, ver orderPricing.ts) -- nenhum coach
+--    conseguia ser trocado num pedido de coaching ativo, nem pelo admin.
 --
--- p_requester_role distingue COMO a penalidade negativa é calculada:
--- 'booster' paga o valor CHEIO (sem desconto de comissão -- é ele quem
--- escolheu abandonar um pedido ruim); 'customer'/'admin' descontam só a
--- parte que o booster receberia (comissão da empresa fica com a empresa,
--- não é cobrada do booster numa decisão que não foi dele).
+-- 2. order_drop_completion_pct sempre retorna 0 pra coaching ("sem
+--    progresso gradual", migrations_archive/116) -- correto pra Clash (evento
+--    único de fim de semana), mas não pra coaching: um coach que já deu a
+--    maioria das sessões de um pacote e é trocado/dropado ficava sem receber
+--    nada pelo trabalho feito. Não existe hoje um jeito automático de medir
+--    "quantas sessões de coaching já foram entregues" (sessions_purchased
+--    nunca chega a ser preenchido no fluxo de compra atual -- é só exibição
+--    condicional, nunca setado por CoachPackagePicker), então em vez de
+--    inventar uma métrica automática, adiciona um p_coaching_completion_pct
+--    OPCIONAL nos 3 pontos de entrada de drop/reatribuição -- o admin, que já
+--    aprova/inicia essas ações manualmente e normalmente já conversou com
+--    cliente/coach sobre quantas sessões rolaram, informa o % entregue na
+--    hora. Sem valor informado, comportamento default continua exatamente
+--    como antes (0%, calculado por order_drop_completion_pct) -- não muda
+--    nada pra quem não passa o parâmetro novo.
 --
--- Limite de 2 drops: a partir do 3º drop (drop_count já em 2 antes desta
--- chamada) o pedido NÃO reabre -- cancela e cai em 'under_review' (pool
--- geral não recebe nem o booster nem o cliente automaticamente; ver
--- admin_resolve_order_case na próxima migration). Vale pra qualquer
--- solicitante (cliente, booster ou admin).
+-- CREATE OR REPLACE só substitui uma função de mesma assinatura (nome +
+-- tipos de parâmetro) -- como as 4 funções abaixo ganham um parâmetro novo,
+-- sem os drops explícitos a assinatura antiga (sem o parâmetro) ficaria
+-- coexistindo como uma sobrecarga separada, e o PostgREST (supabase.rpc)
+-- ficaria ambíguo sobre qual versão chamar quando o cliente não manda o
+-- parâmetro novo.
+drop function if exists public.apply_order_drop(uuid, text, uuid, text, public.drop_requester_role);
+drop function if exists public.admin_drop_order(uuid, text);
+drop function if exists public.resolve_drop_request(uuid, boolean, text);
+drop function if exists public.admin_reassign_booster(uuid, uuid, text);
 
 create or replace function public.apply_order_drop(
-  p_order_id        uuid,
-  p_from_status     text,
-  p_actor_id        uuid,
-  p_reason          text,
-  p_requester_role  public.drop_requester_role
-) returns jsonb
+  p_order_id uuid,
+  p_from_status text,
+  p_actor_id uuid,
+  p_reason text,
+  p_requester_role drop_requester_role,
+  p_coaching_completion_pct numeric default null
+)
+returns jsonb
 language plpgsql
 security definer
-set search_path = public
-as $$
+set search_path to 'public'
+as $function$
 declare
   v_order                 record;
   v_is_top3                boolean;
@@ -67,18 +81,26 @@ declare
 begin
   select id, service_type, boost_mode, queue_type, total_price, current_rank, target_rank,
          current_pdl, customer_id, assigned_booster_id, estimated_hours, wins_played,
-         losses_played, wins_purchased, drop_count
+         losses_played, wins_purchased, drop_count, status
   into v_order from public.orders where id = p_order_id for update;
 
   if not found or v_order.assigned_booster_id is null then
     return jsonb_build_object('success', false, 'error', 'order_not_found_or_unassigned');
   end if;
 
-  perform 1 from public.booster_profiles where user_id = v_order.assigned_booster_id for update;
+  if v_order.status::text <> p_from_status then
+    return jsonb_build_object('success', false, 'error', 'order_status_mismatch');
+  end if;
 
   select coalesce(is_top3, false) into v_is_top3
-    from public.booster_profiles where user_id = v_order.assigned_booster_id;
-  v_share_pct := case when v_is_top3 then 0.60 else 0.55 end;
+    from public.booster_profiles where user_id = v_order.assigned_booster_id for update;
+  -- Coaching tem taxa própria e fixa (70%, ver trg_fn_order_completed_booster_stats
+  -- e boosterEarningsShare em src/lib/utils.ts) -- não varia com is_top3.
+  v_share_pct := case
+    when v_order.service_type = 'coaching' then 0.70
+    when v_is_top3 then 0.60
+    else 0.55
+  end;
 
   v_is_positive := coalesce(v_order.wins_played, 0) >= coalesce(v_order.losses_played, 0);
   v_over_limit  := v_order.drop_count >= 2;
@@ -151,10 +173,8 @@ begin
     if v_is_positive then
       v_payout := round(v_win_value_unit * v_share_pct * coalesce(v_order.wins_played, 0), 2);
     else
-      v_penalty := case
-        when p_requester_role = 'booster' then v_order.total_price
-        else round(v_order.total_price * v_share_pct, 2)
-      end;
+      v_penalty := public.compute_drop_penalty(
+        p_requester_role, v_win_value_unit, round(v_win_value_unit * v_share_pct, 2), v_order.losses_played);
     end if;
 
   -- ── Elo/Duo Boost: current_rank/target_rank nulos são um estado de dados
@@ -171,16 +191,12 @@ begin
     v_new_wins_purchased := v_order.wins_purchased;
     v_new_estimated_hours := v_order.estimated_hours;
 
-    select fetched_tier, fetched_division
+    select fetched_tier, fetched_division, fetched_lp
     into v_latest_rank
     from public.order_rank_verifications
     where order_id = p_order_id order by created_at desc limit 1;
 
-    select fetched_lp into v_latest_pdl
-    from public.order_rank_verifications
-    where order_id = p_order_id order by created_at desc limit 1;
-
-    v_latest_pdl := coalesce(v_latest_pdl, v_order.current_pdl, 0);
+    v_latest_pdl := coalesce(v_latest_rank.fetched_lp, v_order.current_pdl, 0);
     v_new_current_pdl := v_latest_pdl;
     v_new_current_rank := case
       when v_latest_rank.fetched_tier is not null
@@ -228,9 +244,8 @@ begin
         v_order.total_price * (1 - v_quarters_completed / 4.0), 2
       ));
     else
-      v_penalty := round(
-        (case when p_requester_role = 'booster' then v_win_value_master_full else v_win_value_master_share end)
-        * coalesce(v_order.losses_played, 0), 2);
+      v_penalty := public.compute_drop_penalty(
+        p_requester_role, v_win_value_master_full, v_win_value_master_share, v_order.losses_played);
       v_new_total_price := round(v_order.total_price + v_penalty, 2);
     end if;
 
@@ -268,18 +283,30 @@ begin
         v_order.total_price - (v_division_value_full * v_steps_crossed), 2
       ));
     else
-      -- Abaixo de Mestre a regra é sempre a remuneração do booster por
-      -- divisão / 4, independentemente de quem solicitou o drop.
-      v_win_value_unit := round(v_division_value_share / 4.0, 2);
-      v_penalty := round(v_win_value_unit * coalesce(v_order.losses_played, 0), 2);
+      v_penalty := public.compute_drop_penalty(
+        p_requester_role,
+        round(v_division_value_full / 4.0, 2),
+        round(v_division_value_share / 4.0, 2),
+        v_order.losses_played);
       v_new_total_price := round(v_order.total_price + v_penalty, 2);
     end if;
 
   -- ── Demais tipos (coaching, placement_matches, clash): sem fórmula
   -- específica no plano -- mantém o cálculo proporcional genérico de
-  -- antes (completion_pct * share_pct), sem penalidade negativa.
+  -- antes (completion_pct * share_pct), sem penalidade negativa. Coaching
+  -- usa v_share_pct = 0.70 (fixo, ver acima); placement_matches/clash
+  -- continuam em 0.55/0.60 por is_top3, sem taxa própria definida.
+  --
+  -- Coaching aceita um % de conclusão informado manualmente pelo admin
+  -- (p_coaching_completion_pct) em vez do automático (sempre 0, sem métrica
+  -- de sessões entregues) -- clash/placement_matches continuam 100%
+  -- automáticos (ignoram o parâmetro, mesmo que informado por engano).
   else
-    v_completion_pct  := public.order_drop_completion_pct(p_order_id);
+    if v_order.service_type = 'coaching' and p_coaching_completion_pct is not null then
+      v_completion_pct := greatest(0, least(100, p_coaching_completion_pct));
+    else
+      v_completion_pct := public.order_drop_completion_pct(p_order_id);
+    end if;
     v_completion_frac := v_completion_pct / 100.0;
     v_new_total_price := round(v_order.total_price * (1 - v_completion_frac), 2);
     v_new_estimated_hours := case
@@ -316,9 +343,6 @@ begin
     updated_at             = now()
   where id = p_order_id;
 
-  -- Fecha a janela de atribuição do booster removido. Sem isso, uma
-  -- reatribuição deixava duas linhas ativas e partidas futuras podiam ser
-  -- creditadas ao booster anterior.
   update public.order_booster_assignments
   set unassigned_at = now()
   where order_id = p_order_id
@@ -384,177 +408,20 @@ begin
     'is_positive', v_is_positive
   );
 end;
-$$;
+$function$;
 
-revoke all on function public.apply_order_drop(uuid, text, uuid, text, public.drop_requester_role) from public, anon, authenticated;
-grant execute on function public.apply_order_drop(uuid, text, uuid, text, public.drop_requester_role) to service_role;
-
--- Mantém as duas portas de entrada com as mesmas garantias: justificativa,
--- limite global de dois drops, rate limit e snapshot de status. O valor
--- financeiro definitivo é calculado apenas na aprovação, usando o estado
--- sincronizado mais recente do pedido.
-create or replace function public.request_order_drop(
+-- ── admin_drop_order: repassa o % de conclusão informado (coaching only) ──
+create or replace function public.admin_drop_order(
   p_order_id uuid,
-  p_reason text
+  p_reason   text,
+  p_coaching_completion_pct numeric default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_order record;
+  v_order  record;
   v_reason text := trim(p_reason);
-  v_existing uuid;
-begin
-  if not public.check_own_write_rate_limit('request_order_drop', 5, 300) then
-    return jsonb_build_object('success', false, 'error', 'rate_limited');
-  end if;
-
-  if v_reason is null or length(v_reason) < 10 or length(v_reason) > 500 then
-    return jsonb_build_object('success', false, 'error', 'invalid_reason');
-  end if;
-
-  select id, status, service_type, assigned_booster_id, wins_played,
-         losses_played, last_match_synced_at, drop_count
-  into v_order from public.orders where id = p_order_id for update;
-
-  if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
-  if auth.uid() is distinct from v_order.assigned_booster_id then
-    return jsonb_build_object('success', false, 'error', 'unauthorized');
-  end if;
-  if v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer') then
-    return jsonb_build_object('success', false, 'error', 'order_not_active');
-  end if;
-  if v_order.status = 'in_progress' and v_order.last_match_synced_at is null then
-    return jsonb_build_object('success', false, 'error', 'sync_required_before_drop');
-  end if;
-  if coalesce(v_order.drop_count, 0) >= 2 then
-    return jsonb_build_object('success', false, 'error', 'drop_limit_reached');
-  end if;
-
-  select id into v_existing from public.order_drop_requests
-  where order_id = p_order_id and status = 'pending';
-  if found then
-    return jsonb_build_object('success', false, 'error', 'drop_request_already_pending');
-  end if;
-
-  insert into public.order_drop_requests(
-    order_id, booster_id, reason, wins_at_request, losses_at_request,
-    penalty_pct, penalty_amount, requested_by_role, status_at_request
-  ) values (
-    p_order_id, auth.uid(), v_reason, v_order.wins_played, v_order.losses_played,
-    0, 0, 'booster', v_order.status
-  );
-
-  update public.orders set status = 'drop_requested', updated_at = now()
-  where id = p_order_id;
-
-  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, v_order.status, 'drop_requested', auth.uid(), v_reason);
-
-  insert into public.notifications(user_id, type, title, body, data)
-  select id, 'drop_request_pending_admin', 'Nova solicitação de drop',
-         'Um booster solicitou o drop de um pedido e aguarda aprovação.',
-         jsonb_build_object('order_id', p_order_id)
-  from public.profiles where role = 'admin';
-
-  return jsonb_build_object('success', true);
-end;
-$$;
-
-revoke all on function public.request_order_drop(uuid, text) from public, anon;
-grant execute on function public.request_order_drop(uuid, text) to authenticated;
-
-create or replace function public.request_customer_order_drop(
-  p_order_id uuid,
-  p_reason text
-) returns jsonb
-language plpgsql security definer set search_path = public as $$
-declare
-  v_order record;
-  v_reason text := trim(p_reason);
-  v_existing uuid;
-begin
-  if not public.check_own_write_rate_limit('request_customer_order_drop', 5, 300) then
-    return jsonb_build_object('success', false, 'error', 'rate_limited');
-  end if;
-
-  if v_reason is null or length(v_reason) < 10 or length(v_reason) > 500 then
-    return jsonb_build_object('success', false, 'error', 'invalid_reason');
-  end if;
-
-  select id, status, customer_id, assigned_booster_id, wins_played,
-         losses_played, last_match_synced_at, drop_count
-  into v_order from public.orders where id = p_order_id for update;
-
-  if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
-  if auth.uid() is distinct from v_order.customer_id then
-    return jsonb_build_object('success', false, 'error', 'unauthorized');
-  end if;
-  if v_order.assigned_booster_id is null then
-    return jsonb_build_object('success', false, 'error', 'order_not_assigned');
-  end if;
-  if v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer') then
-    return jsonb_build_object('success', false, 'error', 'order_not_active');
-  end if;
-  if v_order.status = 'in_progress' and v_order.last_match_synced_at is null then
-    return jsonb_build_object('success', false, 'error', 'sync_required_before_drop');
-  end if;
-  if coalesce(v_order.drop_count, 0) >= 2 then
-    return jsonb_build_object('success', false, 'error', 'drop_limit_reached');
-  end if;
-
-  select id into v_existing from public.order_drop_requests
-  where order_id = p_order_id and status = 'pending';
-  if found then
-    return jsonb_build_object('success', false, 'error', 'drop_request_already_pending');
-  end if;
-
-  insert into public.order_drop_requests(
-    order_id, booster_id, reason, wins_at_request, losses_at_request,
-    penalty_pct, penalty_amount, requested_by_role, status_at_request
-  ) values (
-    p_order_id, v_order.assigned_booster_id, v_reason,
-    v_order.wins_played, v_order.losses_played, 0, 0,
-    'customer', v_order.status
-  );
-
-  update public.orders set status = 'drop_requested', updated_at = now()
-  where id = p_order_id;
-
-  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, v_order.status, 'drop_requested', auth.uid(), v_reason);
-
-  insert into public.notifications(user_id, type, title, body, data)
-  values (
-    v_order.assigned_booster_id, 'customer_requested_drop',
-    'Cliente solicitou sair do pedido',
-    'O cliente pediu para encerrar sua participação neste pedido. A solicitação está em análise pelo admin.',
-    jsonb_build_object('order_id', p_order_id)
-  );
-
-  insert into public.notifications(user_id, type, title, body, data)
-  select id, 'drop_request_pending_admin', 'Nova solicitação de drop',
-         'Um cliente solicitou a troca de booster e aguarda aprovação.',
-         jsonb_build_object('order_id', p_order_id)
-  from public.profiles where role = 'admin';
-
-  return jsonb_build_object('success', true);
-end;
-$$;
-
-revoke all on function public.request_customer_order_drop(uuid, text) from public, anon;
-grant execute on function public.request_customer_order_drop(uuid, text) to authenticated;
-
--- Durante a janela inicial, "atribuir" significa atribuição direta. O
--- pedido não passa pelo pool e não expira para os demais boosters.
-create or replace function public.admin_assign_pending_review_order(
-  p_order_id uuid,
-  p_target_booster_id uuid,
-  p_reason text
-) returns jsonb
-language plpgsql security definer set search_path = public as $$
-declare
-  v_order record;
-  v_target record;
-  v_reason text := trim(p_reason);
+  v_result jsonb;
+  v_request_id uuid;
 begin
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
@@ -563,95 +430,251 @@ begin
     return jsonb_build_object('success', false, 'error', 'invalid_reason');
   end if;
 
-  select id, status, customer_id into v_order
-  from public.orders where id = p_order_id for update;
-  if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
-  if v_order.status <> 'pending_review' then
-    return jsonb_build_object('success', false, 'error', 'order_not_pending_review');
+  select id, status, assigned_booster_id, wins_played, losses_played
+  into v_order from public.orders where id = p_order_id for update;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'order_not_found');
+  end if;
+  if v_order.assigned_booster_id is null then
+    return jsonb_build_object('success', false, 'error', 'order_not_assigned');
+  end if;
+  if v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer') then
+    return jsonb_build_object('success', false, 'error', 'order_not_active');
   end if;
 
-  select user_id, status into v_target
-  from public.booster_profiles where user_id = p_target_booster_id;
-  if not found then return jsonb_build_object('success', false, 'error', 'target_booster_not_found'); end if;
-  if v_target.status <> 'approved' then
-    return jsonb_build_object('success', false, 'error', 'target_booster_not_approved');
+  v_result := public.apply_order_drop(
+    p_order_id, v_order.status::text, auth.uid(), v_reason, 'admin'::public.drop_requester_role,
+    p_coaching_completion_pct
+  );
+
+  if not coalesce((v_result->>'success')::boolean, false) then
+    return v_result;
   end if;
 
-  update public.orders set
-    status = 'assigned',
-    assigned_booster_id = p_target_booster_id,
-    preferred_booster_id = null,
-    exclusive_until = null,
-    admin_review_locked = false,
-    review_release_at = null,
-    updated_at = now()
-  where id = p_order_id;
-
-  insert into public.order_booster_assignments(order_id, booster_id)
-  values (p_order_id, p_target_booster_id);
-
-  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, 'pending_review', 'assigned', auth.uid(),
-          'Atribuído diretamente pelo admin durante a revisão: ' || v_reason);
+  insert into public.order_drop_requests(
+    order_id, booster_id, reason, wins_at_request, losses_at_request,
+    penalty_amount, status, admin_id, admin_note, resolved_at, requested_by_role
+  ) values (
+    p_order_id, v_order.assigned_booster_id, v_reason, v_order.wins_played, v_order.losses_played,
+    coalesce((v_result->>'payout_amount')::numeric, 0) - coalesce((v_result->>'penalty_amount')::numeric, 0),
+    'approved', auth.uid(), 'Drop iniciado pelo admin', now(), 'admin'
+  )
+  returning id into v_request_id;
 
   insert into public.notifications(user_id, type, title, body, data)
   values (
-    p_target_booster_id, 'order_reassigned_by_admin',
-    'Um pedido foi atribuído a você',
-    'Um administrador atribuiu este pedido diretamente a você. Motivo: ' || v_reason,
+    v_order.assigned_booster_id, 'order_dropped_by_admin', 'Você foi removido de um pedido',
+    'Um administrador retirou você do pedido. Motivo: ' || v_reason,
     jsonb_build_object('order_id', p_order_id)
   );
 
   insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
-  values (auth.uid(), 'admin', 'order.pending_review_assigned', 'order', p_order_id::text,
-          jsonb_build_object('reason', v_reason, 'target_booster_id', p_target_booster_id, 'direct', true));
+  values (auth.uid(), 'admin', 'order.admin_dropped', 'order', p_order_id::text,
+          jsonb_build_object('reason', v_reason, 'drop_request_id', v_request_id, 'result', v_result));
 
   return jsonb_build_object('success', true);
 end;
 $$;
 
-revoke all on function public.admin_assign_pending_review_order(uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.admin_assign_pending_review_order(uuid, uuid, text) to authenticated;
-
--- Notifica todos os admins assim que um pedido entra na janela de revisão.
-create or replace function public.notify_admins_on_pending_review()
-returns trigger
+-- ── resolve_drop_request: idem, só usado no ramo de aprovação ────────────
+create or replace function public.resolve_drop_request(
+  p_request_id uuid,
+  p_approve boolean,
+  p_admin_note text default null,
+  p_coaching_completion_pct numeric default null
+) returns jsonb
 language plpgsql security definer set search_path = public as $$
+declare
+  v_req    record;
+  v_actor  record;
+  v_result jsonb;
+  v_restore_status public.order_status;
 begin
-  if new.status = 'pending_review' and old.status is distinct from 'pending_review' then
-    insert into public.notifications(user_id, type, title, body, data)
-    select id, 'order_pending_review', 'Novo pedido em revisão',
-           'Um pedido pago ficará disponível aos boosters após a janela administrativa.',
-           jsonb_build_object('order_id', new.id, 'review_release_at', new.review_release_at)
-    from public.profiles where role = 'admin';
+  if not public.is_admin() then
+    return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
-  return new;
+
+  select r.id, r.order_id, r.booster_id, r.status, r.status_at_request, r.requested_by_role
+  into   v_req from public.order_drop_requests r where r.id = p_request_id for update;
+
+  if not found then return jsonb_build_object('success', false, 'error', 'request_not_found'); end if;
+  if v_req.status <> 'pending' then return jsonb_build_object('success', false, 'error', 'already_resolved'); end if;
+
+  select id, role into v_actor from public.profiles where id = auth.uid();
+
+  if p_approve then
+    v_result := public.apply_order_drop(
+      v_req.order_id, 'drop_requested', auth.uid(), 'Drop request approved', v_req.requested_by_role,
+      p_coaching_completion_pct
+    );
+
+    if not coalesce((v_result->>'success')::boolean, false) then
+      return v_result;
+    end if;
+
+    insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+    values (v_actor.id, v_actor.role, 'drop_request.approved', 'order_drop_request', p_request_id::text,
+            jsonb_build_object('order_id', v_req.order_id, 'result', v_result));
+
+    update public.order_drop_requests
+    set    status      = 'approved',
+           admin_id    = auth.uid(),
+           admin_note  = p_admin_note,
+           penalty_amount = coalesce((v_result->>'payout_amount')::numeric, 0) - coalesce((v_result->>'penalty_amount')::numeric, 0),
+           resolved_at = now()
+    where  id = p_request_id;
+  else
+    v_restore_status := coalesce(v_req.status_at_request, 'in_progress');
+
+    update public.orders set status = v_restore_status, updated_at = now() where id = v_req.order_id;
+    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+    values (v_req.order_id, 'drop_requested', v_restore_status, auth.uid(), 'Drop request rejected');
+    insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+    values (v_actor.id, v_actor.role, 'drop_request.rejected', 'order_drop_request', p_request_id::text,
+            jsonb_build_object('order_id', v_req.order_id));
+
+    update public.order_drop_requests
+    set    status      = 'rejected',
+           admin_id    = auth.uid(),
+           admin_note  = p_admin_note,
+           resolved_at = now()
+    where  id = p_request_id;
+  end if;
+
+  return jsonb_build_object('success', true);
 end;
 $$;
 
-drop trigger if exists trg_notify_admins_on_pending_review on public.orders;
-create trigger trg_notify_admins_on_pending_review
-after update of status on public.orders
-for each row execute function public.notify_admins_on_pending_review();
-
-revoke all on function public.notify_admins_on_pending_review() from public, anon, authenticated;
-
--- Um cron por minuto torna a janela real de 60 a 120 segundos. Dez segundos
--- limita a variação a aproximadamente 60-70 segundos.
-do $$
+-- ── admin_reassign_booster: mesma isenção de sync pra coaching que já
+-- corrigimos em request_order_drop, + repassa o % de conclusão informado ──
+create or replace function public.admin_reassign_booster(
+  p_order_id uuid,
+  p_target_booster_id uuid,
+  p_reason text,
+  p_coaching_completion_pct numeric default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order              record;
+  v_reason             text := coalesce(trim(p_reason), '');
+  v_target             record;
+  v_result             jsonb;
+  v_is_new_assignment  boolean;
 begin
-  perform cron.unschedule('release-pending-review-orders');
-exception when others then
-  null;
-end $$;
+  if not public.is_admin() then
+    return jsonb_build_object('success', false, 'error', 'unauthorized');
+  end if;
+  if length(v_reason) > 500 then
+    return jsonb_build_object('success', false, 'error', 'invalid_reason');
+  end if;
 
-do $$
-begin
-  perform cron.schedule(
-    'release-pending-review-orders',
-    '10 seconds',
-    $cron$select public.release_pending_review_orders();$cron$
+  select id, status, assigned_booster_id, last_match_synced_at, customer_id, service_type
+  into v_order from public.orders where id = p_order_id for update;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'order_not_found');
+  end if;
+
+  v_is_new_assignment := v_order.assigned_booster_id is null;
+
+  if v_is_new_assignment then
+    if v_order.status <> 'awaiting_assignment' then
+      return jsonb_build_object('success', false, 'error', 'order_not_active');
+    end if;
+  else
+    if v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer') then
+      return jsonb_build_object('success', false, 'error', 'order_not_active');
+    end if;
+    if v_order.status = 'in_progress' and v_order.service_type <> 'coaching' and v_order.last_match_synced_at is null then
+      return jsonb_build_object('success', false, 'error', 'sync_required_before_reassign');
+    end if;
+    if v_order.assigned_booster_id = p_target_booster_id then
+      return jsonb_build_object('success', false, 'error', 'already_assigned_to_target');
+    end if;
+  end if;
+
+  select user_id, status into v_target
+  from public.booster_profiles where user_id = p_target_booster_id;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'target_booster_not_found');
+  end if;
+  if v_target.status <> 'approved' then
+    return jsonb_build_object('success', false, 'error', 'target_booster_not_approved');
+  end if;
+
+  if not v_is_new_assignment then
+    v_result := public.apply_order_drop(
+      p_order_id, v_order.status::text, auth.uid(), v_reason, 'admin'::public.drop_requester_role,
+      p_coaching_completion_pct
+    );
+
+    if not (v_result->>'success')::boolean then
+      return v_result;
+    end if;
+
+    if coalesce((v_result->>'under_review')::boolean, false) then
+      return jsonb_build_object('success', false, 'error', 'drop_limit_reached', 'details', v_result);
+    end if;
+  end if;
+
+  update public.orders
+  set preferred_booster_id = p_target_booster_id,
+      -- Coaching é reserva permanente do dono do pacote (mesmo critério de
+      -- _release_pending_review_order) -- nunca expira, mesmo reatribuído.
+      exclusive_until      = case when v_order.service_type = 'coaching' then null else now() + interval '9 hours' end,
+      reassigned_by_admin  = true,
+      duo_own_riot_id      = null,
+      updated_at           = now()
+  where id = p_order_id;
+
+  insert into public.notifications(user_id, type, title, body, data)
+  values (
+    p_target_booster_id, 'order_reassigned_by_admin',
+    case when v_is_new_assignment then 'Um pedido foi reservado pra você' else 'Um pedido foi reatribuído a você' end,
+    'Um administrador reservou este pedido pra você -- você tem 9 horas para aceitar na aba Jobs.'
+      || case when v_reason <> '' then ' Motivo: ' || v_reason else '' end,
+    jsonb_build_object('order_id', p_order_id)
   );
-exception when others then
-  raise notice 'pg_cron scheduling unavailable — release_pending_review_orders() exists but is not scheduled';
-end $$;
+
+  if not v_is_new_assignment and v_order.customer_id is not null then
+    insert into public.notifications(user_id, type, title, body, data)
+    values (
+      v_order.customer_id, 'order_reassigned', 'Booster do seu pedido foi trocado',
+      'Um administrador reatribuiu seu pedido para outro booster.',
+      jsonb_build_object('order_id', p_order_id)
+    );
+  end if;
+
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'admin', 'order.admin_reassigned', 'order', p_order_id::text,
+          jsonb_build_object('reason', v_reason, 'previous_booster_id', v_order.assigned_booster_id,
+                              'new_booster_id', p_target_booster_id, 'new_assignment', v_is_new_assignment,
+                              'drop_result', v_result));
+
+  if v_is_new_assignment then
+    perform net.http_post(
+      url := 'https://yrynfqjxqblrbxxiobty.supabase.co/functions/v1/discord-order-channel',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'supabase_functions_anon_key'),
+        'x-webhook-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'discord_webhook_secret')
+      ),
+      body := jsonb_build_object(
+        'record', jsonb_build_object(
+          'id', p_order_id, 'status', 'awaiting_assignment',
+          'discord_voice_channel_id', null, 'discord_text_channel_id', null
+        ),
+        'old_record', jsonb_build_object('status', 'assigned')
+      ),
+      timeout_milliseconds := 10000
+    );
+  end if;
+
+  return jsonb_build_object('success', true, 'drop_result', v_result);
+end;
+$$;

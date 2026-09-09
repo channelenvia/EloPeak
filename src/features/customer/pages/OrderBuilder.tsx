@@ -323,12 +323,40 @@ export function OrderBuilderPage() {
   // confirma que a consulta já rodou e não há NENHUM pedido aguardando
   // pagamento -- só então é seguro concluir que o vínculo é lixo de uma
   // sessão anterior já paga/encerrada.
+  //
+  // staleBoosterCheckedRef trava esse diagnóstico pra rodar UMA vez só, na
+  // primeira vez que resumableOrder resolve -- sem isso, o efeito reagia a
+  // toda mudança de preferredBoosterId (dep antiga), inclusive uma escolha
+  // AO VIVO durante a própria configuração (CoachPackagePicker::selectPackage
+  // chama setPreferredBooster ao clicar num pacote). Nesse momento ainda não
+  // existe pedido persistido (Configurar não salva nada, só "Gerar PIX" em
+  // StepPayment.tsx salva) -- então resumableOrder já era null de verdade, e
+  // o efeito tratava a escolha recém-feita como "lixo de sessão anterior" e
+  // chamava reset(), apagando o configurador inteiro (só Coaching passa por
+  // isso durante a configuração; os outros serviços nunca vinculam um
+  // booster nesse ponto).
+  //
+  // initialPreferredBoosterIdRef congela o valor de preferredBoosterId no
+  // MOUNT (useRef só usa o argumento na primeira chamada) -- só travar por
+  // "já rodou uma vez" não bastava: se o cliente escolhesse um pacote de
+  // coach ENQUANTO a query de resumableOrder ainda estava em voo (undefined),
+  // ela ficaria pendurada até resolver e, ao resolver pra null, rodava pela
+  // primeira vez lendo o preferredBoosterId JÁ atualizado pela escolha ao
+  // vivo -- mesmo bug de antes, só que só na janela de corrida do
+  // carregamento inicial em vez da sessão inteira. Usar o valor congelado no
+  // mount responde "isso já estava vinculado ANTES de qualquer interação
+  // nesta visita" independente de quando a query termina.
+  const initialPreferredBoosterIdRef = useRef(preferredBoosterId)
+  const staleBoosterCheckedRef = useRef(false)
   useEffect(() => {
+    if (staleBoosterCheckedRef.current) return
+    if (resumableOrder === undefined) return
+    staleBoosterCheckedRef.current = true
     if (resumableOrder !== null) return
     if (pendingOrderId || explicitlyStartingNewOrder || hasCatalogEntryIntent) return
-    if (!preferredBoosterId) return
+    if (!initialPreferredBoosterIdRef.current) return
     reset()
-  }, [resumableOrder, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, preferredBoosterId, reset])
+  }, [resumableOrder, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, reset])
 
   // Processa um link de entrada de catálogo (?service=/?booster=/?coach_package=)
   // -- reage a MUDANÇAS nesses parâmetros, não só ao mount. Antes rodava com
@@ -456,7 +484,7 @@ export function OrderBuilderPage() {
             <span className="flex-1">
               Pedido vinculado a <span className="font-semibold">{preferredBoosterName}</span> — {serviceType === 'coaching'
                 ? 'só ele(a) poderá aceitar este pedido.'
-                : 'ele(a) poderá aceitar com exclusividade por 12 horas após o pagamento.'}
+                : 'ele(a) poderá aceitar com exclusividade por 9 horas após o pagamento.'}
             </span>
             <button
               type="button"

@@ -144,7 +144,11 @@ export function JobDetailPage() {
     if (!order) return
     function maybeSync() {
       const current = orderRef.current
-      if (current && shouldAutoSync(current, Date.now())) syncMatches.mutate()
+      // Coaching nunca tem riot_id (orderPricing.ts) -- nunca é elegível pro
+      // cron/endpoint de sync (ambos filtram riot_id is null), então
+      // last_match_synced_at fica null pra sempre e shouldAutoSync ficaria
+      // batendo aqui a cada 30min só pra tomar 400 "sem conta Riot".
+      if (current && current.service_type !== 'coaching' && shouldAutoSync(current, Date.now())) syncMatches.mutate()
     }
     maybeSync()
     const intervalId = setInterval(maybeSync, AUTO_SYNC_INTERVAL_MS)

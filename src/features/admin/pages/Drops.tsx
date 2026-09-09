@@ -1,5 +1,5 @@
 // src/features/admin/pages/Drops.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { Button, EmptyState, Skeleton, Modal } from '@/components/ui'
@@ -13,6 +13,20 @@ export function AdminDropsPage() {
   const currency = useCurrency()
   const [resolving, setResolving] = useState<{ id: string; approve: boolean } | null>(null)
   const [adminNote, setAdminNote] = useState('')
+  // Coaching não tem métrica automática de progresso (order_drop_completion_
+  // pct sempre retorna 0 pra ele) -- pede quanto do pacote o coach já deu
+  // antes de aprovar o drop, em vez de pagar sempre 0% (ver migration
+  // 20260908090000). Só usado quando a solicitação pendente é de coaching.
+  const [completionPct, setCompletionPct] = useState('0')
+  // O Modal só é fechado (zerando completionPct) via Cancelar/backdrop/
+  // sucesso -- mas `resolving` também pode trocar direto de uma solicitação
+  // pra outra sem passar por ali (ex.: o valor de `id` muda mantendo o
+  // modal "aberto"). Sem isso, um % digitado pra uma solicitação de coaching
+  // podia vazar como o % de outra se o admin abrisse uma segunda sem fechar
+  // a primeira antes.
+  useEffect(() => {
+    setCompletionPct('0')
+  }, [resolving?.id])
 
   const { data: requests, isLoading } = useAdminDropRequests()
 
@@ -23,10 +37,13 @@ export function AdminDropsPage() {
   const resolveMutation = useResolveDropRequest()
   const resolve = {
     isPending: resolveMutation.isPending,
-    mutate: (params: { id: string; approve: boolean; note: string }) =>
+    mutate: (params: { id: string; approve: boolean; note: string; coachingCompletionPct?: number }) =>
       resolveMutation.mutate(
-        { requestId: params.id, approve: params.approve, adminNote: params.note || undefined },
-        { onSuccess: () => { setResolving(null); setAdminNote('') } },
+        {
+          requestId: params.id, approve: params.approve, adminNote: params.note || undefined,
+          coachingCompletionPct: params.coachingCompletionPct,
+        },
+        { onSuccess: () => { setResolving(null); setAdminNote(''); setCompletionPct('0') } },
       ),
   }
 
@@ -195,7 +212,7 @@ export function AdminDropsPage() {
       {/* Resolve modal */}
       <Modal
         open={!!resolving}
-        onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote('') } }}
+        onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote(''); setCompletionPct('0') } }}
         title={resolving?.approve ? 'Aprovar solicitação de drop' : 'Rejeitar solicitação de drop'}
       >
         <div>
@@ -211,23 +228,54 @@ export function AdminDropsPage() {
           />
         </div>
         {(() => {
-          const willCancel = resolving?.approve
-            && (pendingRequests.find(r => r.id === resolving.id)?.order?.drop_count ?? 0) >= 2
+          const resolvingRequest = pendingRequests.find(r => r.id === resolving?.id)
+          const isCoaching = resolvingRequest?.order?.service_type === 'coaching'
+          const willCancel = resolving?.approve && (resolvingRequest?.order?.drop_count ?? 0) >= 2
           const note = !resolving?.approve
             ? 'O pedido volta ao status anterior.'
             : willCancel
               ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui CANCELA o pedido em vez de devolvê-lo pro painel. Trate o pagamento do booster e o cliente manualmente depois.'
               : 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'
-          return <p className={`text-xs ${willCancel ? 'text-danger' : 'text-ink-secondary'}`}>{note}</p>
+          return (
+            <>
+              {resolving?.approve && isCoaching && (
+                <div>
+                  <label htmlFor="drop-resolve-coaching-pct" className="text-xs font-semibold text-ink-secondary block mb-1.5">
+                    % do pacote já entregue pelo coach
+                  </label>
+                  <input
+                    id="drop-resolve-coaching-pct"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={completionPct}
+                    onChange={(e) => setCompletionPct(e.target.value)}
+                    className="input-base w-full text-sm"
+                  />
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Coaching não tem como medir progresso automaticamente -- informe quanto do pacote já foi dado antes do drop. 0% se nada foi entregue ainda.
+                  </p>
+                </div>
+              )}
+              <p className={`text-xs ${willCancel ? 'text-danger' : 'text-ink-secondary'}`}>{note}</p>
+            </>
+          )
         })()}
         <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={() => { setResolving(null); setAdminNote('') }}>
+          <Button variant="ghost" onClick={() => { setResolving(null); setAdminNote(''); setCompletionPct('0') }}>
             Cancelar
           </Button>
           <Button
             variant={resolving?.approve ? 'success' : 'danger'}
             loading={resolve.isPending}
-            onClick={() => resolving && resolve.mutate({ id: resolving.id, approve: resolving.approve, note: adminNote })}
+            onClick={() => {
+              if (!resolving) return
+              const isCoaching = pendingRequests.find(r => r.id === resolving.id)?.order?.service_type === 'coaching'
+              resolve.mutate({
+                id: resolving.id, approve: resolving.approve, note: adminNote,
+                coachingCompletionPct: resolving.approve && isCoaching ? Number(completionPct) || 0 : undefined,
+              })
+            }}
           >
             Confirmar
           </Button>

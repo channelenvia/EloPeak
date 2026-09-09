@@ -63,9 +63,10 @@ supabase/functions/.env
 supabase/functions/.env.local
 !supabase/functions/.env.example
 
-# Historical migrations are versioned because the active migrations depend on
-# objects introduced before the current baseline. Keeping the archive in Git
-# makes fresh database reconstruction and schema-regression tests reproducible.
+# Migrations superadas/mortas (substituídas por CREATE OR REPLACE mais
+# recente) saem daqui pra não sujar o repo -- ficam só localmente, backup
+# manual (zip) ao trocar de máquina, não versionadas no Git.
+supabase/migrations_archive/
 
 # Deploy tooling
 .vercel/

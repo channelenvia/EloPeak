@@ -360,7 +360,7 @@ export function useAdminOverrideOrderStatus(orderId: string) {
 export function useAdminDropOrder(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (reason: string) => adminDropOrder({ orderId, reason }),
+    mutationFn: (params: { reason: string; coachingCompletionPct?: number }) => adminDropOrder({ orderId, ...params }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
 }
@@ -368,7 +368,7 @@ export function useAdminDropOrder(orderId: string) {
 export function useAdminReassignBooster(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (params: { targetBoosterId: string; reason: string }) => adminReassignBooster({ orderId, ...params }),
+    mutationFn: (params: { targetBoosterId: string; reason: string; coachingCompletionPct?: number }) => adminReassignBooster({ orderId, ...params }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })

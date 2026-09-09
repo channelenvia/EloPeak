@@ -140,7 +140,7 @@ async function deleteOrderChannels(voiceChannelId: string | null, textChannelId:
 
 // DM pro booster dono do pedido -- coaching (sempre reservado pro dono do
 // pacote, exclusividade permanente) e pedidos "solicitados diretamente" via
-// perfil público (reservados por 12h antes de caírem pro pool geral). Nos
+// perfil público (reservados por 9h antes de caírem pro pool geral). Nos
 // dois casos o pedido nem aparece no canal público de jobs -- ver
 // buildPublicJobEmbed/awaiting_assignment abaixo.
 // deno-lint-ignore no-explicit-any
@@ -328,7 +328,7 @@ serve(async (req) => {
     // caem nesse mesmo webhook. Sem exceção: todo pedido passa por aqui.
     //
     // Pedido com preferred_booster_id é reservado a um booster específico
-    // (coaching -- sempre; ou "solicitação direta" via perfil público -- 12h,
+    // (coaching -- sempre; ou "solicitação direta" via perfil público -- 9h,
     // ver available_boost_orders/process_mp_payment_event) e NUNCA aparece
     // no canal público: só o booster dono vê, direto no PV dele. Pedido sem
     // preferred_booster_id é público, segue anunciando no canal de jobs.

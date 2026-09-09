@@ -63,7 +63,7 @@ export async function listAdminReviewCases(): Promise<AdminReviewCase[]> {
 export async function listAdminDropRequests(limit = 100): Promise<OrderDropRequest[]> {
   const { data, error } = await supabase
     .from('order_drop_requests')
-    .select('*, order:orders(drop_count)')
+    .select('*, order:orders(drop_count, service_type)')
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw normalizeApiError(error)

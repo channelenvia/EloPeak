@@ -331,10 +331,12 @@ export interface OrderDropRequest {
   resolved_at: string | null
   requested_by_role: 'booster' | 'admin' | 'customer'
   status_at_request: OrderStatus | null
-  // Presente só quando a query embeda orders(drop_count) -- ver
-  // listAdminDropRequests -- pra saber se aprovar essa solicitação vai
-  // cancelar o pedido (limite de 2 drops já atingido) em vez de reatribuir.
-  order?: { drop_count: number } | null
+  // Presente só quando a query embeda orders(drop_count, service_type) --
+  // ver listAdminDropRequests -- drop_count pra saber se aprovar essa
+  // solicitação vai cancelar o pedido (limite de 2 drops já atingido) em vez
+  // de reatribuir; service_type pra mostrar o campo de % de conclusão
+  // manual só em pedidos de coaching (sem métrica automática de progresso).
+  order?: { drop_count: number; service_type: ServiceType } | null
 }
 
 export interface OrderMatch {

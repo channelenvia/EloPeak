@@ -18,7 +18,7 @@ import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { supabase } from '@/lib/supabase'
 import { cn, formatDateTime, formatEstimatedDelivery, getOrderServiceName, orderRequiresAccountAccess, timeAgo } from '@/lib/utils'
-import type { Order, OrderStatus } from '@/types'
+import type { Order, OrderStatus, ServiceType } from '@/types'
 import { useQuery } from '@tanstack/react-query'
 import {
     ArrowLeftRight,
@@ -77,21 +77,53 @@ const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
   danger:  'text-danger hover:bg-danger/10',
 }
 
-function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string; dropCount: number; open: boolean; onClose: () => void }) {
+function AdminDropModal({ orderId, serviceType, dropCount, open, onClose }: { orderId: string; serviceType: ServiceType; dropCount: number; open: boolean; onClose: () => void }) {
   const [dropReason, setDropReason] = useState('')
+  // Coaching não tem métrica automática de progresso (sem partida/rank pra
+  // medir) -- order_drop_completion_pct sempre retorna 0 pra esse serviço.
+  // Pede o % de sessões já entregues pro admin em vez de pagar sempre 0%
+  // (ver migration 20260908090000). Só aparece pra coaching -- os outros
+  // serviços continuam com o cálculo automático de sempre.
+  const [completionPct, setCompletionPct] = useState('0')
   const dropOrder = useAdminDropOrder(orderId)
   const willCancel = dropCount >= 2
+  const isCoaching = serviceType === 'coaching'
+
+  function close() {
+    onClose()
+    setDropReason('')
+    setCompletionPct('0')
+  }
 
   return (
     <Modal
       open={open}
-      onOpenChange={(next) => { if (!next) { onClose(); setDropReason('') } }}
+      onOpenChange={(next) => { if (!next) close() }}
       title="Dropar Pedido"
     >
       <div>
         <label htmlFor="admin-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea id="admin-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Justificativa para o drop..." className="input-base w-full min-h-[80px] resize-none text-sm" maxLength={500} />
       </div>
+      {isCoaching && (
+        <div>
+          <label htmlFor="admin-drop-coaching-pct" className="text-xs font-semibold text-ink-secondary block mb-1.5">
+            % do pacote já entregue pelo coach
+          </label>
+          <input
+            id="admin-drop-coaching-pct"
+            type="number"
+            min={0}
+            max={100}
+            value={completionPct}
+            onChange={(e) => setCompletionPct(e.target.value)}
+            className="input-base w-full text-sm"
+          />
+          <p className="text-[11px] text-ink-muted mt-1">
+            Coaching não tem como medir progresso automaticamente (sem partida/rank) -- informe quanto do pacote já foi dado antes do drop. 0% se nada foi entregue ainda.
+          </p>
+        </div>
+      )}
       {dropOrder.isError && (
         <ErrorAlert message={dropOrder.error instanceof Error ? dropOrder.error.message : 'Erro'} className="mt-2" />
       )}
@@ -101,12 +133,15 @@ function AdminDropModal({ orderId, dropCount, open, onClose }: { orderId: string
           : 'O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'}
       </p>
       <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={() => { onClose(); setDropReason('') }}>Cancelar</Button>
+        <Button variant="ghost" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={dropOrder.isPending}
           disabled={dropReason.trim().length < 10}
-          onClick={() => dropOrder.mutate(dropReason.trim(), { onSuccess: () => { onClose(); setDropReason('') } })}
+          onClick={() => dropOrder.mutate(
+            { reason: dropReason.trim(), coachingCompletionPct: isCoaching ? Number(completionPct) || 0 : undefined },
+            { onSuccess: close },
+          )}
         >
           {willCancel ? 'Cancelar Pedido' : 'Confirmar Drop'}
         </Button>
@@ -128,9 +163,16 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+  const [completionPct, setCompletionPct] = useState('0')
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const reassign = useAdminReassignBooster(order.id)
   const isNewAssignment = !order.assigned_booster_id
+  // Trocar o coach de um pedido de coaching ativo passa pelo mesmo drop
+  // proporcional de qualquer reatribuição (apply_order_drop) -- coaching não
+  // tem métrica automática de progresso (order_drop_completion_pct sempre
+  // retorna 0 pra ele), então pede quanto do pacote o coach anterior já deu
+  // em vez de pagar sempre 0% (ver migration 20260908090000).
+  const showCoachingCompletionInput = !isNewAssignment && order.service_type === 'coaching'
 
   const filtered = (boosters ?? [])
     .filter((b: BoosterWithSlots) => b.user_id !== order.assigned_booster_id)
@@ -142,6 +184,7 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
     setSearch('')
     setSelectedBoosterId(null)
     setReason('')
+    setCompletionPct('0')
   }
 
   return (
@@ -200,14 +243,34 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
         />
       </div>
 
+      {showCoachingCompletionInput && (
+        <div>
+          <label htmlFor="admin-reassign-coaching-pct" className="text-xs font-semibold text-ink-secondary block mb-1.5">
+            % do pacote já entregue pelo coach atual
+          </label>
+          <input
+            id="admin-reassign-coaching-pct"
+            type="number"
+            min={0}
+            max={100}
+            value={completionPct}
+            onChange={(e) => setCompletionPct(e.target.value)}
+            className="input-base w-full text-sm"
+          />
+          <p className="text-[11px] text-ink-muted mt-1">
+            Coaching não tem como medir progresso automaticamente -- informe quanto do pacote o coach atual já deu antes de trocar. 0% se nada foi entregue ainda.
+          </p>
+        </div>
+      )}
+
       {reassign.isError && (
         <ErrorAlert message={reassign.error instanceof Error ? reassign.error.message : 'Erro'} className="mt-2" />
       )}
 
       <p className="text-xs text-ink-secondary">
         {isNewAssignment
-          ? 'Ele some da aba Jobs dos outros e aparece só pra ele, marcado como "Reatribuído" (roxo). Recebe notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'
-          : 'Ignora o limite de slots -- ação exclusiva do admin, use só em casos bem específicos. Ele recebe notificação e DM no Discord, e tem 12h pra aceitar antes de voltar pro pool geral.'}
+          ? 'Ele some da aba Jobs dos outros e aparece só pra ele, marcado como "Reatribuído" (roxo). Recebe notificação e DM no Discord, e tem 9h pra aceitar antes de voltar pro pool geral.'
+          : 'Ignora o limite de slots -- ação exclusiva do admin, use só em casos bem específicos. Ele recebe notificação e DM no Discord, e tem 9h pra aceitar antes de voltar pro pool geral.'}
       </p>
 
       <div className="flex gap-3 justify-end pt-2">
@@ -218,7 +281,10 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
           disabled={!selectedBoosterId}
           onClick={() => {
             if (!selectedBoosterId) return
-            reassign.mutate({ targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
+            reassign.mutate({
+              targetBoosterId: selectedBoosterId, reason: reason.trim(),
+              coachingCompletionPct: showCoachingCompletionInput ? Number(completionPct) || 0 : undefined,
+            }, { onSuccess: close })
           }}
         >
           {isNewAssignment ? 'Atribuir' : 'Reatribuir'}
@@ -307,7 +373,7 @@ function ReasonPromptModal({
   )
 }
 
-// Atribuir durante pending_review/under_review: reserva exclusiva (12h),
+// Atribuir durante pending_review/under_review: reserva exclusiva (9h),
 // mesmo formato de busca do AdminReassignModal acima, só que chamando
 // admin_assign_pending_review_order em vez de admin_reassign_booster (RPC
 // distinta -- ver migration 20260906190000).
@@ -385,7 +451,7 @@ function PendingReviewAssignModal({ order, open, onClose }: { order: Order; open
         <ErrorAlert message={assignOrder.error instanceof Error ? assignOrder.error.message : 'Erro'} className="mt-2" />
       )}
       <p className="text-xs text-ink-secondary">
-        Reserva o pedido só pra esse booster -- ele tem 12h pra aceitar, sem passar pelo pool público.
+        Reserva o pedido só pra esse booster -- ele tem 9h pra aceitar, sem passar pelo pool público.
       </p>
       <div className="flex gap-3 justify-end pt-2">
         <Button variant="ghost" onClick={close}>Cancelar</Button>
@@ -787,7 +853,7 @@ export function AdminOrderDetailPage() {
         }
       />
 
-      <AdminDropModal orderId={order.id} dropCount={order.drop_count} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
+      <AdminDropModal orderId={order.id} serviceType={order.service_type} dropCount={order.drop_count} open={dropModalOpen} onClose={() => setDropModalOpen(false)} />
     </div>
   )
 }

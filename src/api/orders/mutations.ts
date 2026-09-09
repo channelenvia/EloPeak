@@ -121,9 +121,12 @@ const ADMIN_DROP_ORDER_MESSAGES: Record<string, string> = {
   missing_rank_data: 'Este pedido está sem rank atual/alvo definido -- não é possível calcular o valor do drop.',
 }
 
-export async function adminDropOrder(params: { orderId: string; reason: string }) {
+export async function adminDropOrder(params: { orderId: string; reason: string; coachingCompletionPct?: number }) {
   const syncError = await bestEffortSyncBeforeAction(params.orderId)
-  const { data, error } = await supabase.rpc('admin_drop_order', { p_order_id: params.orderId, p_reason: params.reason })
+  const { data, error } = await supabase.rpc('admin_drop_order', {
+    p_order_id: params.orderId, p_reason: params.reason,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
+  })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES, syncError)
 }
@@ -143,10 +146,11 @@ const ADMIN_REASSIGN_BOOSTER_MESSAGES: Record<string, string> = {
   missing_rank_data: 'Este pedido está sem rank atual/alvo definido -- não é possível calcular o valor da reatribuição.',
 }
 
-export async function adminReassignBooster(params: { orderId: string; targetBoosterId: string; reason: string }) {
+export async function adminReassignBooster(params: { orderId: string; targetBoosterId: string; reason: string; coachingCompletionPct?: number }) {
   const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_reassign_booster', {
     p_order_id: params.orderId, p_target_booster_id: params.targetBoosterId, p_reason: params.reason,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
   })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_REASSIGN_BOOSTER_MESSAGES, syncError)

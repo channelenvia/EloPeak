@@ -92,7 +92,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
       onOpenChange={(next) => { if (!next) close() }}
       title={isReassign ? 'Reatribuir a outro booster' : 'Atribuir a um booster'}
       maxWidth="lg"
-      description="Reserva o pedido só pra esse booster -- ele tem 12h pra aceitar, sem passar pelo pool público."
+      description="Reserva o pedido só pra esse booster -- ele tem 9h pra aceitar, sem passar pelo pool público."
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />

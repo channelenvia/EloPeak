@@ -342,10 +342,12 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       win_package: store.winPackage,
       booster_service_id: store.selectedCoachPackage?.id ?? null,
       riot_id: store.serviceType === 'win_boost' ? store.riotId : null,
-      // Coaching não tem esse conceito de rota -- o schema strict rejeita
-      // chave desconhecida, então só manda quando é win_boost mesmo (mesma
-      // regra condicional do riot_id acima).
-      ...(store.serviceType === 'win_boost' ? { customer_lanes: store.customerLanes } : {}),
+      // Coaching/placement_matches não têm esse conceito de rota, mas o
+      // schema (otherServiceIntentSchema) exige a chave presente pros três
+      // (sem .default(), diferente de riot_id) -- omitir pra quem não é
+      // win_boost derrubava a validação com "Body inválido" (400) em vez de
+      // cair no valor certo. Manda vazio nesse caso.
+      customer_lanes: store.serviceType === 'win_boost' ? store.customerLanes : [],
     }
   }
 

@@ -4,9 +4,10 @@ import { assertRpcSuccess, normalizeApiError } from '@/api/core/errors'
 // O limite de 2 drops não bloqueia mais a 3ª aprovação (apply_order_drop) --
 // ela é permitida, só que cancela o pedido pra 'under_review' em vez de
 // reabrir pro pool. Não há mais um erro drop_limit_reached a tratar aqui.
-export async function resolveDropRequest(params: { requestId: string; approve: boolean; adminNote?: string }) {
+export async function resolveDropRequest(params: { requestId: string; approve: boolean; adminNote?: string; coachingCompletionPct?: number }) {
   const { data, error } = await supabase.rpc('resolve_drop_request', {
     p_request_id: params.requestId, p_approve: params.approve, p_admin_note: params.adminNote,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
   })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccess(data as { success: boolean; error?: string }, {
