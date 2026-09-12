@@ -1,19 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Search, ShoppingBag } from 'lucide-react'
-import { Skeleton, EmptyState, ErrorAlert, Button, Pagination } from '@/components/ui'
+import { ShoppingBag } from 'lucide-react'
+import { Skeleton, EmptyState, ErrorAlert, Button, Pagination, SearchInput } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
 import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
 import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
-import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminOrders, useAdminOrderTabCounts } from '@/api/orders'
 
 export function AdminOrdersPage() {
   const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
-  const { t } = useTranslation()
   const currency = useCurrency()
 
   // Categoria/subtipo (fila, tier+dia de Clash) filtrados no cliente -- mesmo
@@ -45,7 +43,7 @@ export function AdminOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">{t('admin.orders.title')}</h1>
+      <h1 className="text-2xl font-bold text-ink">Pedidos</h1>
       {(orders?.length ?? 0) >= 100 && (
         <p className="text-xs text-warning">Mostrando os 100 pedidos mais recentes deste filtro — pode haver mais.</p>
       )}
@@ -53,10 +51,13 @@ export function AdminOrdersPage() {
       {/* Filters -- busca + status à esquerda, tipo de serviço à direita. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-48 shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
-            <input className="input-base pl-8 py-1.5 text-xs" placeholder={t('admin.orders.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+          <SearchInput
+            wrapperClassName="w-full sm:w-64 shrink-0"
+            placeholder="Buscar por ID do pedido..."
+            aria-label="Buscar por ID do pedido..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <OrderStatusFilterDropdown
             tab={statusFilter.tab}
             onTabChange={statusFilter.setTab}
@@ -100,7 +101,7 @@ export function AdminOrdersPage() {
           <Button size="sm" onClick={() => refetch()}>Tentar novamente</Button>
         </div>
       ) : !filtered.length ? (
-        <EmptyState icon={ShoppingBag} title={t('admin.orders.empty')} description="Ajuste os filtros ou o termo de busca." />
+        <EmptyState icon={ShoppingBag} title="Nenhum pedido encontrado" description="Ajuste os filtros ou o termo de busca." />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Ban, CheckCircle2, ChevronDown, RotateCcw, Shield, StickyNote, Trophy, Star, UserX, XCircle } from 'lucide-react'
-import { Button, BoosterStatusBadge, EmptyState, Skeleton, ErrorAlert, Popover, Modal } from '@/components/ui'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Button, Card, BoosterStatusBadge, EmptyState, FilterTabs, Pagination, SearchInput, Skeleton, ErrorAlert, Popover, Modal } from '@/components/ui'
 import { cn, formatDate, formatDateTime, timeAgo } from '@/lib/utils'
 import type { BoosterAdminNote, BoosterProfile } from '@/types'
-import { useTranslation } from 'react-i18next'
 import { useAdminBoosters, useAdminApproveBooster, useBoosterAdminNotes, useSetBoosterAdminNote, useExpelBooster } from '@/api/boosters'
+import { usePagedList } from '@/hooks/usePagedList'
 
 function BoosterActionsMenu({
   booster, note, statusPending, onApprove, onReject, onSuspend, onReinstate, onExpel, expelPending,
@@ -25,11 +27,24 @@ function BoosterActionsMenu({
   const [notesOpen, setNotesOpen] = useState(false)
   const [draft, setDraft] = useState(note?.note ?? '')
   const [expelOpen, setExpelOpen] = useState(false)
-  const [expelReason, setExpelReason] = useState('')
   const [suspendConfirmOpen, setSuspendConfirmOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const setNote = useSetBoosterAdminNote()
   const hasNote = !!note?.note?.trim()
+
+  const { register: registerExpel, handleSubmit: handleExpelSubmit, reset: resetExpel, formState: { isValid: expelValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
+  function closeExpel() {
+    setExpelOpen(false)
+    resetExpel({ reason: '' })
+  }
+  function submitExpel(data: { reason: string }) {
+    onExpel(data.reason.trim())
+    closeExpel()
+  }
 
   const isNew = booster.status === 'pending' || booster.status === 'under_review'
   const isActive = booster.status === 'approved'
@@ -143,7 +158,7 @@ function BoosterActionsMenu({
 
       <Modal
         open={expelOpen}
-        onOpenChange={(open) => { if (!open) { setExpelOpen(false); setExpelReason('') } }}
+        onOpenChange={(open) => { if (!open) closeExpel() }}
         title={`Expulsar ${booster.display_name}`}
       >
         <div>
@@ -152,8 +167,7 @@ function BoosterActionsMenu({
           </label>
           <textarea
             id="booster-expel-reason"
-            value={expelReason}
-            onChange={(e) => setExpelReason(e.target.value)}
+            {...registerExpel('reason')}
             placeholder="Descreva o motivo da expulsão..."
             className="input-base w-full min-h-[100px] resize-none text-sm"
             maxLength={500}
@@ -161,12 +175,12 @@ function BoosterActionsMenu({
         </div>
         <p className="text-xs text-danger">Ação permanente: o login é banido e não pode ser reativado.</p>
         <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={() => { setExpelOpen(false); setExpelReason('') }}>Cancelar</Button>
+          <Button variant="ghost" onClick={closeExpel}>Cancelar</Button>
           <Button
             variant="danger"
             loading={expelPending}
-            disabled={expelReason.trim().length < 10}
-            onClick={() => { onExpel(expelReason.trim()); setExpelOpen(false); setExpelReason('') }}
+            disabled={!expelValid}
+            onClick={handleExpelSubmit(submitExpel)}
           >
             Expulsar Permanentemente
           </Button>
@@ -195,14 +209,15 @@ function BoosterActionsMenu({
 }
 
 export function AdminBoostersPage() {
-  const [filter, setFilter] = useState<BoosterProfile['status'] | 'all'>('all')
-  const { t } = useTranslation()
+  const [filter, setFilter] = useState<BoosterProfile['status'] | 'all'>('approved')
+  const [search, setSearch] = useState('')
+  const navigate = useNavigate()
 
   const filterLabels: Record<string, string> = {
-    all: t('admin.boosters.filters.all'),
-    pending: t('admin.boosters.filters.pending'),
-    approved: t('admin.boosters.filters.approved'),
-    suspended: t('admin.boosters.filters.suspended'),
+    all: 'Todos',
+    pending: 'Pendentes',
+    approved: 'Aprovados',
+    suspended: 'Suspensos',
   }
 
   const { data: boosters, isLoading } = useAdminBoosters(filter)
@@ -221,27 +236,37 @@ export function AdminBoostersPage() {
   }
   const expelBoosterMutation = useExpelBooster()
 
-  const filtered = boosters ?? []
+  const filtered = (boosters ?? []).filter((b) =>
+    !search || b.display_name.toLowerCase().includes(search.trim().toLowerCase())
+  )
+  const { page, pageItems, hasNextPage, onPrev, onNext } = usePagedList(filtered, 20, `${filter}:${search}`)
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">{t('admin.boosters.title')}</h1>
+      <h1 className="text-2xl font-bold text-ink">Boosters</h1>
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex gap-1 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl p-1 w-fit">
-          {(['approved', 'pending', 'suspended', 'all'] as const).map((s) => (
-            <button key={s} onClick={() => setFilter(s)}
-              className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${filter === s ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'}`}>
-              {filterLabels[s] ?? s}
-              {s === 'pending' && pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-danger ring-2 ring-bg-surface" />
-              )}
-            </button>
-          ))}
-        </div>
+      {/* Toolbar -- busca à esquerda, filtro de status à direita: mesmo
+          layout/estilização das listas de pedido (busca + FilterTabs). */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SearchInput
+          wrapperClassName="w-full sm:w-64 shrink-0"
+          placeholder="Buscar por nome do booster..."
+          aria-label="Buscar por nome do booster"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <FilterTabs
+          value={filter}
+          onChange={setFilter}
+          options={(['approved', 'pending', 'suspended', 'all'] as const).map((s) => ({
+            value: s,
+            label: filterLabels[s] ?? s,
+            dot: s === 'pending' && pendingCount > 0,
+          }))}
+        />
       </div>
 
-      {filtered.length >= 100 && (
+      {(boosters?.length ?? 0) >= 100 && (
         <p className="text-xs text-warning">Mostrando os 100 boosters mais recentes deste filtro — pode haver mais.</p>
       )}
 
@@ -253,70 +278,80 @@ export function AdminBoostersPage() {
         <ErrorAlert message={(expelBoosterMutation.error as Error).message} />
       )}
 
-      <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
-        {isLoading ? <div className="p-4"><Skeleton className="h-48 w-full" /></div> :
-          !filtered.length ? <EmptyState icon={Shield} title={t('admin.boosters.empty')} /> : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.boosters.table.name')}</TableHead>
-                <TableHead>{t('admin.boosters.table.rating')}</TableHead>
-                <TableHead>{t('admin.boosters.table.completed')}</TableHead>
-                <TableHead>{t('admin.boosters.table.status')}</TableHead>
-                <TableHead>{t('admin.boosters.table.joined')}</TableHead>
-                <TableHead>{t('admin.boosters.table.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Link to={`/admin/boosters/${b.id}`} className="text-brand hover:underline font-medium text-sm">
-                        {b.display_name}
-                      </Link>
-                      {b.is_top3 && (
-                        <span className="flex items-center gap-1 text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">
-                          <Trophy className="h-2.5 w-2.5" /> TOP3
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1">
-                      {b.rating.toFixed(1)}
-                      <Star className="h-3 w-3 text-warning fill-warning" />
-                    </span>
-                  </TableCell>
-                  <TableCell>{b.total_completed}</TableCell>
-                  <TableCell>
-                    <BoosterStatusBadge status={b.status} />
-                    {b.status === 'suspended' && b.suspended_until && (
-                      <p className="text-[11px] text-ink-muted mt-1">
-                        Até {formatDateTime(b.suspended_until)}
-                      </p>
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+        </div>
+      ) : !filtered.length ? (
+        <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
+          <EmptyState icon={Shield} title="Nenhum booster encontrado" />
+        </div>
+      ) : (
+        <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {pageItems.map((b) => (
+            <Card
+              key={b.id}
+              variant="interactive"
+              padding="md"
+              className="flex flex-col gap-3"
+              onClick={() => navigate(`/admin/boosters/${b.id}`)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-brand font-semibold text-sm truncate">{b.display_name}</span>
+                    {b.is_top3 && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-1.5 py-0.5 uppercase tracking-wide shrink-0">
+                        <Trophy className="h-2.5 w-2.5" /> TOP3
+                      </span>
                     )}
-                  </TableCell>
-                  <TableCell>{formatDate(b.created_at)}</TableCell>
-                  <TableCell>
-                    <BoosterActionsMenu
-                      booster={b}
-                      note={boosterNotes?.get(b.id)}
-                      statusPending={updateBoosterStatusMutation.isPending && updateBoosterStatusMutation.variables?.boosterId === b.id}
-                      onApprove={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
-                      onReject={() => updateBoosterStatus.mutate({ id: b.id, status: 'rejected' })}
-                      onSuspend={() => updateBoosterStatus.mutate({ id: b.id, status: 'suspended' })}
-                      onReinstate={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
-                      onExpel={(reason) => expelBoosterMutation.mutate({ boosterId: b.id, reason })}
-                      expelPending={expelBoosterMutation.isPending && expelBoosterMutation.variables?.boosterId === b.id}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+                  </div>
+                  <p className="text-[11px] text-ink-muted mt-0.5">Entrou {formatDate(b.created_at)}</p>
+                </div>
+                <BoosterStatusBadge status={b.status} />
+              </div>
+
+              {b.status === 'suspended' && b.suspended_until && (
+                <p className="text-[11px] text-ink-muted -mt-2">Suspenso até {formatDateTime(b.suspended_until)}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-bg-raised/40 p-2">
+                  <div className="flex items-center gap-1.5">
+                    <Star className="h-3.5 w-3.5 text-warning fill-warning shrink-0" />
+                    <p className="text-sm font-bold text-ink">{b.rating.toFixed(1)}</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">Avaliação</p>
+                </div>
+                <div className="rounded-xl bg-bg-raised/40 p-2">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+                    <p className="text-sm font-bold text-ink">{b.total_completed}</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">Concluídos</p>
+                </div>
+              </div>
+
+              <div className="mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+                <BoosterActionsMenu
+                  booster={b}
+                  note={boosterNotes?.get(b.id)}
+                  statusPending={updateBoosterStatusMutation.isPending && updateBoosterStatusMutation.variables?.boosterId === b.id}
+                  onApprove={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
+                  onReject={() => updateBoosterStatus.mutate({ id: b.id, status: 'rejected' })}
+                  onSuspend={() => updateBoosterStatus.mutate({ id: b.id, status: 'suspended' })}
+                  onReinstate={() => updateBoosterStatus.mutate({ id: b.id, status: 'approved' })}
+                  onExpel={(reason) => expelBoosterMutation.mutate({ boosterId: b.id, reason })}
+                  expelPending={expelBoosterMutation.isPending && expelBoosterMutation.variables?.boosterId === b.id}
+                />
+              </div>
+            </Card>
+          ))}
+        </div>
+        <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
+        </>
+      )}
     </div>
   )
 }

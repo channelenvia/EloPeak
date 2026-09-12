@@ -2,12 +2,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
-import { Button, EmptyState, Skeleton, Modal } from '@/components/ui'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Button, Card, EmptyState, Pagination, SearchInput, Skeleton, Modal } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDropRequests, useResolveDropRequest } from '@/api/admin'
 import { useBoosterNames } from '@/api/boosters'
+import { usePagedList } from '@/hooks/usePagedList'
 
 export function AdminDropsPage() {
   const currency = useCurrency()
@@ -28,6 +28,8 @@ export function AdminDropsPage() {
     setCompletionPct('0')
   }, [resolving?.id])
 
+  const [search, setSearch] = useState('')
+
   const { data: requests, isLoading } = useAdminDropRequests()
 
   // Nome do booster em vez do UUID cru — mesma ideia do admin/pages/OrderDetail.tsx.
@@ -47,8 +49,19 @@ export function AdminDropsPage() {
       ),
   }
 
-  const pendingRequests = requests?.filter(r => r.status === 'pending') ?? []
-  const pastRequests = requests?.filter(r => r.status !== 'pending') ?? []
+  // Busca por código do pedido ou nome do booster -- mesmo campo de busca
+  // usado nas demais listas (Pedidos, Meus Pedidos, Jobs disponíveis), já que
+  // esta era a única lista de instâncias do admin sem nenhum jeito de filtrar
+  // por texto.
+  const matchesSearch = (r: { order_id: string; booster_id: string }) => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return r.order_id.toLowerCase().includes(q) || (boosterNames?.get(r.booster_id)?.display_name.toLowerCase().includes(q) ?? false)
+  }
+  const pendingRequests = (requests?.filter(r => r.status === 'pending') ?? []).filter(matchesSearch)
+  const pastRequests = (requests?.filter(r => r.status !== 'pending') ?? []).filter(matchesSearch)
+  const pendingPage = usePagedList(pendingRequests, 20, search)
+  const pastPage = usePagedList(pastRequests, 20, search)
 
   const ROLE_LABEL: Record<string, string> = { booster: 'Booster', admin: 'Admin', customer: 'Cliente' }
 
@@ -59,153 +72,143 @@ export function AdminDropsPage() {
         <p className="text-xs text-warning">Mostrando as 100 solicitações mais recentes — pode haver mais.</p>
       )}
 
+      <SearchInput
+        wrapperClassName="w-full sm:w-64 shrink-0"
+        placeholder="Buscar por pedido ou booster..."
+        aria-label="Buscar por pedido ou booster"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {/* Pending */}
       <section>
         <h3 className="text-base font-semibold text-ink mb-3">Pendentes</h3>
-        <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
-          {isLoading ? (
-            <div className="p-4"><Skeleton className="h-48 w-full" /></div>
-          ) : !pendingRequests.length ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
+          </div>
+        ) : !pendingRequests.length ? (
+          <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
             <EmptyState icon={AlertTriangle} title="Nenhuma solicitação pendente" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pedido</TableHead>
-                  <TableHead>Origem</TableHead>
-                  <TableHead>Booster</TableHead>
-                  <TableHead>Motivo</TableHead>
-                  <TableHead>Vitórias / Derrotas</TableHead>
-                  <TableHead>Valor líquido</TableHead>
-                  <TableHead>Há quanto tempo</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingRequests.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link to={`/admin/orders/${r.order_id}`} className="text-brand hover:underline">
-                        #{r.order_id.slice(0, 8).toUpperCase()}
-                      </Link>
-                      {(r.order?.drop_count ?? 0) >= 2 && (
-                        <span
-                          title="Este pedido já foi dropado 2 vezes -- aprovar essa solicitação vai CANCELAR o pedido em vez de devolvê-lo pro painel."
-                          className="badge text-[10px] font-bold bg-danger/10 text-danger mt-1 block w-fit"
-                        >
-                          Cancela o pedido
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
-                        {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {boosterNames?.get(r.booster_id) ? (
-                        <Link to={`/admin/boosters/${boosterNames.get(r.booster_id)!.id}`} className="text-brand hover:underline font-medium">
-                          {boosterNames.get(r.booster_id)!.display_name}
-                        </Link>
-                      ) : (
-                        <span className="font-mono">{r.booster_id.slice(0, 8)}…</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-xs text-ink-secondary max-w-xs truncate">{r.reason}</p>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-success font-semibold">{r.wins_at_request}W</span>
-                      {' / '}
-                      <span className="text-danger font-semibold">{r.losses_at_request}L</span>
-                    </TableCell>
-                    <TableCell>
-                      {r.status === 'pending' ? (
-                        <span className="text-[10px] text-ink-muted">Calculado na aprovação</span>
-                      ) : (
-                        <>
-                          <span className={`font-bold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`}>
-                            {currency(r.penalty_amount)}
-                          </span>
-                          <p className="text-[10px] text-ink-muted">
-                            {r.penalty_amount > 0 ? 'recebe' : r.penalty_amount < 0 ? 'deve' : 'neutro'}
-                          </p>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell>{timeAgo(r.created_at)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          size="xs"
-                          variant="success"
-                          leftIcon={<CheckCircle2 className="h-3 w-3" />}
-                          onClick={() => setResolving({ id: r.id, approve: true })}
-                        >
-                          Aprovar
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="danger"
-                          leftIcon={<XCircle className="h-3 w-3" />}
-                          onClick={() => setResolving({ id: r.id, approve: false })}
-                        >
-                          Rejeitar
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {pendingPage.pageItems.map((r) => (
+              <Card key={r.id} padding="md" className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <Link to={`/admin/orders/${r.order_id}`} className="font-mono text-xs font-bold text-brand hover:underline">
+                    #{r.order_id.slice(0, 8).toUpperCase()}
+                  </Link>
+                  <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary shrink-0">
+                    {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
+                  </span>
+                </div>
+
+                {(r.order?.drop_count ?? 0) >= 2 && (
+                  <span
+                    title="Este pedido já foi dropado 2 vezes -- aprovar essa solicitação vai CANCELAR o pedido em vez de devolvê-lo pro painel."
+                    className="badge text-[10px] font-bold bg-danger/10 text-danger w-fit"
+                  >
+                    Cancela o pedido
+                  </span>
+                )}
+
+                <p className="text-xs text-ink-secondary line-clamp-2">{r.reason}</p>
+
+                <div className="text-xs">
+                  {boosterNames?.get(r.booster_id) ? (
+                    <Link to={`/admin/boosters/${boosterNames.get(r.booster_id)!.id}`} className="text-brand hover:underline font-medium">
+                      {boosterNames.get(r.booster_id)!.display_name}
+                    </Link>
+                  ) : (
+                    <span className="font-mono text-ink-muted">{r.booster_id.slice(0, 8)}…</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-bg-raised/40 p-2">
+                    <p className="text-sm font-bold" data-tabular>
+                      <span className="text-success">{r.wins_at_request}W</span>{' / '}
+                      <span className="text-danger">{r.losses_at_request}L</span>
+                    </p>
+                    <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">Vitórias / Derrotas</p>
+                  </div>
+                  <div className="rounded-xl bg-bg-raised/40 p-2">
+                    {r.status === 'pending' ? (
+                      <p className="text-[10px] text-ink-muted">Calculado na aprovação</p>
+                    ) : (
+                      <>
+                        <p className={`text-sm font-bold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`} data-tabular>
+                          {currency(r.penalty_amount)}
+                        </p>
+                        <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">
+                          {r.penalty_amount > 0 ? 'Recebe' : r.penalty_amount < 0 ? 'Deve' : 'Neutro'}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-ink-muted">{timeAgo(r.created_at)}</p>
+
+                <div className="flex gap-1.5 mt-auto pt-1">
+                  <Button
+                    size="xs"
+                    variant="success"
+                    className="flex-1"
+                    leftIcon={<CheckCircle2 className="h-3 w-3" />}
+                    onClick={() => setResolving({ id: r.id, approve: true })}
+                  >
+                    Aprovar
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="danger"
+                    className="flex-1"
+                    leftIcon={<XCircle className="h-3 w-3" />}
+                    onClick={() => setResolving({ id: r.id, approve: false })}
+                  >
+                    Rejeitar
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <Pagination page={pendingPage.page} hasNextPage={pendingPage.hasNextPage} onPrev={pendingPage.onPrev} onNext={pendingPage.onNext} />
+          </>
+        )}
       </section>
 
       {/* History */}
       {pastRequests.length > 0 && (
         <section>
           <h3 className="text-base font-semibold text-ink mb-3">Histórico</h3>
-          <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pedido</TableHead>
-                  <TableHead>Origem</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Valor líquido</TableHead>
-                  <TableHead>Resolvido</TableHead>
-                  <TableHead>Nota admin</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pastRequests.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link to={`/admin/orders/${r.order_id}`} className="text-brand hover:underline">
-                        #{r.order_id.slice(0, 8).toUpperCase()}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
-                        {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`badge text-xs font-bold ${r.status === 'approved' ? 'text-success bg-success/10' : 'text-danger bg-danger/10'}`}>
-                        {r.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
-                      </span>
-                    </TableCell>
-                    <TableCell className={`text-xs font-semibold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {pastPage.pageItems.map((r) => (
+              <Link key={r.id} to={`/admin/orders/${r.order_id}`}>
+                <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-brand">#{r.order_id.slice(0, 8).toUpperCase()}</span>
+                    <span className={`badge text-xs font-bold ${r.status === 'approved' ? 'text-success bg-success/10' : 'text-danger bg-danger/10'}`}>
+                      {r.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
+                      {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
+                    </span>
+                    <span className={`text-xs font-semibold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`} data-tabular>
                       {currency(r.penalty_amount)}
-                    </TableCell>
-                    <TableCell className="text-xs">{r.resolved_at ? timeAgo(r.resolved_at) : '—'}</TableCell>
-                    <TableCell><p className="text-xs text-ink-secondary max-w-xs truncate">{r.admin_note ?? '—'}</p></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </span>
+                  </div>
+                  <p className="text-xs text-ink-secondary line-clamp-2">{r.admin_note ?? '—'}</p>
+                  <p className="text-[11px] text-ink-muted mt-auto pt-1">{r.resolved_at ? timeAgo(r.resolved_at) : '—'}</p>
+                </Card>
+              </Link>
+            ))}
           </div>
+          <Pagination page={pastPage.page} hasNextPage={pastPage.hasNextPage} onPrev={pastPage.onPrev} onNext={pastPage.onNext} />
         </section>
       )}
 

@@ -82,6 +82,25 @@ export async function getAssignedBoosterProfile(boosterUserId: string): Promise<
   return data as AssignedBoosterProfile | null
 }
 
+// Só o necessário pra decidir elegibilidade de slot na aba Jobs -- versão
+// compacta de getOwnBoosterFullProfile, evita puxar a linha inteira só pra
+// checar status/is_top3.
+export type OwnBoosterSlotEligibility = { status: string; is_top3: boolean; user_id: string }
+
+export async function getOwnBoosterSlotEligibility(userId: string): Promise<OwnBoosterSlotEligibility | null> {
+  const { data, error } = await supabase.from('booster_profiles').select('status, is_top3, user_id').eq('user_id', userId).maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return data
+}
+
+// Linha inteira de booster_profiles do próprio usuário -- usado no dashboard
+// do booster (onboarding/status + dados exibidos no painel).
+export async function getOwnBoosterFullProfile(userId: string): Promise<BoosterProfile | null> {
+  const { data, error } = await supabase.from('booster_profiles').select('*').eq('user_id', userId).maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return data as unknown as BoosterProfile | null
+}
+
 export async function listBoostersPerformance(boosterUserIds: string[]): Promise<BoosterPerformanceSegment[]> {
   if (boosterUserIds.length === 0) return []
   const { data, error } = await supabase

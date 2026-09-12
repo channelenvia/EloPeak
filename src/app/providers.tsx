@@ -1,9 +1,11 @@
-import '@/lib/i18n'
 import { HelmetProvider } from 'react-helmet-async'
 import { MotionConfig } from 'framer-motion'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useEffect, useRef } from 'react'
+// Bootstrap de sessão (getSession/onAuthStateChange) fica no provider raiz de
+// propósito, não é uma query cacheável de src/api/*.
+// eslint-disable-next-line no-restricted-imports
 import { supabase } from '@/lib/supabase'
 import { EdgeFunctionError, invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { useAuthStore } from '@/stores/authStore'

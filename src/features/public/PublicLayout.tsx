@@ -1,6 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Menu, MessageCircle, X } from 'lucide-react'
 import { Button, LogoMark } from '@/components/ui'
 import { AmbientBackground } from '@/components/AmbientBackground'
@@ -12,7 +11,6 @@ export function PublicLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { pathname } = useLocation()
   const { isAuthenticated, profile } = useAuthStore()
-  const { t } = useTranslation()
 
   const dashboardLink =
     profile?.role === 'admin' ? '/admin'
@@ -36,11 +34,11 @@ export function PublicLayout() {
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-1 flex-1">
             {[
-              { href: '/services',  label: t('nav.services')  },
-              { href: '/pricing',   label: t('nav.pricing')   },
-              { href: '/security',  label: t('nav.security')  },
-              { href: '/faq',       label: t('nav.faq')       },
-              { href: '/boosters',  label: t('nav.boosters')  },
+              { href: '/services',  label: 'Serviços' },
+              { href: '/pricing',   label: 'Preços'   },
+              { href: '/security',  label: 'Segurança' },
+              { href: '/faq',       label: 'FAQ'       },
+              { href: '/boosters',  label: 'Boosters'  },
             ].map(({ href, label }) => (
               <Link key={href} to={href}
                 aria-current={pathname === href ? 'page' : undefined}
@@ -57,11 +55,11 @@ export function PublicLayout() {
           <div className="hidden lg:flex items-center gap-3 ml-auto">
             {isAuthenticated() ? (
               <Button asChild size="sm">
-                <Link to={dashboardLink}>{t('nav.dashboard')}</Link>
+                <Link to={dashboardLink}>Painel</Link>
               </Button>
             ) : (
               <Button asChild size="sm">
-                <Link to="/login">{t('nav.signIn')}</Link>
+                <Link to="/login">Entrar</Link>
               </Button>
             )}
           </div>
@@ -82,12 +80,12 @@ export function PublicLayout() {
         {mobileOpen && (
           <div id="public-mobile-nav" className="lg:hidden border-t border-border-subtle bg-bg-surface/90 backdrop-blur-xl px-5 py-5 space-y-1 animate-slide-down">
             {[
-              { href: '/services',  label: t('nav.services')      },
-              { href: '/pricing',   label: t('nav.pricing')       },
-              { href: '/security',  label: t('nav.security')      },
-              { href: '/faq',       label: t('nav.faq')           },
-              { href: '/boosters',  label: t('nav.boosters')      },
-              { href: '/apply?booster=1', label: t('nav.applyBooster')  },
+              { href: '/services',  label: 'Serviços' },
+              { href: '/pricing',   label: 'Preços'    },
+              { href: '/security',  label: 'Segurança' },
+              { href: '/faq',       label: 'FAQ'       },
+              { href: '/boosters',  label: 'Boosters'  },
+              { href: '/apply?booster=1', label: 'Seja um Booster' },
             ].map(({ href, label }) => (
               <Link key={href} to={href} onClick={() => setMobileOpen(false)}
                 aria-current={pathname === href ? 'page' : undefined}
@@ -98,7 +96,7 @@ export function PublicLayout() {
             ))}
             <div className="pt-3 flex gap-2">
               <Button asChild size="sm" className="flex-1">
-                <Link to="/login">{t('nav.signIn')}</Link>
+                <Link to="/login">Entrar</Link>
               </Button>
             </div>
           </div>
@@ -119,22 +117,22 @@ export function PublicLayout() {
                 <span className="font-extrabold text-ink">Elo<span className="text-brand">Peak</span></span>
               </Link>
               <p className="text-sm text-ink-secondary max-w-xs leading-relaxed mb-2.5">
-                {t('footer.tagline')}
+                Serviços de gaming profissionais. Seguro, rápido e garantido.
               </p>
             </div>
 
             {[
-              { title: t('footer.services'), links: [
-                { href: '/services#elo-boost', label: t('footer.eloBoost') },
-                { href: '/services#win-boost', label: t('footer.winBoost') },
-                { href: '/services#coaching',  label: t('footer.coaching') },
-                { href: '/services#clash',     label: t('footer.clash')    },
+              { title: 'Serviços', links: [
+                { href: '/services#elo-boost', label: 'Elo Boost' },
+                { href: '/services#win-boost', label: 'Win Boost' },
+                { href: '/services#coaching',  label: 'Coaching' },
+                { href: '/services#clash',     label: 'Clash'    },
               ]},
-              { title: t('footer.company'), links: [
-                { href: '/pricing',   label: t('footer.pricing')  },
-                { href: '/security',  label: t('footer.security') },
-                { href: '/faq',       label: t('footer.faq')      },
-                { href: '/boosters',  label: t('nav.boosters')    },
+              { title: 'Empresa', links: [
+                { href: '/pricing',   label: 'Preços'    },
+                { href: '/security',  label: 'Segurança' },
+                { href: '/faq',       label: 'FAQ'       },
+                { href: '/boosters',  label: 'Boosters'  },
               ]},
             ].map(({ title, links }) => (
               <div key={title}>
@@ -150,9 +148,9 @@ export function PublicLayout() {
             ))}
 
             <div className="col-span-2 md:col-span-1">
-              <p className="section-label mb-2.5">{t('footer.needHelp')}</p>
+              <p className="section-label mb-2.5">Precisa de ajuda?</p>
               <p className="text-sm text-ink-secondary leading-relaxed mb-3">
-                {t('footer.supportDescription')}
+                Nossa equipe de suporte está disponível 24 horas por dia para ajudar com qualquer dúvida ou problema.
               </p>
               {DISCORD_SUPPORT_URL && (
                 <a
@@ -162,17 +160,17 @@ export function PublicLayout() {
                   className="inline-flex items-center gap-2 text-sm font-semibold text-brand hover:text-brand/80 transition-colors"
                 >
                   <MessageCircle className="h-4 w-4 shrink-0" />
-                  {t('footer.joinDiscord')}
+                  Entrar no Discord
                 </a>
               )}
             </div>
           </div>
 
           <div className="mt-6 pt-4 border-t border-border-subtle flex flex-col md:flex-row items-center justify-between gap-3">
-            <p className="text-xs text-ink-muted">{t('footer.copyright', { year: new Date().getFullYear() })}</p>
+            <p className="text-xs text-ink-muted">© {new Date().getFullYear()} EloPeak. Todos os direitos reservados.</p>
             <div className="flex items-center gap-5">
-              <Link to="/privacy" className="text-xs text-ink-muted hover:text-ink-secondary">{t('footer.privacy')}</Link>
-              <Link to="/terms"   className="text-xs text-ink-muted hover:text-ink-secondary">{t('footer.terms')}</Link>
+              <Link to="/privacy" className="text-xs text-ink-muted hover:text-ink-secondary">Privacidade</Link>
+              <Link to="/terms"   className="text-xs text-ink-muted hover:text-ink-secondary">Termos</Link>
             </div>
           </div>
         </div>

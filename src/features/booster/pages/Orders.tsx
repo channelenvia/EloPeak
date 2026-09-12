@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Search, ShoppingBag } from 'lucide-react'
-import { EmptyState, Pagination, Skeleton } from '@/components/ui'
+import { ShoppingBag } from 'lucide-react'
+import { EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
@@ -51,17 +51,13 @@ export function BoosterOrdersPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-48 shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Buscar por ID do pedido..."
-              aria-label="Buscar por ID do pedido"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input-base pl-8 py-1.5 text-xs"
-            />
-          </div>
+          <SearchInput
+            wrapperClassName="w-full sm:w-64 shrink-0"
+            placeholder="Buscar por ID do pedido..."
+            aria-label="Buscar por ID do pedido"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <OrderStatusFilterDropdown
             tab={statusFilter.tab}
             onTabChange={statusFilter.setTab}

@@ -47,7 +47,9 @@ import {
     XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 function AssignedBoosterValue({ order }: { order: Order }) {
@@ -235,7 +237,7 @@ function PendingPaymentSection({ order }: { order: Order }) {
         onOpenChange={setOpen}
         title="Pagamento PIX"
         description="Pedido ainda não pago. Gere o PIX quando quiser continuar ou cancele o pedido."
-        maxWidth="xl"
+        maxWidth="2xl"
       >
         {!pix ? (
         <div className="flex items-center justify-between">
@@ -293,14 +295,23 @@ function DropLockedBadge({ order }: { order: Order }) {
 }
 
 function CustomerDropModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
-  const [dropReason, setDropReason] = useState('')
   const requestDrop = useRequestCustomerOrderDrop(order.id)
   const remainingDrops = Math.max(0, MAX_CUSTOMER_DROPS - order.drop_count)
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
+
+  function close() { onClose(); reset({ reason: '' }) }
+  function submit(data: { reason: string }) {
+    requestDrop.mutate(data.reason.trim(), { onSuccess: close })
+  }
 
   return (
     <Modal
       open={open}
-      onOpenChange={(next) => { if (!next) { onClose(); setDropReason('') } }}
+      onOpenChange={(next) => { if (!next) close() }}
       title="Solicitar troca de booster"
       description="Enviamos ao admin para aprovação. O pedido continua ativo e passa para outro booster, sem cobrança ou reembolso."
     >
@@ -311,18 +322,18 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
         <label htmlFor="customer-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea id="customer-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="customer-drop-reason" {...register('reason')} placeholder="Descreva o motivo..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
       )}
       <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={() => { onClose(); setDropReason('') }}>Cancelar</Button>
+        <Button variant="ghost" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={requestDrop.isPending}
-          disabled={dropReason.trim().length < 10}
-          onClick={() => requestDrop.mutate(dropReason.trim(), { onSuccess: () => { onClose(); setDropReason('') } })}
+          disabled={!isValid}
+          onClick={handleSubmit(submit)}
         >
           Enviar Solicitação
         </Button>
@@ -334,7 +345,6 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const currency = useCurrency()
   const { profile } = useAuthStore()
   const [dropModalOpen, setDropModalOpen] = useState(false)
@@ -422,7 +432,7 @@ export function OrderDetailPage() {
     ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
     { icon: UserCheck, label: 'Booster associado', value: <AssignedBoosterValue order={order} /> },
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
-    { icon: Wallet, label: t('customer.order.totalPaid'), value: currency(order.total_price) },
+    { icon: Wallet, label: 'Total Pago', value: currency(order.total_price) },
   ]
 
   // getOrderStatusGroup === 'in_progress' cobre assigned/in_progress/paused
@@ -452,7 +462,7 @@ export function OrderDetailPage() {
         extra={(
           <>
             <span className="text-xs text-ink-muted">
-              {getOrderServiceName(order)} · {t('customer.order.created', { date: formatDateTime(order.created_at) })}
+              {getOrderServiceName(order)} · Criado {formatDateTime(order.created_at)}
             </span>
             {order.drop_count > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
@@ -487,11 +497,11 @@ export function OrderDetailPage() {
       <OrderDetailShell
         order={order}
         viewerRole="customer"
-        detailsTitle={t('customer.order.details')}
+        detailsTitle="Detalhes do Pedido"
         history={history}
         coachPackage={coachPackage}
         infoItems={infoItems}
-        notesLabel={t('customer.order.notes')}
+        notesLabel="Suas Notas"
         syncMatches={syncMatches}
         accountSectionRef={accountSectionRef}
         // Deliberadamente NÃO usa getOrderStatusGroup: essa lista é "todo

@@ -8,12 +8,14 @@ import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { applyCoupon, getWinBoostPrice } from '@/lib/pricing'
-import { getBoostFlow, resolveAddonLabel } from '@/lib/boostDomain'
+import { getBoostFlow, resolveAddonLabel, isValidRiotId } from '@/lib/boostDomain'
 import { ChevronRight, ChevronLeft, RotateCcw, Shield, Clock, Star, UserCheck, Tag, X } from 'lucide-react'
 import type { ServiceType, Rank } from '@/types'
-import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { getCustomerOrderState } from '@/api/orders'
+import { useCatalogGameId, useCatalogServiceId } from '@/api/catalog'
+import { getAssignedBoosterProfile } from '@/api/boosters'
+import { getActiveCoachingPackage } from '@/api/coaching'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 
 const VALID_SERVICES: ServiceType[] = ['elo_boost', 'win_boost', 'clash', 'coaching']
@@ -43,12 +45,6 @@ const STEP_COMPONENTS: Record<OrderBuilderStep, React.ComponentType> = {
   extras: StepExtras,
   review: StepReview,
   payment: StepPayment,
-}
-
-// Riot ID no formato Nome#TAG (3-16 chars antes do #, 2-5 alfanuméricos
-// depois) — mesmo formato aceito pelo lookup da Riot em StepConfigure.tsx.
-function isValidRiotId(riotId: string): boolean {
-  return /^.{3,16}#[^#]{2,5}$/.test(riotId.trim())
 }
 
 // Regras de "step completo" usadas só para gatear o botão Continuar — a
@@ -269,34 +265,18 @@ export function OrderBuilderPage() {
   // e StepConfigure.tsx só conhecem o slug/tipo, então resolvemos os uuids
   // aqui, uma vez, antes que StepPayment precise deles pra criar o pedido
   // (create-pix-payment exige uuid real em service_id/game_id).
-  const { data: gameRow } = useQuery({
-    queryKey: ['catalog-game', gameSlug],
-    queryFn: async () => {
-      const { data } = await supabase.from('games').select('id').eq('slug', gameSlug!).maybeSingle()
-      return data
-    },
-    enabled: !!gameSlug,
-    staleTime: 1000 * 60 * 30,
-  })
+  const { data: resolvedGameId } = useCatalogGameId(gameSlug)
   useEffect(() => {
-    if (gameRow?.id && gameRow.id !== gameId) setGame(gameSlug!, gameRow.id)
-  }, [gameRow, gameId, gameSlug, setGame])
+    if (resolvedGameId && resolvedGameId !== gameId) setGame(gameSlug!, resolvedGameId)
+  }, [resolvedGameId, gameId, gameSlug, setGame])
 
-  const { data: serviceRow } = useQuery({
-    queryKey: ['catalog-service', gameRow?.id, serviceType],
-    queryFn: async () => {
-      const catalogServiceType = serviceType === 'md5' ? 'win_boost' : serviceType
-      const { data } = await supabase.from('services').select('id').eq('game_id', gameRow!.id).eq('type', catalogServiceType!).maybeSingle()
-      return data
-    },
-    enabled: !!gameRow?.id && !!serviceType,
-    staleTime: 1000 * 60 * 30,
-  })
+  const catalogServiceType = serviceType === 'md5' ? 'win_boost' : serviceType
+  const { data: resolvedServiceId } = useCatalogServiceId(resolvedGameId, catalogServiceType)
   useEffect(() => {
     // Só sobe o uuid resolvido — NÃO reaplica setService (que resetaria
     // winsPurchased/MD5 e apagaria as partidas restantes recém-detectadas).
-    if (serviceRow?.id && serviceRow.id !== serviceId) setServiceId(serviceRow.id)
-  }, [serviceRow, serviceId, setServiceId])
+    if (resolvedServiceId && resolvedServiceId !== serviceId) setServiceId(resolvedServiceId)
+  }, [resolvedServiceId, serviceId, setServiceId])
 
   // `?new=1` sozinho (sem parâmetro de catálogo) só significa "descarte a
   // configuração em memória e volte pro primeiro passo" -- usado depois de um
@@ -388,27 +368,18 @@ export function OrderBuilderPage() {
       // Revalida no cliente pra exibir o nome (a validação que importa é a
       // server-side, ao criar o pedido) — id inválido/não aprovado é
       // simplesmente ignorado, sem erro visível.
-      supabase
-        .from('public_booster_profiles')
-        .select('user_id, display_name')
-        .eq('user_id', boosterId)
-        .maybeSingle()
-        .then(({ data }) => {
+      getAssignedBoosterProfile(boosterId)
+        .then((data) => {
           if (data?.user_id && data.display_name) setPreferredBooster(data.user_id, data.display_name)
         })
+        .catch(() => {})
     }
 
     if (coachPackageId) {
       // Mesma lógica defensiva do ?booster= — id inválido/inativo é
       // ignorado silenciosamente; a validação que importa é server-side.
-      supabase
-        .from('booster_services')
-        .select('id, title, description, requirements, price, tempo, booster_id, is_active, service_type, lanes, specialties, champions')
-        .eq('id', coachPackageId)
-        .eq('service_type', 'coaching')
-        .eq('is_active', true)
-        .maybeSingle()
-        .then(async ({ data: pkg }) => {
+      getActiveCoachingPackage(coachPackageId)
+        .then(async (pkg) => {
           if (!pkg) return
           setSelectedCoachPackage({
             id: pkg.id, title: pkg.title, price: pkg.price, tempo: pkg.tempo,
@@ -417,14 +388,11 @@ export function OrderBuilderPage() {
           })
           setBasePrice(pkg.price)
           if (!boosterId) {
-            const { data: boosterRow } = await supabase
-              .from('public_booster_profiles')
-              .select('user_id, display_name')
-              .eq('user_id', pkg.booster_id)
-              .maybeSingle()
+            const boosterRow = await getAssignedBoosterProfile(pkg.booster_id)
             if (boosterRow?.user_id && boosterRow.display_name) setPreferredBooster(boosterRow.user_id, boosterRow.display_name)
           }
         })
+        .catch(() => {})
     }
 
     // Mantém um marcador após consumir os parâmetros de entrada (e derruba um
@@ -551,7 +519,7 @@ export function OrderBuilderPage() {
           {/* Popup do PIX -- só abre por ação explícita na revisão. Dentro
               dele, o QR também só é gerado ao clicar em "Gerar PIX". */}
           {step === 'review' && (
-            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="xl">
+            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="2xl">
               <StepPayment insideModal />
             </Modal>
           )}

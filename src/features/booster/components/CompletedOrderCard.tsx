@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Card, OrderStatusBadge } from '@/components/ui'
 import { getOrderServiceName, boosterEarningsShare } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
+import { useBoosterServiceDetails } from '@/api/coaching'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
 import { OrderCardFooter } from '@/components/order/OrderCardFooter'
 import type { Order } from '@/types'
@@ -17,6 +18,11 @@ interface CompletedOrderCardProps {
 // total pago pelo cliente).
 export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
   const currency = useCurrency()
+  // Mesmo título do pacote mostrado na aba "Pegar" -- pra um pedido de
+  // coaching não virar só "Coaching" genérico na lista.
+  const { data: coachPackage } = useBoosterServiceDetails(
+    order.service_type === 'coaching' ? (order.booster_service_id ?? undefined) : undefined,
+  )
 
   return (
     <Link to={`/booster/orders/${order.id}`}>
@@ -29,7 +35,7 @@ export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
                 <span className="text-[9px] font-bold uppercase tracking-wide text-warning bg-warning/10 px-1.5 py-0.5 rounded">Dropado</span>
               )}
             </div>
-            <p className="text-sm font-semibold text-ink truncate">{getOrderServiceName(order)}</p>
+            <p className="text-sm font-semibold text-ink truncate">{coachPackage?.title ?? getOrderServiceName(order)}</p>
           </div>
           <OrderStatusBadge order={order} />
         </div>

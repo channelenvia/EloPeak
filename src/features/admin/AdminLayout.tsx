@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui'
-import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/authStore'
 import { NotificationBell } from '@/components/NotificationBell'
 import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'
@@ -17,7 +16,6 @@ import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 
 export function AdminLayout() {
   const { pathname } = useLocation()
-  const { t } = useTranslation()
   const { profile } = useAuthStore()
   const [panelOpen, setPanelOpen] = useState(false)
   useChatMentionSound()
@@ -25,22 +23,22 @@ export function AdminLayout() {
 
   const NAV_SECTIONS: SidebarNavSection[] = [
     {
-      label: t('admin.nav.operations'),
+      label: 'Operações',
       items: [
-        { href: '/admin',           icon: LayoutDashboard, label: t('admin.nav.overview')   },
-        { href: '/admin/orders',    icon: ShoppingBag,     label: t('admin.nav.orders')     },
-        { href: '/admin/boosters',  icon: Shield,          label: t('admin.nav.boosters')   },
-        { href: '/admin/customers', icon: Users,           label: t('admin.nav.customers')  },
-        { href: '/admin/drops',     icon: AlertTriangle,   label: 'Drops'                   },
-        { href: '/admin/duo-accounts', icon: Landmark,     label: 'Contas Duo'              },
+        { href: '/admin',           icon: LayoutDashboard, label: 'Visão Geral' },
+        { href: '/admin/orders',    icon: ShoppingBag,     label: 'Pedidos'     },
+        { href: '/admin/boosters',  icon: Shield,          label: 'Boosters'    },
+        { href: '/admin/customers', icon: Users,           label: 'Clientes'    },
+        { href: '/admin/drops',     icon: AlertTriangle,   label: 'Drops'       },
+        { href: '/admin/duo-accounts', icon: Landmark,     label: 'Contas Duo'  },
       ],
     },
     {
-      label: t('admin.nav.finance'),
+      label: 'Finanças',
       items: [
-        { href: '/admin/payments', icon: DollarSign, label: t('admin.nav.payments') },
+        { href: '/admin/payments', icon: DollarSign, label: 'Pagamentos' },
         { href: '/admin/payouts',  icon: Banknote,    label: 'Saques' },
-        { href: '/admin/refunds',  icon: RefreshCw,  label: t('admin.nav.refunds')  },
+        { href: '/admin/refunds',  icon: RefreshCw,  label: 'A analisar' },
       ],
     },
   ]

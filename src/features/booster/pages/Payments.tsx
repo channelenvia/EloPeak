@@ -3,8 +3,10 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Wallet, Banknote, PiggyBank, Hourglass, Send, FileText, XCircle, CalendarClock } from 'lucide-react'
-import { Button, Card, Skeleton, EmptyState, StatCard, ErrorAlert, CurrencyMaskedInput } from '@/components/ui'
-import { formatDateTime, cn, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_REQUEST_STATUS_COLOR } from '@/lib/utils'
+import { Button, Card, FilterTabs, Pagination, Skeleton, EmptyState, StatCard, ErrorAlert, CurrencyMaskedInput } from '@/components/ui'
+import { formatDateTime, cn, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_REQUEST_STATUS_COLOR, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 import { useAuthStore } from '@/stores/authStore'
 import { useCurrency } from '@/hooks/useCurrency'
 import { isWithdrawalWindowOpen, nextWithdrawalDayLabel } from '@/lib/payoutWithdrawalWindow'
@@ -12,6 +14,7 @@ import {
   useBoosterPayoutTotals, useBoosterPayoutRequests, useRequestPayout, useCancelPayoutRequest,
   getPayoutProofSignedUrl, MIN_PAYOUT_AMOUNT,
 } from '@/api/payouts'
+import type { PayoutRequestStatus } from '@/api/payouts'
 
 const STATUS_LABEL = PAYOUT_REQUEST_STATUS_LABEL
 const STATUS_COLOR = PAYOUT_REQUEST_STATUS_COLOR
@@ -139,6 +142,11 @@ export function BoosterPaymentsPage() {
   const { data: totals, isLoading: loadingTotals } = useBoosterPayoutTotals(profile?.id)
   const { data: requests, isLoading: loadingRequests } = useBoosterPayoutRequests(profile?.id)
   const cancelRequest = useCancelPayoutRequest(profile?.id)
+  type PaymentsStatusFilter = 'all' | 'pending' | 'paid' | 'rejected'
+  const matchesFilter = (r: { status: PayoutRequestStatus }, f: PaymentsStatusFilter) =>
+    f === 'all' ? true : f === 'pending' ? PAYOUT_PENDING_STATUSES.includes(r.status) : r.status === f
+  const { value: statusFilter, onChange: setStatusFilter, countFor, filtered } = useCountedFilterTabs(requests, 'all' as PaymentsStatusFilter, matchesFilter)
+  const { page, pageItems, hasNextPage, onPrev, onNext } = usePagedList(filtered, 20, statusFilter)
 
   const BALANCE_BOXES = [
     { label: 'Total Ganho', value: totals?.total_earned ?? 0, icon: Wallet, color: 'text-success bg-success/10' },
@@ -171,41 +179,62 @@ export function BoosterPaymentsPage() {
         <WithdrawalWindowClosedCard />
       )}
 
-      <Card padding="md">
-        <h3 className="text-base font-semibold text-ink mb-4">Histórico de solicitações</h3>
+      <div>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="text-base font-semibold text-ink">Histórico de solicitações</h3>
+          {!!requests?.length && (
+            <FilterTabs
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'Todos', count: countFor('all') },
+                { value: 'pending', label: 'Aguardando', count: countFor('pending') },
+                { value: 'paid', label: 'Pago', count: countFor('paid') },
+                { value: 'rejected', label: 'Rejeitado', count: countFor('rejected') },
+              ]}
+            />
+          )}
+        </div>
         {loadingRequests ? (
-          <Skeleton className="h-32 w-full" />
-        ) : !requests?.length ? (
-          <EmptyState icon={Wallet} title="Nenhuma solicitação de saque ainda." />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
+          </div>
+        ) : !filtered.length ? (
+          <Card padding="md"><EmptyState icon={Wallet} title={requests?.length ? 'Nenhuma solicitação com esse status.' : 'Nenhuma solicitação de saque ainda.'} /></Card>
         ) : (
-          <div className="space-y-2">
-            {requests.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 py-3 border-b border-border-subtle last:border-0">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-ink" data-tabular>{currency(r.amount)}</p>
-                  <p className="text-xs text-ink-muted">{formatDateTime(r.requested_at)}</p>
-                  {r.admin_note && <p className="text-xs text-ink-secondary mt-0.5">{r.admin_note}</p>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLOR[r.status])}>
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {pageItems.map((r) => (
+              <Card key={r.id} padding="md" className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-lg font-black text-ink" data-tabular>{currency(r.amount)}</p>
+                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0', STATUS_COLOR[r.status])}>
                     {STATUS_LABEL[r.status]}
                   </span>
-                  {r.status === 'paid' && r.proof_url && (
-                    <Button size="xs" variant="secondary" leftIcon={<FileText className="h-3.5 w-3.5" />} onClick={() => viewProof(r.proof_url!)}>
-                      Comprovante
-                    </Button>
-                  )}
-                  {(r.status === 'requested' || r.status === 'under_review') && (
-                    <Button size="xs" variant="danger-ghost" leftIcon={<XCircle className="h-3.5 w-3.5" />} loading={cancelRequest.isPending && cancelRequest.variables === r.id} onClick={() => cancelRequest.mutate(r.id)}>
-                      Cancelar
-                    </Button>
-                  )}
                 </div>
-              </div>
+                <p className="text-[11px] text-ink-muted">{formatDateTime(r.requested_at)}</p>
+                {r.admin_note && <p className="text-xs text-ink-secondary line-clamp-2">{r.admin_note}</p>}
+                {(r.status === 'paid' && r.proof_url) || r.status === 'requested' || r.status === 'under_review' ? (
+                  <div className="mt-auto pt-1">
+                    {r.status === 'paid' && r.proof_url && (
+                      <Button size="xs" variant="secondary" className="w-full" leftIcon={<FileText className="h-3.5 w-3.5" />} onClick={() => viewProof(r.proof_url!)}>
+                        Comprovante
+                      </Button>
+                    )}
+                    {(r.status === 'requested' || r.status === 'under_review') && (
+                      <Button size="xs" variant="danger-ghost" className="w-full" leftIcon={<XCircle className="h-3.5 w-3.5" />} loading={cancelRequest.isPending && cancelRequest.variables === r.id} onClick={() => cancelRequest.mutate(r.id)}>
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
+              </Card>
             ))}
           </div>
+          <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
+          </>
         )}
-      </Card>
+      </div>
     </div>
   )
 }

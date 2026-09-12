@@ -1,10 +1,11 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
-import { Button, Card, OrderStatusBadge, Skeleton, EmptyState, StarRating } from '@/components/ui'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { formatDate, timeAgo, getOrderServiceName } from '@/lib/utils'
+import { ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
+import { Card, DetailPageHeader, Pagination, Skeleton, EmptyState, StarRating } from '@/components/ui'
+import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
+import { formatDate, timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminCustomerDetail, useAdminCustomerOrders, useAdminCustomerReviews } from '@/api/customers'
+import { usePagedList } from '@/hooks/usePagedList'
 
 export function AdminCustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -13,22 +14,19 @@ export function AdminCustomerDetailPage() {
   const { data: customer, isLoading } = useAdminCustomerDetail(id)
   const { data: orders, isLoading: loadingOrders } = useAdminCustomerOrders(customer?.user_id)
   const { data: reviews, isLoading: loadingReviews } = useAdminCustomerReviews(customer?.user_id)
+  const ordersPage = usePagedList(orders ?? [], 20)
+  const reviewsPage = usePagedList(reviews ?? [], 20)
 
   if (isLoading) return <Skeleton className="h-48 w-full" />
   if (!customer) return <p className="text-ink-muted">Cliente não encontrado.</p>
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button asChild variant="ghost" size="icon" aria-label="Voltar">
-          <Link to="/admin/customers"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
-        <div>
-          <h1 className="text-xl font-bold text-ink">{customer.profiles?.username ?? 'Cliente'}</h1>
-          <p className="text-xs text-ink-muted">{customer.profiles?.email ?? '—'}</p>
-        </div>
-      </div>
+      <DetailPageHeader
+        backHref="/admin/customers"
+        title={customer.profiles?.username ?? 'Cliente'}
+        subtitle={<span className="text-xs text-ink-muted">{customer.profiles?.email ?? '—'}</span>}
+      />
 
       {/* Controle */}
       <Card padding="md">
@@ -52,66 +50,57 @@ export function AdminCustomerDetailPage() {
       </Card>
 
       {/* Pedidos */}
-      <Card padding="md">
+      <div>
         <h3 className="text-base font-semibold text-ink mb-3">Pedidos</h3>
         {loadingOrders ? (
-          <Skeleton className="h-32 w-full" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
+          </div>
         ) : !orders?.length ? (
-          <EmptyState icon={ShoppingBag} title="Nenhum pedido ainda" />
+          <Card padding="none"><EmptyState icon={ShoppingBag} title="Nenhum pedido ainda" /></Card>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Serviço</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Criado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id} clickable>
-                  <TableCell>
-                    <Link to={`/admin/orders/${order.id}`} className="font-mono text-brand hover:underline text-xs">
-                      #{order.id.slice(0, 8).toUpperCase()}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-ink">{getOrderServiceName(order)}</TableCell>
-                  <TableCell className="font-semibold text-ink">{currency(order.total_price)}</TableCell>
-                  <TableCell><OrderStatusBadge order={order} /></TableCell>
-                  <TableCell>{timeAgo(order.created_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-
-      {/* Avaliações dadas */}
-      <Card padding="md">
-        <h3 className="text-base font-semibold text-ink mb-3">Avaliações Dadas</h3>
-        {loadingReviews ? (
-          <Skeleton className="h-24 w-full" />
-        ) : !reviews?.length ? (
-          <EmptyState icon={Star} title="Nenhuma avaliação ainda" />
-        ) : (
-          <div className="space-y-3">
-            {reviews.map((review) => (
-              <div key={review.id} className="border-b border-border-subtle last:border-0 pb-3 last:pb-0">
-                <div className="flex items-center justify-between mb-1">
-                  <StarRating rating={review.rating} size="sm" />
-                  <span className="text-[10px] text-ink-muted">{timeAgo(review.created_at)}</span>
-                </div>
-                {review.content && <p className="text-xs text-ink-secondary">{review.content}</p>}
-                <Link to={`/admin/orders/${review.order_id}`} className="text-[10px] text-brand hover:underline mt-1 inline-block">
-                  Ver pedido #{review.order_id.slice(0, 8).toUpperCase()}
-                </Link>
-              </div>
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {ordersPage.pageItems.map((order) => (
+              <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" viewerRole="admin" />
             ))}
           </div>
+          <Pagination page={ordersPage.page} hasNextPage={ordersPage.hasNextPage} onPrev={ordersPage.onPrev} onNext={ordersPage.onNext} />
+          </>
         )}
-      </Card>
+      </div>
+
+      {/* Avaliações dadas */}
+      <div>
+        <h3 className="text-base font-semibold text-ink mb-3">Avaliações Dadas</h3>
+        {loadingReviews ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-2xl" />)}
+          </div>
+        ) : !reviews?.length ? (
+          <Card padding="none"><EmptyState icon={Star} title="Nenhuma avaliação ainda" /></Card>
+        ) : (
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {reviewsPage.pageItems.map((review) => (
+              <Link key={review.id} to={`/admin/orders/${review.order_id}`}>
+                <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <StarRating rating={review.rating} size="sm" />
+                    <span className="text-[10px] text-ink-muted">{timeAgo(review.created_at)}</span>
+                  </div>
+                  {review.content && <p className="text-xs text-ink-secondary line-clamp-3">{review.content}</p>}
+                  <span className="text-[10px] text-brand mt-auto pt-1">
+                    Ver pedido #{review.order_id.slice(0, 8).toUpperCase()}
+                  </span>
+                </Card>
+              </Link>
+            ))}
+          </div>
+          <Pagination page={reviewsPage.page} hasNextPage={reviewsPage.hasNextPage} onPrev={reviewsPage.onPrev} onNext={reviewsPage.onNext} />
+          </>
+        )}
+      </div>
     </div>
   )
 }

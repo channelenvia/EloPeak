@@ -6,6 +6,7 @@ import {
   getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
   getOwnBoosterTop3Status, getOwnProfessionalProfile, getPublicBooster, getTopBoosters, listAdminBoosters,
   listBoosterAdminNotes, listBoostersPerformance, listBoostersWithSlots, listBoosterNames, listPublicBoosters,
+  getOwnBoosterSlotEligibility, getOwnBoosterFullProfile,
 } from './queries'
 import {
   adminApproveBooster, boosterHeartbeat, expelBooster, onboardBooster, setBoosterAdminNote,
@@ -16,6 +17,22 @@ export function useBoosterStatus(userId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.boosters.status(userId ?? ''),
     queryFn: () => getBoosterAccessState(userId!),
+    enabled: !!userId,
+  })
+}
+
+export function useOwnBoosterSlotEligibility(userId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.boosters.slotEligibility(userId ?? ''),
+    queryFn: () => getOwnBoosterSlotEligibility(userId!),
+    enabled: !!userId,
+  })
+}
+
+export function useOwnBoosterFullProfile(userId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.boosters.ownFullProfile(userId ?? ''),
+    queryFn: () => getOwnBoosterFullProfile(userId!),
     enabled: !!userId,
   })
 }

@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Button, LogoMark } from '@/components/ui'
 import { PageLoader } from '@/components/ui/Spinner'
+// signInWithOAuth é uma chamada de auth direta (fluxo Discord PKCE), não uma
+// query de src/api/*.
+// eslint-disable-next-line no-restricted-imports
 import { supabase } from '@/lib/supabase'
 import { checkRateLimit, limits } from '@/lib/rateLimit'
 import { LEGAL_VERSION, hasAcceptedLegal } from '@/lib/legal'

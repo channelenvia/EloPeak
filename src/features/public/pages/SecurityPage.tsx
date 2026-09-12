@@ -1,69 +1,66 @@
 import { Shield, Lock, Eye, Cpu, Server, CreditCard, Check } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
 
 export function SecurityPage() {
-  const { t } = useTranslation()
-
   const PILLARS = [
     {
       icon: Shield,
-      title: t('security.pillars.accountProtection'),
+      title: 'Proteção da Conta',
       items: [
-        t('security.items.vpn'),
-        t('security.items.offline'),
-        t('security.items.noCredentials'),
-        t('security.items.cleanIp'),
+        'VPN ativado em cada sessão de jogo',
+        "Modo 'Aparecer Offline' — sua lista de amigos fica limpa",
+        'Credenciais não armazenadas além da sessão ativa',
+        'Boosters operam com histórico de IP limpo',
       ],
     },
     {
       icon: Lock,
-      title: t('security.pillars.authSessions'),
+      title: 'Autenticação & Sessões',
       items: [
-        t('security.items.bcrypt'),
-        t('security.items.jwt'),
-        t('security.items.revocation'),
-        t('security.items.2fa'),
+        'Auth Supabase com hash bcrypt de senhas',
+        'Sessões JWT seguras com rotação automática',
+        'Revogação de sessão ao trocar a senha',
+        '2FA disponível para sua conta',
       ],
     },
     {
       icon: CreditCard,
-      title: t('security.pillars.paymentSecurity'),
+      title: 'Segurança do Pagamento',
       items: [
-        t('security.items.payment'),
-        t('security.items.pci'),
-        t('security.items.webhook'),
-        t('security.items.idempotent'),
+        'Pagamentos via PIX processados com segurança pelo Mercado Pago',
+        'Processamento de pagamento compatível com PCI-DSS',
+        'Validação de assinatura de webhook em cada evento',
+        'Operações de pagamento idempotentes evitam cobranças duplas',
       ],
     },
     {
       icon: Eye,
-      title: t('security.pillars.privacy'),
+      title: 'Privacidade & Dados',
       items: [
-        t('security.items.minimal'),
-        t('security.items.noEmail'),
-        t('security.items.privateUrls'),
-        t('security.items.deletion'),
+        'Coleta mínima de dados — apenas o necessário',
+        'Booster nunca vê seu e-mail completo ou dados pessoais',
+        'Todos os arquivos usam URLs privadas com expiração',
+        'Exclusão de dados disponível ao fechar a conta',
       ],
     },
     {
       icon: Cpu,
-      title: t('security.pillars.accessControl'),
+      title: 'Controle de Acesso',
       items: [
-        t('security.items.rls'),
-        t('security.items.boosters'),
-        t('security.items.audit'),
-        t('security.items.serverSide'),
+        'Segurança em nível de linha — clientes só veem seus próprios pedidos',
+        'Boosters só acessam os jobs atribuídos a eles',
+        'Acesso admin totalmente auditado e registrado',
+        'Funções aplicadas no servidor, nunca confiando no cliente',
       ],
     },
     {
       icon: Server,
-      title: t('security.pillars.infrastructure'),
+      title: 'Infraestrutura',
       items: [
-        t('security.items.encrypted'),
-        t('security.items.soc2'),
-        t('security.items.backups'),
+        'Todos os dados criptografados em repouso e em trânsito (TLS 1.3)',
+        'Hospedado na Supabase (certificada SOC 2 Tipo II)',
+        'Backups automáticos regulares',
       ],
     },
   ]
@@ -77,10 +74,10 @@ export function SecurityPage() {
       <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
       <div className="container-wide space-y-16 relative">
         <ScrollReveal className="text-center">
-          <p className="section-label mb-3">{t('security.sectionLabel')}</p>
-          <h1 className="text-4xl font-extrabold text-ink mb-4">{t('security.title')}</h1>
+          <p className="section-label mb-3">Confiança & Segurança</p>
+          <h1 className="text-4xl font-extrabold text-ink mb-4">Segurança</h1>
           <p className="text-lg text-ink-secondary max-w-xl mx-auto">
-            {t('security.subtitle')}
+            Como protegemos você e sua conta.
           </p>
         </ScrollReveal>
 

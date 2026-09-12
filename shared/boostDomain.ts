@@ -172,3 +172,13 @@ export function isRankLocked(
 // Zod da Edge Function é quem efetivamente recusa o campo (ver seção 19 do
 // contrato de API).
 export const MASTER_PLUS_FORBIDDEN_FIELDS = ['targetPdl', 'target_pdl', 'targetLp', 'target_lp'] as const
+
+// Formato Nome#TAG do Riot ID (1-16 chars antes do #, sem '#' no nome; 2-5
+// chars alfanuméricos depois). Fonte única — antes havia 2 regex divergentes
+// (uma exigia mínimo de 3 chars no nome) causando gate inconsistente entre
+// telas.
+export const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
+
+export function isValidRiotId(riotId: string): boolean {
+  return RIOT_ID_FORMAT.test(riotId.trim())
+}

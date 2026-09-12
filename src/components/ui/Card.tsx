@@ -5,17 +5,11 @@ import { cn } from '@/lib/utils'
 // variante carrega a classe base "card"/"card-raised"/"card-glass"/
 // "card-brand" pra preservar a herança tipográfica de @layer components
 // (globals.css) mesmo quando @layer utilities sobrescreve bg/border/shadow
-// (utilities sempre vence components na ordem de layer do Tailwind). Os 4
-// nomes antigos (default/elevated/brand/glass) continuam válidos como
-// aliases.
+// (utilities sempre vence components na ordem de layer do Tailwind).
 const cardVariants = cva('transition-all duration-base', {
   variants: {
     variant: {
-      // Aliases retrocompatíveis
-      default: 'card',
-      elevated: 'card-raised',
       brand: 'card-brand',
-      glass: 'card-glass',
       // Standard — agrupamento geral de informação. É o card "default".
       standard: 'card',
       // Interactive — clicável/navegável (order cards, booster cards). Mesmo
@@ -55,7 +49,7 @@ const cardVariants = cva('transition-all duration-base', {
     { variant: 'attention', tone: 'info', class: 'border-l-info/50 bg-info/[0.03]' },
   ],
   defaultVariants: {
-    variant: 'default',
+    variant: 'standard',
     tone: 'danger',
     padding: 'md',
   },

@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Landmark, Plus, Eye, EyeOff, Search, CheckCircle2, Trash2, History } from 'lucide-react'
-import { Button, EmptyState, Skeleton, Modal, RankBadge, ErrorAlert } from '@/components/ui'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Landmark, Plus, Eye, EyeOff, Copy, Search, CheckCircle2, Trash2, History } from 'lucide-react'
+import { Button, Card, EmptyState, FilterTabs, Pagination, SearchInput, Skeleton, Modal, RankBadge, ErrorAlert } from '@/components/ui'
 import { FormField } from '@/components/ui/FormField'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { RANK_TIER_LABEL, formatDate, formatDateTime } from '@/lib/utils'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 import {
   useAdminDuoAccounts, useDuoAccountAutoRefresh, useAdminSaveDuoAccount, useAdminSetDuoAccountActive,
   useAdminReleaseDuoAccount, useAdminDeleteDuoAccount, useDuoAccountReservationHistory,
   lookupDuoAccountRiotRank, adminGetDuoAccountCredentials,
 } from '@/api/duoAccounts'
 import type { AdminDuoAccount } from '@/api/duoAccounts'
+import { RIOT_ID_FORMAT } from '@/lib/boostDomain'
 import type { Division, RankTier } from '@/types'
 
 function formatDurationSeconds(seconds: number): string {
@@ -99,8 +104,6 @@ function DuoAccountHistoryModal({ account, onClose }: { account: AdminDuoAccount
   )
 }
 
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
-
 interface AccountForm {
   riot_id: string
   tier: RankTier
@@ -137,15 +140,42 @@ function accountToForm(a: AdminDuoAccount): AccountForm {
 export function AdminDuoAccountsPage() {
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; account?: AdminDuoAccount } | null>(null)
   const [showPasswordField, setShowPasswordField] = useState(false)
-  const [form, setForm] = useState<AccountForm>(EMPTY_FORM)
   const [revealed, setRevealed] = useState<Record<string, { login: string; password: string } | 'loading' | 'error'>>({})
+  const revealTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [riotVerified, setRiotVerified] = useState(false)
   const [riotLookupError, setRiotLookupError] = useState<string | null>(null)
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
 
+  // riotVerified/mode não são campos do form -- são regras de quando login/
+  // senha passam a ser obrigatórios, então o schema é reconstruído a cada
+  // render fechando sobre eles (mesmo padrão de maxCents em Refunds.tsx).
+  const accountSchema = z.object({
+    riot_id: z.string().trim().min(1, 'Riot ID obrigatório.'),
+    tier: z.custom<RankTier>(),
+    division: z.custom<Division>(),
+    leaguePoints: z.number().nullable(),
+    avgGain: z.number().nullable(),
+    avgLoss: z.number().nullable(),
+    notes: z.string(),
+    is_active: z.boolean(),
+    login: z.string(),
+    password: z.string(),
+  }).superRefine((data, ctx) => {
+    if (modal?.mode !== 'create') return
+    if (!riotVerified) ctx.addIssue({ code: 'custom', path: ['riot_id'], message: 'Verifique o Riot ID antes de salvar.' })
+    if (!data.login.trim()) ctx.addIssue({ code: 'custom', path: ['login'], message: 'Login obrigatório.' })
+    if (!data.password.trim()) ctx.addIssue({ code: 'custom', path: ['password'], message: 'Senha obrigatória.' })
+  })
+
+  const { register, handleSubmit, watch, setValue, reset, getValues } = useForm<AccountForm>({
+    resolver: zodResolver(accountSchema),
+    defaultValues: EMPTY_FORM,
+  })
+  const form = watch()
+
   const lookupRiot = useMutation({
     mutationFn: async () => {
-      const trimmed = form.riot_id.trim()
+      const trimmed = getValues('riot_id').trim()
       if (!RIOT_ID_FORMAT.test(trimmed)) throw new Error('Riot ID inválido. Use o formato Nome#TAG (ex.: Fulano#BR1).')
       return lookupDuoAccountRiotRank(trimmed)
     },
@@ -156,14 +186,11 @@ export function AdminDuoAccountsPage() {
         setRiotLookupError(!result.found ? 'Conta Riot não encontrada.' : 'Conta sem rank nesta fila — contas Duo precisam de um rank definido.')
         return
       }
-      setForm((f) => ({
-        ...f,
-        tier: result.tier!,
-        division: result.division ?? 'IV',
-        leaguePoints: result.league_points ?? null,
-        avgGain: result.avg_lp_gain ?? null,
-        avgLoss: result.avg_lp_loss ?? null,
-      }))
+      setValue('tier', result.tier!)
+      setValue('division', result.division ?? 'IV')
+      setValue('leaguePoints', result.league_points ?? null)
+      setValue('avgGain', result.avg_lp_gain ?? null)
+      setValue('avgLoss', result.avg_lp_loss ?? null)
       setRiotLookupMessage(result.message ?? 'Rank preenchido automaticamente a partir da Riot.')
       setRiotVerified(true)
     },
@@ -175,41 +202,40 @@ export function AdminDuoAccountsPage() {
   })
 
   const { data: accounts, isLoading, isError, error: accountsError } = useAdminDuoAccounts()
+  const [search, setSearch] = useState('')
+  type DuoStatusFilter = 'all' | 'active' | 'inactive' | 'reserved'
+  const matchesStatus = (a: AdminDuoAccount, f: DuoStatusFilter) =>
+    f === 'all' ? true : f === 'reserved' ? !!a.reserved_by : f === 'active' ? a.is_active : !a.is_active
+  const { value: statusFilter, onChange: setStatusFilter, countFor, filtered: statusFiltered } = useCountedFilterTabs(accounts, 'all' as DuoStatusFilter, matchesStatus)
+  const filtered = statusFiltered.filter((a) => !search.trim() || (a.riot_id ?? a.label).toLowerCase().includes(search.trim().toLowerCase()))
+  const { page, pageItems, hasNextPage, onPrev, onNext } = usePagedList(filtered, 20, `${statusFilter}:${search}`)
 
   useDuoAccountAutoRefresh(accounts)
 
   useEffect(() => {
     if (!modal) return
-    setForm(modal.mode === 'edit' && modal.account ? accountToForm(modal.account) : EMPTY_FORM)
+    reset(modal.mode === 'edit' && modal.account ? accountToForm(modal.account) : EMPTY_FORM)
     // Contas já existentes já passaram pela verificação em algum momento —
     // só uma nova conta exige rodar o lookup antes de liberar as credenciais.
     setRiotVerified(modal.mode === 'edit')
     setRiotLookupError(null)
     setRiotLookupMessage(null)
     setShowPasswordField(false)
-  }, [modal])
+  }, [modal, reset])
 
   const saveMutation = useAdminSaveDuoAccount()
-  const save = {
-    isPending: saveMutation.isPending,
-    isError: saveMutation.isError,
-    error: saveMutation.error,
-    mutate: () => {
-      if (!form.riot_id.trim()) return
-      if (modal?.mode === 'create' && !riotVerified) return
-      if (modal?.mode === 'create' && (!form.login.trim() || !form.password.trim())) return
-      saveMutation.mutate({
-        accountId: modal?.mode === 'edit' ? modal.account?.id : undefined,
-        riotId: form.riot_id.trim(),
-        label: form.riot_id.trim(),
-        tier: form.tier,
-        division: form.division,
-        notes: form.notes.trim() || undefined,
-        isActive: form.is_active,
-        login: form.login.trim() || undefined,
-        password: form.password || undefined,
-      }, { onSuccess: () => setModal(null) })
-    },
+  function onSubmit(data: AccountForm) {
+    saveMutation.mutate({
+      accountId: modal?.mode === 'edit' ? modal.account?.id : undefined,
+      riotId: data.riot_id.trim(),
+      label: data.riot_id.trim(),
+      tier: data.tier,
+      division: data.division,
+      notes: data.notes.trim() || undefined,
+      isActive: data.is_active,
+      login: data.login.trim() || undefined,
+      password: data.password || undefined,
+    }, { onSuccess: () => setModal(null) })
   }
 
   const toggleActiveMutation = useAdminSetDuoAccountActive()
@@ -235,9 +261,15 @@ export function AdminDuoAccountsPage() {
     mutate: (accountId: string) => deleteAccountMutation.mutate(accountId, { onSuccess: () => setDeleteTarget(null) }),
   }
 
+  function hideReveal(accountId: string) {
+    clearTimeout(revealTimers.current[accountId])
+    delete revealTimers.current[accountId]
+    setRevealed((r) => { const next = { ...r }; delete next[accountId]; return next })
+  }
+
   async function toggleReveal(a: AdminDuoAccount) {
     if (revealed[a.id] && revealed[a.id] !== 'error') {
-      setRevealed((r) => { const next = { ...r }; delete next[a.id]; return next })
+      hideReveal(a.id)
       return
     }
     setRevealed((r) => ({ ...r, [a.id]: 'loading' }))
@@ -247,7 +279,10 @@ export function AdminDuoAccountsPage() {
       return
     }
     setRevealed((r) => ({ ...r, [a.id]: { login: res.login!, password: res.password! } }))
+    revealTimers.current[a.id] = setTimeout(() => hideReveal(a.id), 15_000)
   }
+
+  useEffect(() => () => { Object.values(revealTimers.current).forEach(clearTimeout) }, [])
 
   return (
     <div className="space-y-6">
@@ -261,113 +296,144 @@ export function AdminDuoAccountsPage() {
         </Button>
       </div>
 
-      <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
-        {isLoading ? <div className="p-4"><Skeleton className="h-48 w-full" /></div> :
-          isError ? <div className="p-4"><ErrorAlert message={accountsError instanceof Error ? accountsError.message : 'Não foi possível carregar as contas Duo.'} /></div> :
-          !accounts?.length ? <EmptyState icon={Landmark} title="Nenhuma conta cadastrada" description="Adicione contas para que boosters possam usá-las em Duo Boost." /> : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Conta</TableHead>
-                <TableHead>Rank</TableHead>
-                <TableHead>Credenciais</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Reserva</TableHead>
-                <TableHead>Criada em</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {accounts.map((a) => {
-                const rev = revealed[a.id]
-                return (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-medium text-ink">{a.riot_id ?? a.label}</TableCell>
-                    <TableCell>
-                      {a.current_rank ? (
-                        <div className="flex items-center gap-2">
-                          <RankBadge tier={a.current_rank.tier} division={a.current_rank.division} size="xs" showLabel={false} />
-                          <span className="text-xs text-ink-secondary">
-                            {RANK_TIER_LABEL[a.current_rank.tier]}{a.current_rank.division ? ` ${a.current_rank.division}` : ''}
-                          </span>
-                        </div>
-                      ) : <span className="text-[10px] text-ink-muted">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      {rev && rev !== 'loading' && rev !== 'error' ? (
-                        <div className="text-xs font-mono text-ink space-y-0.5">
-                          <p>{rev.login}</p>
-                          <p className="text-ink-muted">{rev.password}</p>
-                        </div>
-                      ) : rev === 'error' ? (
-                        <span className="text-xs text-danger">Falha ao revelar</span>
-                      ) : (
-                        <span className="text-xs text-ink-muted">••••••••</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        onClick={() => toggleActive.mutate(a)}
-                        disabled={toggleActiveMutation.isPending && toggleActiveMutation.variables?.accountId === a.id}
-                        className={`badge text-xs disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
-                      >
-                        {a.is_active ? 'Ativa' : 'Inativa'}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      {a.reserved_by ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setHistoryTarget(a)}
-                            className="badge text-xs text-warning bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer"
-                            title={a.reserved_by_name ? `Reservada por ${a.reserved_by_name} — ver histórico` : 'Ver histórico de reservas'}
-                          >
-                            Reservada
-                          </button>
-                          <Button size="xs" variant="ghost" loading={releaseReservationMutation.isPending && releaseReservationMutation.variables === a.id} onClick={() => setReleaseTarget(a)}>
-                            Liberar
-                          </Button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setHistoryTarget(a)}
-                          className="badge text-xs text-ink-muted bg-bg-raised hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1"
-                          title="Ver histórico de reservas"
-                        >
-                          <History className="h-3 w-3" /> Livre
-                        </button>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-ink-muted">{formatDate(a.created_at)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button size="xs" variant="ghost" onClick={() => toggleReveal(a)} loading={rev === 'loading'}>
-                          {rev && rev !== 'loading' && rev !== 'error' ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </Button>
-                        <Button size="xs" variant="ghost" onClick={() => setModal({ mode: 'edit', account: a })}>
-                          Editar
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          className="text-danger hover:bg-danger/10"
-                          disabled={!!a.reserved_by}
-                          title={a.reserved_by ? 'Libere a reserva antes de excluir' : 'Excluir conta'}
-                          onClick={() => setDeleteTarget(a)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SearchInput
+          wrapperClassName="w-full sm:w-64 shrink-0"
+          placeholder="Buscar por Riot ID..."
+          aria-label="Buscar por Riot ID"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <FilterTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: 'all', label: 'Todas', count: countFor('all') },
+            { value: 'active', label: 'Ativas', count: countFor('active') },
+            { value: 'inactive', label: 'Inativas', count: countFor('inactive') },
+            { value: 'reserved', label: 'Reservadas', count: countFor('reserved') },
+          ]}
+        />
       </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-56 w-full rounded-2xl" />)}
+        </div>
+      ) : isError ? (
+        <Card padding="md"><ErrorAlert message={accountsError instanceof Error ? accountsError.message : 'Não foi possível carregar as contas Duo.'} /></Card>
+      ) : !filtered.length ? (
+        <Card padding="none">
+          <EmptyState
+            icon={Landmark}
+            title={accounts?.length ? 'Nenhuma conta encontrada' : 'Nenhuma conta cadastrada'}
+            description={accounts?.length ? 'Tente outro filtro ou termo de busca.' : 'Adicione contas para que boosters possam usá-las em Duo Boost.'}
+          />
+        </Card>
+      ) : (
+        <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {pageItems.map((a) => {
+            const rev = revealed[a.id]
+            return (
+              <Card key={a.id} padding="md" className="flex flex-col gap-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink text-sm truncate">{a.riot_id ?? a.label}</p>
+                    {a.current_rank ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <RankBadge tier={a.current_rank.tier} division={a.current_rank.division} size="xs" showLabel={false} />
+                        <span className="text-[11px] text-ink-secondary">
+                          {RANK_TIER_LABEL[a.current_rank.tier]}{a.current_rank.division ? ` ${a.current_rank.division}` : ''}
+                        </span>
+                      </div>
+                    ) : <span className="text-[10px] text-ink-muted">Sem rank</span>}
+                  </div>
+                  <button
+                    onClick={() => toggleActive.mutate(a)}
+                    disabled={toggleActiveMutation.isPending && toggleActiveMutation.variables?.accountId === a.id}
+                    className={`badge text-[10px] shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
+                  >
+                    {a.is_active ? 'Ativa' : 'Inativa'}
+                  </button>
+                </div>
+
+                <div className="rounded-xl bg-bg-raised/40 p-2">
+                  <p className="text-[9px] text-ink-muted uppercase tracking-wide mb-1">Credenciais</p>
+                  {rev && rev !== 'loading' && rev !== 'error' ? (
+                    <div className="text-xs font-mono text-ink space-y-0.5">
+                      <div className="flex items-center gap-1">
+                        <p className="truncate">{rev.login}</p>
+                        <button type="button" title="Copiar login" onClick={() => navigator.clipboard.writeText(rev.login)} className="shrink-0 text-ink-muted hover:text-ink">
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <p className="text-ink-muted truncate">{rev.password}</p>
+                        <button type="button" title="Copiar senha" onClick={() => navigator.clipboard.writeText(rev.password)} className="shrink-0 text-ink-muted hover:text-ink">
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : rev === 'error' ? (
+                    <span className="text-xs text-danger">Falha ao revelar</span>
+                  ) : (
+                    <span className="text-xs text-ink-muted">••••••••</span>
+                  )}
+                </div>
+
+                {a.reserved_by ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryTarget(a)}
+                      className="badge text-[10px] text-warning bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer"
+                      title={a.reserved_by_name ? `Reservada por ${a.reserved_by_name} — ver histórico` : 'Ver histórico de reservas'}
+                    >
+                      Reservada
+                    </button>
+                    <Button size="xs" variant="ghost" loading={releaseReservationMutation.isPending && releaseReservationMutation.variables === a.id} onClick={() => setReleaseTarget(a)}>
+                      Liberar
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTarget(a)}
+                    className="badge text-[10px] text-ink-muted bg-bg-raised hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1 w-fit"
+                    title="Ver histórico de reservas"
+                  >
+                    <History className="h-3 w-3" /> Livre
+                  </button>
+                )}
+
+                <p className="text-[11px] text-ink-muted">Criada em {formatDate(a.created_at)}</p>
+
+                <div className="flex items-center gap-1 mt-auto pt-1 border-t border-border-subtle">
+                  <Button size="xs" variant="ghost" onClick={() => toggleReveal(a)} loading={rev === 'loading'}>
+                    {rev && rev !== 'loading' && rev !== 'error' ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button size="xs" variant="ghost" className="flex-1" onClick={() => setModal({ mode: 'edit', account: a })}>
+                    Editar
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="text-danger hover:bg-danger/10"
+                    disabled={!!a.reserved_by}
+                    title={a.reserved_by ? 'Libere a reserva antes de excluir' : 'Excluir conta'}
+                    onClick={() => setDeleteTarget(a)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+        <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
+        </>
+      )}
 
       <Modal
         open={!!modal}
@@ -386,13 +452,13 @@ export function AdminDuoAccountsPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 id="duo-account-riot-id"
-                value={form.riot_id}
-                onChange={(e) => {
-                  setForm((f) => ({ ...f, riot_id: e.target.value }))
-                  setRiotVerified(false)
-                  setRiotLookupMessage(null)
-                  setRiotLookupError(null)
-                }}
+                {...register('riot_id', {
+                  onChange: () => {
+                    setRiotVerified(false)
+                    setRiotLookupMessage(null)
+                    setRiotLookupError(null)
+                  },
+                })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); lookupRiot.mutate() }
                 }}
@@ -449,8 +515,7 @@ export function AdminDuoAccountsPage() {
               <FormField label={`Login${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`} id="duo-account-login">
                 <input
                   id="duo-account-login"
-                  value={form.login}
-                  onChange={(e) => setForm((f) => ({ ...f, login: e.target.value }))}
+                  {...register('login')}
                   className="input-base w-full py-3"
                   autoComplete="off"
                 />
@@ -460,8 +525,7 @@ export function AdminDuoAccountsPage() {
                   <input
                     id="duo-account-password"
                     type={showPasswordField ? 'text' : 'password'}
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    {...register('password')}
                     className="input-base w-full py-3 pr-10"
                     autoComplete="off"
                   />
@@ -481,8 +545,7 @@ export function AdminDuoAccountsPage() {
           <FormField label="Notas internas" id="duo-account-notes">
             <textarea
               id="duo-account-notes"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              {...register('notes')}
               rows={3}
               className="input-base w-full resize-none"
             />
@@ -491,18 +554,17 @@ export function AdminDuoAccountsPage() {
           <label className="flex items-center gap-2.5 text-sm text-ink-secondary rounded-xl border border-border-subtle bg-bg-raised/40 px-5 py-3.5 w-fit">
             <input
               type="checkbox"
-              checked={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              {...register('is_active')}
               className="h-4 w-4"
             />
             Disponível para boosters
           </label>
 
-          {save.isError && <ErrorAlert message={(save.error as Error).message} />}
+          {saveMutation.isError && <ErrorAlert message={(saveMutation.error as Error).message} />}
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border-subtle -mx-6 px-6 -mb-6 pb-6 mt-2">
             <Button variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
-            <Button loading={save.isPending} onClick={() => save.mutate()}>Salvar</Button>
+            <Button loading={saveMutation.isPending} onClick={handleSubmit(onSubmit)}>Salvar</Button>
           </div>
         </div>
       </Modal>

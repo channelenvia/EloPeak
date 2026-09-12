@@ -39,6 +39,15 @@ export async function listCustomerOrders(customerId: string, tab: OrderListTab =
 // assim que o pool passasse de 50 (os 50 mais ANTIGOS ficam, o resto é
 // cortado): o job mais recente literalmente não vinha na resposta, parecendo
 // um bug de tempo real quando na verdade era truncamento da consulta.
+// Só os ids (sem o resto das colunas) -- usado por useNewOrderSound pra
+// diffar contra a rodada anterior e decidir se toca o alerta sonoro, não
+// pra exibir os pedidos em si (isso é listAvailableJobs).
+export async function listAvailableJobIds(): Promise<string[]> {
+  const { data, error } = await supabase.from('available_boost_orders').select('id')
+  if (error) throw normalizeApiError(error)
+  return (data ?? []).map((row) => row.id).filter((id): id is string => typeof id === 'string')
+}
+
 export async function listAvailableJobs(limit = 300): Promise<Order[]> {
   const { data, error } = await supabase
     .from('available_boost_orders')
@@ -47,6 +56,32 @@ export async function listAvailableJobs(limit = 300): Promise<Order[]> {
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw normalizeApiError(error, 'Não foi possível carregar os pedidos disponíveis.')
+  return (data ?? []) as unknown as Order[]
+}
+
+// orders.assigned_booster_id FKs to profiles.id (the auth uid), which is
+// booster_profiles.user_id — NOT booster_profiles.id. Must filter by the
+// auth uid, never by the booster_profiles row's own primary key.
+export async function listBoosterActiveOrders(boosterUserId: string): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ORDER_SAFE_COLUMNS)
+    .eq('assigned_booster_id', boosterUserId)
+    .in('status', ['assigned', 'in_progress', 'paused', 'awaiting_customer'])
+    .order('created_at', { ascending: false })
+  if (error) throw normalizeApiError(error, 'Não foi possível carregar seus pedidos ativos.')
+  return (data ?? []) as unknown as Order[]
+}
+
+export async function listBoosterCompletedOrdersSince(boosterUserId: string, sinceIso: string): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ORDER_SAFE_COLUMNS)
+    .eq('assigned_booster_id', boosterUserId)
+    .eq('status', 'completed')
+    .gte('completed_at', sinceIso)
+    .order('completed_at', { ascending: false })
+  if (error) throw normalizeApiError(error, 'Não foi possível carregar seus pedidos concluídos.')
   return (data ?? []) as unknown as Order[]
 }
 

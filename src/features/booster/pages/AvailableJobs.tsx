@@ -1,16 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, History, Lock, Search, Sparkles } from 'lucide-react'
-import { Button, Card, EmptyState, Pagination, Skeleton } from '@/components/ui'
-import { supabase } from '@/lib/supabase'
+import { Briefcase, History, Lock, Sparkles } from 'lucide-react'
+import { Button, Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { timeAgo, boosterEarningsShare, getOrderServiceName, getOrderModeType } from '@/lib/utils'
 import type { Order } from '@/types'
-import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAvailableJobs, useBoosterSlotInfo, useAcceptBoostOrder } from '@/api/orders'
 import { useBoosterServicesByIds } from '@/api/coaching'
+import { useOwnBoosterSlotEligibility } from '@/api/boosters'
 import { OrderSoundSettings } from '@/features/booster/components/OrderSoundSettings'
 import { SlotIndicator, type SlotInfo } from '@/features/booster/components/SlotIndicator'
 import { exclusiveBadge, exclusiveTimeLeft, isReassignedToMe, reassignedBadge } from '@/features/booster/utils/exclusiveJobBadges'
@@ -24,21 +22,9 @@ export function AvailableJobsPage() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const { t } = useTranslation()
   const currency = useCurrency()
 
-  const { data: boosterProfile } = useQuery({
-    queryKey: ['booster-profile-slots', profile?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('booster_profiles')
-        .select('status, is_top3, user_id')
-        .eq('user_id', profile!.id)
-        .maybeSingle()
-      return data
-    },
-    enabled: !!profile?.id,
-  })
+  const { data: boosterProfile } = useOwnBoosterSlotEligibility(profile?.id)
 
   // Real-time slot counts via DB function
   const { data: slotInfoRaw } = useBoosterSlotInfo(profile?.id, boosterProfile?.status === 'approved')
@@ -123,11 +109,11 @@ export function AvailableJobsPage() {
 
   if (boosterProfile && boosterProfile.status !== 'approved') {
     const statusMessages: Record<string, { title: string; desc: string }> = {
-      pending:      { title: t('booster.jobs.locked.pending'), desc: t('booster.jobs.locked.pendingDesc') },
-      under_review: { title: t('booster.jobs.locked.under_review'), desc: t('booster.jobs.locked.under_reviewDesc') },
-      suspended:    { title: t('booster.jobs.locked.suspended'), desc: t('booster.jobs.locked.suspendedDesc') },
+      pending:      { title: 'Candidatura em análise', desc: 'Nossa equipe está analisando seu perfil. Você será notificado quando aprovado.' },
+      under_review: { title: 'Revisão final em andamento', desc: 'Quase lá! Seu perfil está na fase final de revisão.' },
+      suspended:    { title: 'Conta suspensa', desc: 'Entre em contato com o suporte para mais informações.' },
     }
-    const msg = statusMessages[boosterProfile.status] ?? { title: t('booster.jobs.locked.default'), desc: t('booster.jobs.locked.defaultDesc') }
+    const msg = statusMessages[boosterProfile.status] ?? { title: 'Perfil inativo', desc: 'Entre em contato com o suporte.' }
     return (
       <div>
         <EmptyState icon={Lock} title={msg.title} description={msg.desc} />
@@ -139,16 +125,16 @@ export function AvailableJobsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-ink">{t('booster.jobs.title')}</h1>
+          <h1 className="text-2xl font-bold text-ink">Jobs Disponíveis</h1>
           <p className="text-sm text-ink-secondary mt-1">
-            {t('booster.jobs.count', { count: filtered.length })}
+            {filtered.length} job disponível
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {slotInfo && <SlotIndicator slots={slotInfo} />}
           <div className="flex items-center gap-2 text-xs text-ink-muted">
             <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
-            {t('booster.jobs.live')}
+            Ao vivo
           </div>
           <OrderSoundSettings />
         </div>
@@ -165,17 +151,13 @@ export function AvailableJobsPage() {
 
       {/* Filters -- busca à esquerda, categoria de serviço + subfiltros à direita (sem status aqui: todo job já é awaiting_assignment). */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="relative w-full sm:w-48 shrink-0">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por código do pedido..."
-            aria-label="Buscar por código do pedido"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input-base pl-8 py-1.5 text-xs"
-          />
-        </div>
+        <SearchInput
+          wrapperClassName="w-full sm:w-64 shrink-0"
+          placeholder="Buscar por código do pedido..."
+          aria-label="Buscar por código do pedido"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <ServiceFilterBar
           category={serviceFilters.category}
           onCategoryChange={serviceFilters.setCategory}
@@ -201,7 +183,7 @@ export function AvailableJobsPage() {
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
         </div>
       ) : !filtered.length ? (
-        <EmptyState icon={Briefcase} title={t('booster.jobs.empty')} description={t('booster.jobs.emptyDesc')} />
+        <EmptyState icon={Briefcase} title="Sem jobs disponíveis" description="Volte em breve — jobs chegam frequentemente." />
       ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -247,7 +229,7 @@ export function AvailableJobsPage() {
                   <div className="flex flex-wrap gap-1.5 mb-3">
                     {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
                       <span className="text-[10px] font-bold bg-bg-raised text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">
-                        {job.queue_type === 'solo_duo' ? t('booster.jobs.soloQueue') : t('booster.jobs.flexQueue')}
+                        {job.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex'}
                       </span>
                     )}
                     {reassignedLabel ? (
@@ -287,7 +269,7 @@ export function AvailableJobsPage() {
                 <div className="flex items-center justify-between pt-3 border-t border-border-subtle mt-auto">
                   <div>
                     <p className="text-sm font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3, job.service_type))}</p>
-                    <p className="text-[10px] text-ink-muted">{t('booster.jobs.yourCut', { pct: Math.round(boosterEarningsShare(slotInfo?.is_top3, job.service_type) * 100) })}</p>
+                    <p className="text-[10px] text-ink-muted">Seu corte ({Math.round(boosterEarningsShare(slotInfo?.is_top3, job.service_type) * 100)}%)</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Button
@@ -297,7 +279,7 @@ export function AvailableJobsPage() {
                       disabled={!!blocked}
                       title={blocked ? 'Slots cheios' : undefined}
                     >
-                      {t('booster.jobs.accept')}
+                      Aceitar
                     </Button>
                     {acceptJob.isError && (
                       <p className="text-[10px] text-danger text-right max-w-[140px]">
@@ -307,7 +289,7 @@ export function AvailableJobsPage() {
                   </div>
                 </div>
 
-                <p className="text-[10px] text-ink-muted mt-2">{t('booster.jobs.posted', { time: timeAgo(job.created_at) })}</p>
+                <p className="text-[10px] text-ink-muted mt-2">Publicado {timeAgo(job.created_at)}</p>
               </Card>
             )
           })}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { MASTER_PLUS_TIER_PRICE_CENTS, centsToMoney } from './pricing'
 
@@ -12,7 +12,11 @@ import { MASTER_PLUS_TIER_PRICE_CENTS, centsToMoney } from './pricing'
 // isso não foi possível neste ambiente (Docker/Supabase local indisponível,
 // ver relatório final).
 const migrationPath = join(__dirname, '..', 'supabase', 'migrations_archive', '005_boost_configurator.sql')
-const sql = readFileSync(migrationPath, 'utf-8')
+// migrations_archive/ fica fora do git (histórico local, ver .gitignore) --
+// num clone novo/CI sem esse backup, os describes que dependem dela pulam em
+// vez de quebrar a suite inteira.
+const migrationExists = existsSync(migrationPath)
+const sql = migrationExists ? readFileSync(migrationPath, 'utf-8') : ''
 
 interface SeedRow {
   name: string
@@ -35,9 +39,9 @@ function parseSeedRows(source: string): SeedRow[] {
   return rows
 }
 
-const rows = parseSeedRows(sql)
+const rows = migrationExists ? parseSeedRows(sql) : []
 
-describe('Seed de addons (005_boost_configurator.sql) — valores comerciais do enunciado', () => {
+describe.skipIf(!migrationExists)('Seed de addons (005_boost_configurator.sql) — valores comerciais do enunciado', () => {
   it('a seed foi encontrada e parseada (12 linhas: 4 addons x 3 fluxos)', () => {
     expect(rows).toHaveLength(12)
   })
@@ -93,7 +97,7 @@ describe('Seed de addons (005_boost_configurator.sql) — valores comerciais do 
   })
 })
 
-describe('Tabela master_plus_pricing — 12 combinações válidas, sem preço fictício', () => {
+describe.skipIf(!migrationExists)('Tabela master_plus_pricing — 12 combinações válidas, sem preço fictício', () => {
   it('semeia exatamente as 3 progressões válidas x 4 faixas de PDL, todas com price null', () => {
     const insertBlockMatch = sql.match(/insert into public\.master_plus_pricing[\s\S]*?on conflict/)
     expect(insertBlockMatch).not.toBeNull()
@@ -119,11 +123,11 @@ describe('Tabela master_plus_pricing — 12 combinações válidas, sem preço f
 // orderPricing.ts). São duas fontes de verdade pro mesmo valor monetário:
 // se divergirem, o cliente vê um preço e é cobrado outro. Este teste amarra
 // a seed da migration atual ao constante do código.
-describe('master_plus_pricing (20260829010000) — seed do banco bate com o preço exibido na página pública', () => {
-  const migration = readFileSync(
-    join(__dirname, '..', 'supabase', 'migrations_archive', '20260829010000_master_plus_pricing_rate_increase.sql'),
-    'utf-8',
-  )
+const rateIncreasePath = join(__dirname, '..', 'supabase', 'migrations_archive', '20260829010000_master_plus_pricing_rate_increase.sql')
+const rateIncreaseExists = existsSync(rateIncreasePath)
+
+describe.skipIf(!rateIncreaseExists)('master_plus_pricing (20260829010000) — seed do banco bate com o preço exibido na página pública', () => {
+  const migration = rateIncreaseExists ? readFileSync(rateIncreasePath, 'utf-8') : ''
 
   function parsePrices(source: string): Record<string, number> {
     const insertBlock = source.match(/insert into public\.master_plus_pricing[\s\S]*?;/)
@@ -139,7 +143,7 @@ describe('master_plus_pricing (20260829010000) — seed do banco bate com o pre�
     return out
   }
 
-  const seeded = parsePrices(migration)
+  const seeded = rateIncreaseExists ? parsePrices(migration) : {}
 
   it('semeia exatamente os 3 pares válidos (master->grandmaster, grandmaster->challenger, master->challenger), fila solo_duo', () => {
     expect(Object.keys(seeded).sort()).toEqual(['grandmaster->challenger', 'master->challenger', 'master->grandmaster'])

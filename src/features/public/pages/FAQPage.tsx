@@ -1,7 +1,6 @@
 import { useId, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTranslation } from 'react-i18next'
 import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
 import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
@@ -31,18 +30,16 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 }
 
 export function FAQPage() {
-  const { t } = useTranslation()
-
   const FAQS = [
-    { q: t('faq.q1'), a: t('faq.a1') },
-    { q: t('faq.q2'), a: t('faq.a2') },
-    { q: t('faq.q3'), a: t('faq.a3') },
-    { q: t('faq.q4'), a: t('faq.a4') },
-    { q: t('faq.q5'), a: t('faq.a5') },
-    { q: t('faq.q6'), a: t('faq.a6') },
-    { q: t('faq.q7'), a: t('faq.a7') },
-    { q: t('faq.q8'), a: t('faq.a8') },
-    { q: t('faq.q9'), a: t('faq.a9') },
+    { q: 'O Elo Boost é seguro?', a: 'Usamos VPN em todas as sessões, modo aparecer offline e nunca armazenamos suas credenciais além do pedido ativo. Nossos boosters têm histórico de IP limpo e seguem protocolos rigorosos de segurança de conta. Completamos mais de 1.800 pedidos sem nenhum banimento permanente pelos nossos métodos.' },
+    { q: 'Quanto tempo leva meu pedido?', a: 'A maioria dos pedidos começa dentro de 30 minutos após a confirmação do pagamento. O tempo estimado de entrega é mostrado antes do checkout e depende da diferença de rank e tipo de fila. O adicional de Prioridade garante atribuição imediata a um booster top.' },
+    { q: 'Posso assistir meu booster jogar?', a: "Sim — adicione o extra 'Transmissão ao Vivo' no checkout e você receberá um link de stream privado depois que seu pedido começar." },
+    { q: 'E se o pedido não for concluído?', a: 'Oferecemos garantia de 100% de conclusão. Se um booster não conseguir finalizar seu pedido, reatribuímos ou emitimos reembolso total. Sem perguntas.' },
+    { q: 'Preciso compartilhar minha senha?', a: 'Para boost solo, sim — você compartilha as credenciais pela nossa plataforma criptografada e elas são apagadas ao concluir o pedido. Para boost em duo, você joga junto com nosso booster e nenhuma credencial é necessária.' },
+    { q: 'Posso solicitar um campeão ou função específica?', a: "Sim. Durante a configuração do pedido você pode especificar função e preferências de campeão. Adicione o extra 'Campeão Único' para garantir apenas um campeão." },
+    { q: 'Como os boosters são verificados?', a: 'Todos os boosters se candidatam pela nossa plataforma e passam por verificação em múltiplas etapas: prova de rank, revisão de partidas teste e um período de observação. Apenas boosters Grão-mestre ou Desafiante são aprovados.' },
+    { q: 'Quais métodos de pagamento vocês aceitam?', a: 'Aceitamos pagamento via PIX, processado com segurança pelo Mercado Pago. O PIX é instantâneo, gratuito para você e disponível 24h por dia.' },
+    { q: 'Posso conversar com meu booster?', a: 'Com certeza. Cada pedido inclui um chat interno onde você pode enviar mensagens diretamente para o seu booster.' },
   ]
 
   return (
@@ -54,13 +51,13 @@ export function FAQPage() {
       <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
       <div className="container-app max-w-3xl relative">
         <ScrollReveal className="text-center mb-12">
-          <p className="section-label mb-3">{t('faq.sectionLabel')}</p>
-          <h1 className="text-4xl font-extrabold text-ink mb-4">{t('faq.title')}</h1>
+          <p className="section-label mb-3">FAQ</p>
+          <h1 className="text-4xl font-extrabold text-ink mb-4">Perguntas Frequentes</h1>
           <p className="text-ink-secondary">
-            {t('faq.cantFind')}{' '}
+            Não encontrou o que procura?{' '}
             {DISCORD_SUPPORT_URL
-              ? <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{t('faq.contactSupport')}</a>
-              : <span className="text-brand">{t('faq.contactSupport')}</span>}.
+              ? <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">Fale com o suporte</a>
+              : <span className="text-brand">Fale com o suporte</span>}.
           </p>
         </ScrollReveal>
 

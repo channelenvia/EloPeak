@@ -1,7 +1,7 @@
 import { useBoosterServiceDetails } from '@/api/coaching'
 import { useBoostersWithSlots } from '@/api/boosters'
 import type { BoosterWithSlots } from '@/api/boosters'
-import { useAdminAssignPendingReviewOrder, useAdminCancelPendingReviewOrder, useAdminSetPendingReviewLock } from '@/api/admin'
+import { useAdminAssignPendingReviewOrder, useAdminCancelPendingReviewOrder, useAdminSetPendingReviewLock, useOrderParties } from '@/api/admin'
 import { useAdminDropOrder, useAdminFlagOrderUnderReview, useAdminOverrideOrderStatus, useAdminReassignBooster, useOrder, useOrderPaidAmount, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
 import { AccessTokenSection } from '@/components/order/AccessTokenSection'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
@@ -12,14 +12,12 @@ import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
-import { BoosterStatusBadge, Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover } from '@/components/ui'
+import { BoosterStatusBadge, Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Popover, SearchInput } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
-import { supabase } from '@/lib/supabase'
 import { cn, formatDateTime, formatEstimatedDelivery, getOrderServiceName, orderRequiresAccountAccess, timeAgo } from '@/lib/utils'
 import type { Order, OrderStatus, ServiceType } from '@/types'
-import { useQuery } from '@tanstack/react-query'
 import {
     ArrowLeftRight,
     CalendarDays,
@@ -29,7 +27,6 @@ import {
     Gamepad2,
     Hash,
     History, Lock,
-    Search,
     Undo2,
     Route,
     Shuffle,
@@ -41,6 +38,9 @@ import {
     XCircle,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 type BoosterRef = { id: string; user_id: string; display_name: string } | undefined
@@ -66,6 +66,11 @@ const DROPPABLE_STATUSES: OrderStatus[] = ['assigned', 'in_progress', 'paused', 
 // tem o que "dropar" num pedido que ainda não foi atribuído.
 const ASSIGN_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'awaiting_assignment']
 
+// Mesmo allowlist de admin_flag_order_under_review (migration 20260911020000)
+// -- inclui 'drop_requested' (drop pendente também pode ser travado em
+// análise), diferente de DROPPABLE_STATUSES que o exclui de propósito.
+const REVIEWABLE_WITH_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'drop_requested']
+
 // Só 3 ações manuais: concluir/cancelar (admin_override_order_status, sem
 // efeito colateral) e reembolsar -- que é um link pro formulário de
 // reembolso manual (AdminRefundsPage/admin_create_manual_refund), não um
@@ -77,22 +82,40 @@ const STATUS_ACTION_TONE_CLASS: Record<string, string> = {
   danger:  'text-danger hover:bg-danger/10',
 }
 
+interface AdminDropFormData {
+  reason: string
+  completionPct: string
+}
+
 function AdminDropModal({ orderId, serviceType, dropCount, open, onClose }: { orderId: string; serviceType: ServiceType; dropCount: number; open: boolean; onClose: () => void }) {
-  const [dropReason, setDropReason] = useState('')
-  // Coaching não tem métrica automática de progresso (sem partida/rank pra
-  // medir) -- order_drop_completion_pct sempre retorna 0 pra esse serviço.
-  // Pede o % de sessões já entregues pro admin em vez de pagar sempre 0%
-  // (ver migration 20260908090000). Só aparece pra coaching -- os outros
-  // serviços continuam com o cálculo automático de sempre.
-  const [completionPct, setCompletionPct] = useState('0')
   const dropOrder = useAdminDropOrder(orderId)
   const willCancel = dropCount >= 2
   const isCoaching = serviceType === 'coaching'
 
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<AdminDropFormData>({
+    resolver: zodResolver(z.object({
+      reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.'),
+      completionPct: z.string(),
+    })),
+    // Coaching não tem métrica automática de progresso (sem partida/rank pra
+    // medir) -- order_drop_completion_pct sempre retorna 0 pra esse serviço.
+    // Pede o % de sessões já entregues pro admin em vez de pagar sempre 0%
+    // (ver migration 20260908090000). Só aparece pra coaching -- os outros
+    // serviços continuam com o cálculo automático de sempre.
+    defaultValues: { reason: '', completionPct: '0' },
+    mode: 'onChange',
+  })
+
   function close() {
     onClose()
-    setDropReason('')
-    setCompletionPct('0')
+    reset({ reason: '', completionPct: '0' })
+  }
+
+  function onSubmit(data: AdminDropFormData) {
+    dropOrder.mutate(
+      { reason: data.reason.trim(), coachingCompletionPct: isCoaching ? Number(data.completionPct) || 0 : undefined },
+      { onSuccess: close },
+    )
   }
 
   return (
@@ -103,7 +126,7 @@ function AdminDropModal({ orderId, serviceType, dropCount, open, onClose }: { or
     >
       <div>
         <label htmlFor="admin-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
-        <textarea id="admin-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Justificativa para o drop..." className="input-base w-full min-h-[80px] resize-none text-sm" maxLength={500} />
+        <textarea id="admin-drop-reason" {...register('reason')} placeholder="Justificativa para o drop..." className="input-base w-full min-h-[80px] resize-none text-sm" maxLength={500} />
       </div>
       {isCoaching && (
         <div>
@@ -115,8 +138,7 @@ function AdminDropModal({ orderId, serviceType, dropCount, open, onClose }: { or
             type="number"
             min={0}
             max={100}
-            value={completionPct}
-            onChange={(e) => setCompletionPct(e.target.value)}
+            {...register('completionPct')}
             className="input-base w-full text-sm"
           />
           <p className="text-[11px] text-ink-muted mt-1">
@@ -137,11 +159,8 @@ function AdminDropModal({ orderId, serviceType, dropCount, open, onClose }: { or
         <Button
           variant="danger"
           loading={dropOrder.isPending}
-          disabled={dropReason.trim().length < 10}
-          onClick={() => dropOrder.mutate(
-            { reason: dropReason.trim(), coachingCompletionPct: isCoaching ? Number(completionPct) || 0 : undefined },
-            { onSuccess: close },
-          )}
+          disabled={!isValid}
+          onClick={handleSubmit(onSubmit)}
         >
           {willCancel ? 'Cancelar Pedido' : 'Confirmar Drop'}
         </Button>
@@ -194,16 +213,13 @@ function AdminReassignModal({ order, open, onClose }: { order: Order; open: bool
       title={isNewAssignment ? 'Atribuir booster' : 'Reatribuir booster'}
       maxWidth="lg"
     >
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar booster..."
-          aria-label="Buscar booster"
-          className="input-base w-full pl-9 text-sm"
-        />
-      </div>
+      <SearchInput
+        size="md"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar booster..."
+        aria-label="Buscar booster"
+      />
 
       <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
         {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
@@ -338,8 +354,13 @@ function ReasonPromptModal({
   error: unknown
   onConfirm: (reason: string, done: () => void) => void
 }) {
-  const [reason, setReason] = useState('')
-  function close() { onClose(); setReason('') }
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
+  function close() { onClose(); reset({ reason: '' }) }
+  function submit(data: { reason: string }) { onConfirm(data.reason.trim(), close) }
 
   return (
     <Modal open={open} onOpenChange={(next) => { if (!next) close() }} title={title}>
@@ -347,8 +368,7 @@ function ReasonPromptModal({
         <label htmlFor="reason-prompt-input" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
           id="reason-prompt-input"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          {...register('reason')}
           placeholder="Justificativa..."
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
@@ -363,8 +383,8 @@ function ReasonPromptModal({
         <Button
           variant={variant}
           loading={isPending}
-          disabled={reason.trim().length < 10}
-          onClick={() => onConfirm(reason.trim(), close)}
+          disabled={!isValid}
+          onClick={handleSubmit(submit)}
         >
           {confirmLabel}
         </Button>
@@ -402,16 +422,13 @@ function PendingReviewAssignModal({ order, open, onClose }: { order: Order; open
       title="Atribuir a um booster"
       maxWidth="lg"
     >
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar booster..."
-          aria-label="Buscar booster"
-          className="input-base w-full pl-9 text-sm"
-        />
-      </div>
+      <SearchInput
+        size="md"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar booster..."
+        aria-label="Buscar booster"
+      />
 
       <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
         {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
@@ -492,7 +509,7 @@ function AdminStatusActionsMenu({ order }: { order: Order }) {
   const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
   const isPendingReview = order.status === 'pending_review'
   const isUnderReview = order.status === 'under_review'
-  const isActiveWithBooster = DROPPABLE_STATUSES.includes(order.status)
+  const isActiveWithBooster = REVIEWABLE_WITH_BOOSTER_STATUSES.includes(order.status)
   const reassignVisible = !isPendingReview && !isUnderReview && ASSIGN_BOOSTER_STATUSES.includes(order.status)
   const isNewAssignment = !order.assigned_booster_id
 
@@ -696,23 +713,7 @@ export function AdminOrderDetailPage() {
   const { data: history } = useOrderStatusHistory(id)
   const { data: coachPackage } = useBoosterServiceDetails(order?.booster_service_id ?? undefined)
 
-  const { data: parties } = useQuery({
-    queryKey: ['admin', 'order-parties', order?.customer_id, order?.assigned_booster_id, order?.preferred_booster_id],
-    queryFn: async () => {
-      const boosterUserIds = [order!.assigned_booster_id, order!.preferred_booster_id].filter((v): v is string => !!v)
-      const [{ data: customer }, { data: boosters }] = await Promise.all([
-        supabase.from('profiles').select('username').eq('id', order!.customer_id).maybeSingle(),
-        boosterUserIds.length
-          ? supabase.from('booster_profiles').select('id, user_id, display_name').in('user_id', boosterUserIds)
-          : Promise.resolve({ data: [] as { id: string; user_id: string; display_name: string }[] }),
-      ])
-      return {
-        customerUsername: customer?.username ?? null,
-        boosterByUserId: new Map((boosters ?? []).map((b) => [b.user_id, b])),
-      }
-    },
-    enabled: !!order,
-  })
+  const { data: parties } = useOrderParties(order?.customer_id, order?.assigned_booster_id, order?.preferred_booster_id)
 
   const syncMatches = useSyncOrderMatches(id ?? '')
 
@@ -755,33 +756,35 @@ export function AdminOrderDetailPage() {
       ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
       : []),
     { icon: User, label: 'Cliente', value: parties?.customerUsername ?? 'Carregando…' },
-    ...((isBoostFlow || isClash) ? [{
-      icon: Hash, label: 'Riot ID', value: order.riot_id ? (
+    ...((isBoostFlow || isClash) && order.riot_id ? [{
+      icon: Hash, label: 'Riot ID', value: (
         <span className="inline-flex items-center justify-center gap-1.5">
           {order.riot_id}
           <button type="button" onClick={() => void copyNickname()} aria-label="Copiar Riot ID" className="text-ink-muted hover:text-brand transition-colors">
             {nickCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           </button>
         </span>
-      ) : 'Não informado',
+      ),
     }] : []),
-    ...getLaneDisplayItems(order, 'admin').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
-    {
-      icon: User, label: 'Booster associado', value: (() => {
-        const boosterId = order.assigned_booster_id ?? order.preferred_booster_id
-        if (!boosterId) return 'Não associado'
-        return (
+    ...getLaneDisplayItems(order, 'admin')
+      .filter((item) => item.lanes.length > 0)
+      .map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact className="justify-center" /> })),
+    ...(() => {
+      const boosterId = order.assigned_booster_id ?? order.preferred_booster_id
+      if (!boosterId) return []
+      return [{
+        icon: User, label: 'Booster associado', value: (
           <span className="inline-flex items-center gap-1.5">
             <BoosterLink userId={boosterId} booster={parties?.boosterByUserId.get(boosterId)} />
             {!order.assigned_booster_id && (
               <span className={`text-[10px] font-bold uppercase ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
-                {order.reassigned_by_admin ? 'Reatribuído (aguardando aceite)' : 'Exclusivo'}
+                {order.reassigned_by_admin ? 'Reatribuído' : 'Exclusivo'}
               </span>
             )}
           </span>
-        )
-      })(),
-    },
+        ),
+      }]
+    })(),
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: 'Total pago', value: currency(paidAmount ?? order.total_price) },
   ]

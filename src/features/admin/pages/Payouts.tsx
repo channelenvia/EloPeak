@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Banknote, CheckCircle2, Clock3, FileText, ShieldCheck, Upload, XCircle } from 'lucide-react'
-import { Button, Card, EmptyState, Modal, Skeleton } from '@/components/ui'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import { cn, formatDateTime, PAYOUT_REQUEST_STATUS_LABEL } from '@/lib/utils'
+import { Button, Card, EmptyState, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { cn, formatDateTime, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 import { useCurrency } from '@/hooks/useCurrency'
 import {
   useAdminPayoutRequests, useAdminReviewPayoutRequest, useAdminMarkPayoutPaid, usePayoutRequestBreakdown,
@@ -19,9 +23,7 @@ const STATUS_COLOR: Record<PayoutRequestStatus, string> = {
   rejected: 'text-danger bg-danger/10 border-danger/20',
   canceled: 'text-ink-muted bg-bg-raised border-border-subtle',
 }
-// Só requested/under_review/approved têm ação pendente pro admin -- o resto
-// (pago/rejeitado/cancelado) é estado final, só consulta.
-const PENDING_STATUSES: PayoutRequestStatus[] = ['requested', 'under_review', 'approved']
+const PENDING_STATUSES = PAYOUT_PENDING_STATUSES
 
 function StatusBadge({ status }: { status: PayoutRequestStatus }) {
   return (
@@ -52,15 +54,23 @@ function StatCard({ label, value, icon: Icon, tone }: { label: string; value: st
 // backend ainda passa por 'approved' internamente antes de 'paid', porque
 // admin_mark_payout_paid exige isso, mas isso fica encadeado aqui dentro,
 // invisível pro admin).
+interface RejectPayoutFormData {
+  note: string
+}
+
 function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; onClose: () => void }) {
   const currency = useCurrency()
   const { data: breakdown, isLoading } = usePayoutRequestBreakdown(request.id)
   const review = useAdminReviewPayoutRequest()
   const markPaid = useAdminMarkPayoutPaid()
-  const [note, setNote] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [working, setWorking] = useState(false)
-  const [proofSignedUrl, setProofSignedUrl] = useState<string | null>(null)
+
+  const { register: registerReject, handleSubmit: handleRejectSubmit, formState: { isValid: rejectValid } } = useForm<RejectPayoutFormData>({
+    resolver: zodResolver(z.object({ note: z.string().trim().min(3, 'Motivo obrigatório (mín. 3 caracteres).') })),
+    defaultValues: { note: '' },
+    mode: 'onChange',
+  })
 
   const isPending = PENDING_STATUSES.includes(request.status)
   const canReject = request.status === 'requested' || request.status === 'under_review'
@@ -82,14 +92,13 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
     }
   }
 
-  function handleReject() {
-    review.mutate({ requestId: request.id, newStatus: 'rejected', note }, { onSuccess: onClose })
+  function handleReject(data: RejectPayoutFormData) {
+    review.mutate({ requestId: request.id, newStatus: 'rejected', note: data.note.trim() }, { onSuccess: onClose })
   }
 
   async function handleViewProof() {
     if (!request.proof_url) return
     const url = await getPayoutProofSignedUrl(request.proof_url)
-    setProofSignedUrl(url)
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
@@ -141,12 +150,11 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
                 <label htmlFor="payout-reject-reason" className="text-xs font-bold uppercase text-ink-secondary block">Rejeitar</label>
                 <textarea
                   id="payout-reject-reason"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  {...registerReject('note')}
                   placeholder="Motivo da rejeição (obrigatório)"
                   className="input-base w-full min-h-16 resize-none text-sm"
                 />
-                <Button className="w-full" variant="danger" loading={review.isPending} disabled={note.trim().length < 3} leftIcon={<XCircle className="h-4 w-4" />} onClick={handleReject}>
+                <Button className="w-full" variant="danger" loading={review.isPending} disabled={!rejectValid} leftIcon={<XCircle className="h-4 w-4" />} onClick={handleRejectSubmit(handleReject)}>
                   Rejeitar solicitação
                 </Button>
               </div>
@@ -165,19 +173,31 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
             Ver comprovante
           </Button>
         )}
-        {proofSignedUrl && <p className="text-[10px] text-ink-muted break-all">{proofSignedUrl}</p>}
       </div>
     </Modal>
   )
 }
 
+type PayoutListFilter = 'all' | 'pending' | 'paid' | 'rejected' | 'canceled'
+
 export function AdminPayoutsPage() {
   const currency = useCurrency()
   const [selected, setSelected] = useState<PayoutRequestRow | null>(null)
+  const [search, setSearch] = useState('')
   const { data: requests, isLoading } = useAdminPayoutRequests()
 
   const pendingTotal = (requests ?? []).filter((r) => PENDING_STATUSES.includes(r.status)).reduce((sum, r) => sum + r.amount, 0)
   const paidTotal = (requests ?? []).filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0)
+  const matchesFilter = (r: PayoutRequestRow, f: PayoutListFilter) =>
+    f === 'all' ? true : f === 'pending' ? PENDING_STATUSES.includes(r.status) : r.status === f
+  const { value: filter, onChange: setFilter, countFor, filtered: statusFiltered } = useCountedFilterTabs(requests, 'all' as PayoutListFilter, matchesFilter)
+
+  const filtered = statusFiltered.filter((r) => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return (r.booster_legal_name_snapshot ?? '').toLowerCase().includes(q) || (r.booster_cpf_snapshot ?? '').toLowerCase().includes(q)
+  })
+  const { page, pageItems, hasNextPage, onPrev, onNext } = usePagedList(filtered, 20, `${filter}:${search}`)
 
   return (
     <div className="space-y-6">
@@ -194,44 +214,67 @@ export function AdminPayoutsPage() {
         <StatCard label="Pago" value={currency(paidTotal)} icon={CheckCircle2} tone="bg-success/10 text-success" />
       </div>
 
-      <Card variant="operational" padding="none">
-        {isLoading ? (
-          <div className="p-4"><Skeleton className="h-56 w-full" /></div>
-        ) : !requests?.length ? (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SearchInput
+          wrapperClassName="w-full sm:w-64 shrink-0"
+          placeholder="Buscar por booster ou CPF..."
+          aria-label="Buscar por booster ou CPF"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <FilterTabs
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: 'Todos', count: countFor('all') },
+            { value: 'pending', label: 'Pendentes', count: countFor('pending') },
+            { value: 'paid', label: 'Pago', count: countFor('paid') },
+            { value: 'rejected', label: 'Rejeitado', count: countFor('rejected') },
+            { value: 'canceled', label: 'Cancelado', count: countFor('canceled') },
+          ]}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+        </div>
+      ) : !filtered.length ? (
+        <Card variant="operational" padding="none">
           <EmptyState icon={Banknote} title="Nenhuma solicitação encontrada." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>CPF</TableHead>
-                <TableHead>Nome legal</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Solicitado</TableHead>
-                <TableHead>Última atualização</TableHead>
-                <TableHead className="text-right">Ação</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell><span data-tabular>{row.booster_cpf_snapshot ?? '—'}</span></TableCell>
-                  <TableCell><span className="font-semibold text-ink">{row.booster_legal_name_snapshot ?? '—'}</span></TableCell>
-                  <TableCell className="text-base font-black text-ink" data-tabular>{currency(row.amount)}</TableCell>
-                  <TableCell><StatusBadge status={row.status} /></TableCell>
-                  <TableCell><span className="text-xs">{formatDateTime(row.requested_at)}</span></TableCell>
-                  <TableCell><span className="text-xs">{formatDateTime(row.updated_at)}</span></TableCell>
-                  <TableCell className="text-right">
-                    <Button size="xs" variant="secondary" onClick={() => setSelected(row)}>
-                      {PENDING_STATUSES.includes(row.status) ? 'Ação' : 'Ver detalhes'}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {pageItems.map((row) => (
+            <Card
+              key={row.id}
+              variant="interactive"
+              padding="md"
+              className="flex flex-col gap-2"
+              onClick={() => setSelected(row)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink text-sm truncate">{row.booster_legal_name_snapshot ?? '—'}</p>
+                  <p className="text-[11px] text-ink-muted" data-tabular>{row.booster_cpf_snapshot ?? '—'}</p>
+                </div>
+                <StatusBadge status={row.status} />
+              </div>
+              <p className="text-lg font-black text-ink" data-tabular>{currency(row.amount)}</p>
+              <div className="flex items-center justify-between text-[11px] text-ink-muted">
+                <span>Solicitado {formatDateTime(row.requested_at)}</span>
+              </div>
+              <p className="text-[11px] text-ink-muted -mt-1">Atualizado {formatDateTime(row.updated_at)}</p>
+              <p className="text-[11px] font-semibold text-brand mt-1">
+                {PENDING_STATUSES.includes(row.status) ? 'Ver ação →' : 'Ver detalhes →'}
+              </p>
+            </Card>
+          ))}
+        </div>
+        <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
+        </>
+      )}
 
       {selected && <PayoutActionModal request={selected} onClose={() => setSelected(null)} />}
     </div>

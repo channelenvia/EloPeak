@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Briefcase, ChevronDown, SlidersHorizontal, Swords, TrendingUp, Users, Zap } from 'lucide-react'
-import { Popover } from '@/components/ui'
+import { FilterTabs, Popover } from '@/components/ui'
 import { CLASH_TIERS, CLASH_DAYS, type ServiceCategory } from './useServiceFilters'
 import { CLASH_TIER_LABEL, CLASH_DAY_LABEL } from '@/lib/clashDomain'
 import { cn } from '@/lib/utils'
@@ -16,21 +16,6 @@ const SERVICE_CATEGORIES: { value: ServiceCategory; label: string; icon: React.E
   { value: 'coaching', label: 'Coaching', icon: Users },
   { value: 'all', label: 'Todos', icon: Briefcase },
 ]
-
-const PILL = 'flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors'
-const pillCls = (active: boolean) => `${PILL} ${active ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink'}`
-
-// Pill de subfiltro com contador -- mesmo recorte que o contador de
-// categoria: número dinâmico de pedidos que aquela opção bateria, dado o
-// resto dos filtros já aplicados.
-function CountPill({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} aria-pressed={active} className={pillCls(active)}>
-      {label}
-      <span className={cn('text-[10px]', active ? 'text-white/80' : 'text-ink-muted')}>{count}</span>
-    </button>
-  )
-}
 
 interface ServiceFilterBarProps {
   category: ServiceCategory
@@ -48,15 +33,6 @@ interface ServiceFilterBarProps {
   clashDay: ClashDay | 'all'
   onClashDayChange: (d: ClashDay | 'all') => void
   clashDayCounts: Record<ClashDay | 'all', number>
-}
-
-function FilterGroup({ label, children, nowrap }: { label: string; children: React.ReactNode; nowrap?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">{label}</p>
-      <div role="group" aria-label={label} className={`flex gap-1 bg-bg-raised rounded-lg p-1 ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>{children}</div>
-    </div>
-  )
 }
 
 // Categoria de serviço agora é um label+setinha (mesma mecânica do filtro de
@@ -140,41 +116,50 @@ export function ServiceFilterBar({
           >
             {hasQueueMode && (
               <>
-                <FilterGroup label="Fila">
-                  {([
-                    { label: 'Todas', value: 'all' as const },
-                    { label: 'Solo/Duo', value: 'solo_duo' as const },
-                    { label: 'Flex', value: 'flex' as const },
-                  ]).map(({ label, value }) => (
-                    <CountPill key={value} label={label} count={queueCounts[value]} active={queue === value} onClick={() => onQueueChange(value)} />
-                  ))}
-                </FilterGroup>
-                <FilterGroup label="Modo">
-                  {([
-                    { label: 'Todos', value: 'all' as const },
-                    { label: 'Solo', value: 'solo' as const },
-                    { label: 'Duo', value: 'duo' as const },
-                  ]).map(({ label, value }) => (
-                    <CountPill key={value} label={label} count={modeCounts[value]} active={mode === value} onClick={() => onModeChange(value)} />
-                  ))}
-                </FilterGroup>
+                <FilterTabs
+                  label="Fila"
+                  value={queue}
+                  onChange={onQueueChange}
+                  options={[
+                    { value: 'all', label: 'Todas', count: queueCounts.all },
+                    { value: 'solo_duo', label: 'Solo/Duo', count: queueCounts.solo_duo },
+                    { value: 'flex', label: 'Flex', count: queueCounts.flex },
+                  ]}
+                />
+                <FilterTabs
+                  label="Modo"
+                  value={mode}
+                  onChange={onModeChange}
+                  options={[
+                    { value: 'all', label: 'Todos', count: modeCounts.all },
+                    { value: 'solo', label: 'Solo', count: modeCounts.solo },
+                    { value: 'duo', label: 'Duo', count: modeCounts.duo },
+                  ]}
+                />
               </>
             )}
 
             {hasClash && (
               <>
-                <FilterGroup label="Tier" nowrap>
-                  <CountPill label="Todos" count={clashTierCounts.all} active={clashTier === 'all'} onClick={() => onClashTierChange('all')} />
-                  {CLASH_TIERS.map((tier) => (
-                    <CountPill key={tier} label={CLASH_TIER_LABEL[tier]} count={clashTierCounts[tier]} active={clashTier === tier} onClick={() => onClashTierChange(tier)} />
-                  ))}
-                </FilterGroup>
-                <FilterGroup label="Dia">
-                  <CountPill label="Todos" count={clashDayCounts.all} active={clashDay === 'all'} onClick={() => onClashDayChange('all')} />
-                  {CLASH_DAYS.map((day) => (
-                    <CountPill key={day} label={CLASH_DAY_LABEL[day]} count={clashDayCounts[day]} active={clashDay === day} onClick={() => onClashDayChange(day)} />
-                  ))}
-                </FilterGroup>
+                <FilterTabs
+                  label="Tier"
+                  nowrap
+                  value={clashTier}
+                  onChange={onClashTierChange}
+                  options={[
+                    { value: 'all', label: 'Todos', count: clashTierCounts.all },
+                    ...CLASH_TIERS.map((tier) => ({ value: tier, label: CLASH_TIER_LABEL[tier], count: clashTierCounts[tier] })),
+                  ]}
+                />
+                <FilterTabs
+                  label="Dia"
+                  value={clashDay}
+                  onChange={onClashDayChange}
+                  options={[
+                    { value: 'all', label: 'Todos', count: clashDayCounts.all },
+                    ...CLASH_DAYS.map((day) => ({ value: day, label: CLASH_DAY_LABEL[day], count: clashDayCounts[day] })),
+                  ]}
+                />
               </>
             )}
           </Popover>

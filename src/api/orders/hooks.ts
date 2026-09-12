@@ -8,7 +8,7 @@ import {
   getAdminOrderTabCounts, getBoosterOrder, getBoosterOrderTabCounts, getBoosterSlotInfo, getCustomerOrderState, getCustomerOrderTabCounts, getOrder, getOrderCustomerNickname,
   getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderBoosterDuoMatches, listOrderCoachingTopics,
-  listOrderMatches, listOrderStatusHistory,
+  listOrderMatches, listOrderStatusHistory, listBoosterActiveOrders, listBoosterCompletedOrdersSince,
 } from './queries'
 import {
   acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
@@ -121,6 +121,24 @@ export function useCustomerOrderTabCounts(customerId: string | undefined) {
     queryKey: queryKeys.orders.customerTabCounts(customerId ?? ''),
     queryFn: () => getCustomerOrderTabCounts(customerId!),
     enabled: !!customerId,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useBoosterActiveOrders(boosterUserId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.orders.boosterActive(boosterUserId ?? ''),
+    queryFn: () => listBoosterActiveOrders(boosterUserId!),
+    enabled: !!boosterUserId,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useBoosterCompletedOrdersSince(boosterUserId: string | undefined, sinceIso: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.orders.boosterCompletedSince(boosterUserId ?? '', sinceIso),
+    queryFn: () => listBoosterCompletedOrdersSince(boosterUserId!, sinceIso),
+    enabled: !!boosterUserId && enabled,
     refetchInterval: 30_000,
   })
 }

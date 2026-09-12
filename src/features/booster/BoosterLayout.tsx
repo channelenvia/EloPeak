@@ -3,7 +3,6 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Briefcase, ClipboardList, Wrench, Landmark, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LogoMark, PageLoader, Avatar } from '@/components/ui'
-import { useTranslation } from 'react-i18next'
 import { UserAccountBadge } from '@/components/UserAccountBadge'
 import { UserProfilePanel } from '@/components/UserProfilePanel'
 import { NotificationBell } from '@/components/NotificationBell'
@@ -18,19 +17,18 @@ import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 function ApprovedBoosterPanel() {
   const { pathname } = useLocation()
   const { profile } = useAuthStore()
-  const { t } = useTranslation()
   const [panelOpen, setPanelOpen] = useState(false)
   useNewOrderSound()
   useChatMentionSound()
   useBoosterHeartbeat(true)
 
   const navItems = [
-    { href: '/booster',          icon: LayoutDashboard, label: t('booster.nav.dashboard') },
-    { href: '/booster/jobs',     icon: Briefcase,        label: t('booster.nav.jobs')      },
-    { href: '/booster/orders',   icon: ClipboardList,    label: t('booster.nav.orders')    },
-    { href: '/booster/payments', icon: Wallet,           label: t('booster.nav.payments')  },
-    { href: '/booster/services', icon: Wrench,           label: t('booster.nav.services')  },
-    { href: '/booster/accounts', icon: Landmark,         label: t('booster.nav.accounts')  },
+    { href: '/booster',          icon: LayoutDashboard, label: 'Painel'    },
+    { href: '/booster/jobs',     icon: Briefcase,        label: 'Jobs'     },
+    { href: '/booster/orders',   icon: ClipboardList,    label: 'Pedidos'  },
+    { href: '/booster/payments', icon: Wallet,           label: 'Pagamentos' },
+    { href: '/booster/services', icon: Wrench,           label: 'Serviços' },
+    { href: '/booster/accounts', icon: Landmark,         label: 'Contas'   },
   ]
   const sections: SidebarNavSection[] = [{ items: navItems }]
 
@@ -40,7 +38,7 @@ function ApprovedBoosterPanel() {
         scope="booster"
         homeHref="/booster"
         sections={sections}
-        roleBadge={{ label: t('booster.nav.role'), className: 'bg-success/15 text-success border-success/25' }}
+        roleBadge={{ label: 'Booster', className: 'bg-success/15 text-success border-success/25' }}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

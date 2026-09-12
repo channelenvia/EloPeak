@@ -45,9 +45,15 @@ export async function listAdminPayments(limit = 150): Promise<{
 }
 
 export async function listPendingReviewOrders(): Promise<Order[]> {
+  // admin_review_locked/review_release_at ficam de fora de ORDER_SAFE_COLUMNS
+  // de propósito (é a projeção também usada pra cliente/booster, que não
+  // precisam ver o estado interno da janela de revisão) -- por isso são
+  // selecionados à parte aqui, só nesta lista admin-only. Sem eles, o toggle
+  // de cadeado do PendingReviewPanel sempre lia `undefined` (falsy) e nunca
+  // refletia o travamento real nem a contagem regressiva.
   const { data, error } = await supabase
     .from('orders')
-    .select(ORDER_SAFE_COLUMNS)
+    .select(`${ORDER_SAFE_COLUMNS},admin_review_locked,review_release_at`)
     .eq('status', 'pending_review')
     .order('created_at', { ascending: true })
   if (error) throw normalizeApiError(error)
@@ -68,4 +74,37 @@ export async function listAdminDropRequests(limit = 100): Promise<OrderDropReque
     .limit(limit)
   if (error) throw normalizeApiError(error)
   return (data ?? []) as unknown as OrderDropRequest[]
+}
+
+export async function getProfileUsername(profileId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('profiles').select('username').eq('id', profileId).maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return data?.username ?? null
+}
+
+// Batch de vários ids de uma vez em vez de uma query por card (N+1) --
+// mesmo padrão de listBoosterNames (src/api/boosters/queries.ts).
+export async function listProfileUsernames(profileIds: string[]): Promise<Map<string, string>> {
+  if (profileIds.length === 0) return new Map()
+  const { data, error } = await supabase.from('profiles').select('id, username').in('id', profileIds)
+  if (error) throw normalizeApiError(error)
+  return new Map((data ?? []).map((p) => [p.id, p.username as string]))
+}
+
+export async function getOrderParties(customerId: string, boosterUserIds: string[]): Promise<{
+  customerUsername: string | null
+  boosterByUserId: Map<string, { id: string; user_id: string; display_name: string }>
+}> {
+  const [{ data: customer, error: customerError }, { data: boosters, error: boostersError }] = await Promise.all([
+    supabase.from('profiles').select('username').eq('id', customerId).maybeSingle(),
+    boosterUserIds.length
+      ? supabase.from('booster_profiles').select('id, user_id, display_name').in('user_id', boosterUserIds)
+      : Promise.resolve({ data: [] as { id: string; user_id: string; display_name: string }[], error: null }),
+  ])
+  if (customerError) throw normalizeApiError(customerError)
+  if (boostersError) throw normalizeApiError(boostersError)
+  return {
+    customerUsername: customer?.username ?? null,
+    boosterByUserId: new Map((boosters ?? []).map((b) => [b.user_id, b])),
+  }
 }

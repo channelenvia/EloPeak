@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 const root = join(__dirname, '..')
-const sql = readFileSync(join(root, 'supabase', 'migrations_archive', '014_order_access_token_credentials.sql'), 'utf-8')
-const fixSql = readFileSync(join(root, 'supabase', 'migrations_archive', '016_order_requires_access_token_service_type.sql'), 'utf-8')
+const path1 = join(root, 'supabase', 'migrations_archive', '014_order_access_token_credentials.sql')
+const path2 = join(root, 'supabase', 'migrations_archive', '016_order_requires_access_token_service_type.sql')
+// migrations_archive/ fica fora do git (histórico local, ver .gitignore) --
+// num clone novo/CI sem esse backup, o describe pula em vez de quebrar a
+// suite inteira.
+const migrationsExist = existsSync(path1) && existsSync(path2)
+const sql = migrationsExist ? readFileSync(path1, 'utf-8') : ''
+const fixSql = migrationsExist ? readFileSync(path2, 'utf-8') : ''
 
 function functionBlock(name: string, source = sql): string {
   const escaped = name.replace('.', '\\.')
@@ -13,7 +19,7 @@ function functionBlock(name: string, source = sql): string {
   return match![0]
 }
 
-describe('order access token hardening', () => {
+describe.skipIf(!migrationsExist)('order access token hardening', () => {
   it('get_order_credentials retorna só token, nunca login/senha', () => {
     const block = functionBlock('public.get_order_credentials')
     expect(block).toContain("'access_token'")

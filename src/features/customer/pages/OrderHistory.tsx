@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import { ShoppingBag, Search } from 'lucide-react'
-import { EmptyState, Pagination, Skeleton } from '@/components/ui'
+import { ShoppingBag } from 'lucide-react'
+import { EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
@@ -15,7 +14,6 @@ import { useCustomerOrders, useCustomerOrderTabCounts } from '@/api/orders'
 export function OrderHistoryPage() {
   const navigate = useNavigate()
   const { profile } = useAuthStore()
-  const { t } = useTranslation()
   const currency = useCurrency()
   const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
@@ -55,22 +53,18 @@ export function OrderHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">{t('customer.history.title')}</h1>
+      <h1 className="text-2xl font-bold text-ink">Histórico de Pedidos</h1>
 
       {/* Filters -- busca + status à esquerda, tipo de serviço à direita. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-48 shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
-            <input
-              type="text"
-              placeholder={t('customer.history.search')}
-              aria-label={t('customer.history.search')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input-base pl-8 py-1.5 text-xs"
-            />
-          </div>
+          <SearchInput
+            wrapperClassName="w-full sm:w-64 shrink-0"
+            placeholder="Buscar por ID do pedido..."
+            aria-label="Buscar por ID do pedido..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <OrderStatusFilterDropdown
             tab={statusFilter.tab}
             onTabChange={statusFilter.setTab}
@@ -118,9 +112,9 @@ export function OrderHistoryPage() {
       ) : !filtered.length ? (
         <EmptyState
           icon={ShoppingBag}
-          title={t('customer.history.empty')}
-          description={statusFilter.tab !== 'all' ? t('customer.history.emptyFilter') : t('customer.history.emptyAll')}
-          action={statusFilter.tab === 'all' ? { label: t('customer.history.startBoost'), onClick: () => navigate('/orders/new?new=1') } : undefined}
+          title="Nenhum pedido encontrado"
+          description={statusFilter.tab !== 'all' ? 'Tente mudar o filtro.' : 'Faça seu primeiro pedido para começar.'}
+          action={statusFilter.tab === 'all' ? { label: 'Configurar Boost', onClick: () => navigate('/orders/new?new=1') } : undefined}
         />
       ) : (
         <>

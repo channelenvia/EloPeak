@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Clock, DollarSign, CheckCircle2, Star, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Clock, DollarSign, CheckCircle2, Star, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
@@ -7,7 +7,7 @@ import { LANES, COACH_SPECIALTIES, TEMPO_OPTIONS } from '@/lib/lolTaxonomy'
 import { matchesCoachPackageFilters, activeFilterCount } from '@/lib/coachFilters'
 import type { BoosterService } from '@/types'
 import { useAllCoachingPackages, useCoachBoosterInfo } from '@/api/coaching'
-import { MultiSelectPopover, CurrencyMaskedInput } from '@/components/ui'
+import { MultiSelectPopover, CurrencyMaskedInput, SearchInput } from '@/components/ui'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 
 const PAGE_SIZE = 9 // grade 3x3
@@ -138,17 +138,13 @@ export function CoachPackagePicker() {
 
         {/* Busca por nome — filtro principal, texto livre (cobre título,
             descrição, nome do coach e champions) */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nome do coach, título, descrição ou champion..."
-            aria-label="Buscar pacotes de coach"
-            className="input-base pl-9 w-full text-sm"
-          />
-        </div>
+        <SearchInput
+          size="md"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nome do coach, título, descrição ou champion..."
+          aria-label="Buscar pacotes de coach"
+        />
 
         {/* Rotas, Especialidades e Duração — popovers de multi-seleção (OU
             dentro de cada um), filtram automaticamente a cada marcação, sem

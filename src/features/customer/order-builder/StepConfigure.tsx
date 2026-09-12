@@ -3,21 +3,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { FormField } from '@/components/ui/FormField'
 import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert, InlineFieldSelect } from '@/components/ui'
-import { supabase } from '@/lib/supabase'
+import { useMasterPlusPriceRow } from '@/api/catalog'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { cn, RANK_TIER_ORDER } from '@/lib/utils'
 import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, applyLpModifier, lpModifierPct, applyMasterPlusPdlDiscount, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
-import { isMasterPlusCurrentTier, isDuoBlockedAtTier } from '@/lib/boostDomain'
+import { isMasterPlusCurrentTier, isDuoBlockedAtTier, RIOT_ID_FORMAT } from '@/lib/boostDomain'
 import type { Division, QueueType, RankTier } from '@/types'
 import { Search, Info, Check } from 'lucide-react'
 import { CoachPackagePicker } from './CoachPackagePicker'
 import { ClashConfigPicker } from './ClashConfigPicker'
 import { LaneSelectField } from '@/components/order/LaneSelectField'
-
-// Mesmo formato aceito pelo backend (riot-account-rank bodySchema): 1-16 chars
-// antes do #, 2-5 alfanuméricos depois. Validar no cliente evita um 400
-// "Riot ID inválido" a cada busca com ID incompleto.
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
 type RiotRankResponse = {
   found?: boolean
@@ -341,23 +336,12 @@ export function StepConfigure() {
   // não tem preço configurado, o preço fica indefinido e o pedido não avança.
   const masterPlusPriceCurrentTier = currentIsMasterPlus ? currentRank?.tier : 'master'
   const masterPlusPricePdl = Math.max(0, currentIsMasterPlus ? currentPdl : 0)
-  const { data: masterPlusPriceRow, isFetching: loadingMasterPlusPrice } = useQuery({
-    queryKey: ['master-plus-price', masterPlusPriceCurrentTier, targetRank?.tier, queueType, masterPlusPricePdl, boostMode],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('master_plus_pricing')
-        .select('price')
-        .eq('current_tier', masterPlusPriceCurrentTier!)
-        .eq('target_tier', targetRank!.tier)
-        .eq('queue_type', queueType)
-        .eq('boost_mode', boostMode)
-        .lte('pdl_from', masterPlusPricePdl)
-        .order('pdl_from', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (error) throw error
-      return data as { price: number | null } | null
-    },
+  const { data: masterPlusPriceRow, isFetching: loadingMasterPlusPrice } = useMasterPlusPriceRow({
+    currentTier: masterPlusPriceCurrentTier,
+    targetTier: targetRank?.tier,
+    queueType,
+    boostMode,
+    pdlFrom: masterPlusPricePdl,
     enabled: (currentIsMasterPlus || isStandardToMasterPlus) && !!currentRank && !!targetRank,
   })
 

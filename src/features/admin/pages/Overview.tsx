@@ -4,7 +4,6 @@ import { Card, OrderStatusBadge, Skeleton, StatCard, ErrorAlert } from '@/compon
 import { timeAgo } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { useTranslation } from 'react-i18next'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDashboardStats } from '@/api/admin'
 import { PendingReviewPanel } from '../components/PendingReviewPanel'
@@ -20,7 +19,6 @@ const CHART_BRAND = 'rgb(var(--color-brand))'
 
 export function AdminOverview() {
   const { data: stats, isLoading, isError } = useAdminDashboardStats()
-  const { t } = useTranslation()
   const currency = useCurrency()
 
   const recentOrders = stats?.recent_orders ?? []
@@ -37,10 +35,10 @@ export function AdminOverview() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">{t('admin.overview.title')}</h1>
+        <h1 className="text-2xl font-bold text-ink">Visão Geral</h1>
         <div className="flex items-center gap-2 text-xs text-ink-muted">
           <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
-          {t('admin.overview.live')}
+          Ao vivo
         </div>
       </div>
 
@@ -61,7 +59,7 @@ export function AdminOverview() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link to="/admin/boosters">
             <StatCard
-              label={t('admin.overview.pendingBoosters')}
+              label="Boosters Pendentes"
               value={pendingBoosters}
               icon={Users}
               color={needsAttention ? 'text-warning bg-warning/10' : 'text-brand bg-brand/10'}
@@ -76,7 +74,7 @@ export function AdminOverview() {
             valueSize="lg"
           />
           <StatCard
-            label={t('admin.overview.activeOrders')}
+            label="Pedidos Ativos"
             value={stats?.active_orders_count ?? 0}
             icon={ShoppingBag}
             color="text-info bg-info/10"
@@ -89,7 +87,7 @@ export function AdminOverview() {
         {/* Orders chart -- centralizado verticalmente no card, altura maior
             que a versão anterior (ficava espremido demais). */}
         <Card variant="operational" padding="md" className="flex flex-col">
-          <h3 className="text-sm font-semibold text-ink mb-3">{t('admin.overview.ordersWeek')}</h3>
+          <h3 className="text-sm font-semibold text-ink mb-3">Pedidos Esta Semana</h3>
           <div className="flex-1 flex items-center justify-center">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData}>
@@ -111,8 +109,8 @@ export function AdminOverview() {
         {/* Recent orders */}
         <Card variant="operational" padding="md">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-ink">{t('admin.overview.recentOrders')}</h3>
-            <Link to="/admin/orders" className="text-xs text-brand hover:underline">{t('admin.overview.viewAll')}</Link>
+            <h3 className="text-sm font-semibold text-ink">Pedidos Recentes</h3>
+            <Link to="/admin/orders" className="text-xs text-brand hover:underline">Ver todos</Link>
           </div>
           <div className="divide-y divide-border-subtle max-h-[300px] overflow-y-auto">
             {recentOrders.map((order) => (

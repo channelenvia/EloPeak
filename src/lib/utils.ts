@@ -285,6 +285,11 @@ export const PAYOUT_REQUEST_STATUS_COLOR: Record<PayoutRequestStatus, string> = 
   canceled: 'text-ink-muted bg-bg-raised',
 }
 
+// Só requested/under_review/approved têm ação pendente (do booster ou do
+// admin) -- o resto (pago/rejeitado/cancelado) é estado final, só consulta.
+// Fonte única -- antes duplicada dentro de admin/pages/Payouts.tsx.
+export const PAYOUT_PENDING_STATUSES: PayoutRequestStatus[] = ['requested', 'under_review', 'approved']
+
 // ─── Service label ────────────────────────────────────────────────────────────
 
 // 4 serviços canônicos da plataforma -- win_boost, md5 e o legado

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useTranslation } from 'react-i18next'
 import {
   Shield, Zap, Clock, Users, ChevronRight,
   TrendingUp, MessageCircle, Swords,
@@ -42,8 +41,6 @@ function RankLadder() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function HomePage() {
-  const { t } = useTranslation()
-
   // Mesma seleção sistemática do Top 3 da página /boosters (ver
   // get_top_boosters) — só pede 1 posição a mais para preencher o teaser de
   // 4 colunas da home; não é uma lista fixa/manual.
@@ -60,52 +57,52 @@ export function HomePage() {
   }))
 
   const STATS = [
-    { value: '1.800+', label: t('home.stats.ordersCompleted') },
-    { value: '4,9/5',  label: t('home.stats.avgRating')       },
-    { value: '88%',    label: t('home.stats.winRate')          },
-    { value: '20+',    label: t('home.stats.activeBoosters')   },
+    { value: '1.800+', label: 'Pedidos concluídos' },
+    { value: '4,9/5',  label: 'Avaliação média'    },
+    { value: '88%',    label: 'Taxa de vitória'    },
+    { value: '20+',    label: 'Boosters ativos'    },
   ]
 
   const SERVICES = [
     {
       icon: TrendingUp,
-      title: t('home.services.eloBoostTitle'),
+      title: 'Elo Boost',
       href: '/orders/new?service=elo_boost',
-      badge: t('home.services.mostPopular'),
+      badge: 'Mais Popular',
       color: 'text-brand bg-brand/10',
-      desc: t('home.services.eloBoostDesc'),
+      desc: 'Nossos boosters jogam na sua conta (Solo) ou ao seu lado (Duo) e sobem do seu rank atual até o rank desejado, divisão por divisão.',
     },
     {
       icon: Zap,
-      title: t('home.services.winBoostTitle'),
+      title: 'Win Boost',
       href: '/orders/new?service=win_boost',
-      badge: t('home.services.fast'),
+      badge: 'Rápido',
       color: 'text-accent bg-accent/10',
-      desc: t('home.services.winBoostDesc'),
+      desc: 'Compre um número fixo de vitórias para ganhar LP rápido — ou, se ainda não jogou o posicionamento, ative a garantia MD5 automaticamente.',
     },
     {
       icon: Swords,
-      title: t('home.services.clashTitle'),
+      title: 'Clash',
       href: '/orders/new?service=clash',
-      badge: t('home.services.weekend'),
+      badge: 'Fim de Semana',
       color: 'text-warning bg-warning/10',
-      desc: t('home.services.clashDesc'),
+      desc: 'Solo Clash ou Duo Clash aos sábados e domingos — o booster monta o time e garante sua participação no torneio.',
     },
     {
       icon: Users,
-      title: t('home.services.coachingTitle'),
+      title: 'Coaching',
       href: '/orders/new?service=coaching',
-      badge: t('home.services.pro'),
+      badge: 'Pro',
       color: 'text-success bg-success/10',
-      desc: t('home.services.coachingDesc'),
+      desc: 'Sessões 1-a-1 ao vivo. Seu coach analisa seus VODs, identifica erros e cria um plano de melhoria personalizado.',
     },
   ]
 
   const TRUST_FEATURES = [
-    { icon: Lock,          label: t('home.extras.vpnLabel'),       desc: t('home.extras.vpnDesc')       },
-    { icon: MessageCircle, label: t('home.extras.chatLabel'),      desc: t('home.extras.chatDesc')      },
-    { icon: Star,          label: t('home.extras.guaranteeLabel'), desc: t('home.extras.guaranteeDesc') },
-    { icon: Clock,         label: 'Início rápido',                 desc: 'Seu pedido é atribuído em até 30 minutos após o pagamento.' },
+    { icon: Lock,          label: 'Proteção VPN',  desc: 'Cada sessão roda através de um VPN local.' },
+    { icon: MessageCircle, label: 'Chat ao Vivo',  desc: 'Chat direto com seu booster dentro do seu pedido.' },
+    { icon: Star,          label: 'Garantia 100%', desc: 'Reembolso total se não conseguirmos concluir seu pedido.' },
+    { icon: Clock,         label: 'Início rápido', desc: 'Seu pedido é atribuído em até 30 minutos após o pagamento.' },
   ]
 
   return (
@@ -127,13 +124,13 @@ export function HomePage() {
             className="max-w-4xl mx-auto text-center"
           >
             <h1 className="text-5xl sm:text-6xl xl:text-7xl font-black tracking-tight text-ink leading-[1.02]">
-              {t('home.heroTitle')}{' '}
-              <span className="text-gradient-brand">{t('home.heroTitleHighlight')}</span>
+              SUBA DE{' '}
+              <span className="text-gradient-brand">ELO.</span>
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-ink-secondary leading-relaxed max-w-2xl mx-auto">
-              {t('home.heroDesc')}{' '}
-              <span className="text-ink font-semibold">{t('home.heroDescBold')}</span>{t('home.heroDescPost')}
+              Solo boost, duo boost, coaching e MD5 profissionais — com transparência total, chat ao vivo e{' '}
+              <span className="text-ink font-semibold">garantia de 100% de conclusão</span>.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
@@ -176,9 +173,9 @@ export function HomePage() {
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
           >
-            <p className="section-label mb-3">{t('home.services.sectionLabel')}</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">{t('home.services.title')}</h2>
-            <p className="mt-4 text-ink-secondary text-lg max-w-xl mx-auto">{t('home.services.desc')}</p>
+            <p className="section-label mb-3">O que oferecemos</p>
+            <h2 className="text-4xl md:text-5xl font-black text-ink">Serviços disponíveis</h2>
+            <p className="mt-4 text-ink-secondary text-lg max-w-xl mx-auto">Todos os serviços incluem chat ao vivo com seu booster, atualizações em tempo real e garantia de reembolso total.</p>
           </motion.div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -203,7 +200,7 @@ export function HomePage() {
                     <p className="text-sm text-ink-secondary leading-relaxed">{desc}</p>
                   </div>
                   <div className="flex items-center gap-1.5 text-brand text-sm font-bold mt-auto">
-                    {t('home.services.orderNow')} <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                    Pedir agora <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </Link>
               </motion.div>
@@ -233,15 +230,15 @@ export function HomePage() {
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
           >
-            <p className="section-label mb-3">{t('home.howItWorks.sectionLabel')}</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">{t('home.howItWorks.title')}</h2>
+            <p className="section-label mb-3">Processo simples</p>
+            <h2 className="text-4xl md:text-5xl font-black text-ink">3 passos para seu rank alvo</h2>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
-              { n: '01', title: t('home.howItWorks.step1Title'), body: t('home.howItWorks.step1Desc') },
-              { n: '02', title: t('home.howItWorks.step2Title'), body: t('home.howItWorks.step2Desc') },
-              { n: '03', title: t('home.howItWorks.step3Title'), body: t('home.howItWorks.step3Desc') },
+              { n: '01', title: 'Configure e Pague', body: 'Escolha seu serviço, rank atual e alvo na calculadora acima. Veja o preço na hora. Pague com segurança — seus dados são sempre protegidos.' },
+              { n: '02', title: 'Booster Atribuído', body: 'Em minutos, um booster verificado que combina com seu tipo de fila e preferências de campeão aceita seu pedido.' },
+              { n: '03', title: 'Acompanhe e Converse', body: 'Acompanhe o progresso ao vivo. Converse direto com seu booster. Pause quando quiser. Receba notificação quando seu rank alvo for atingido.' },
             ].map(({ n, title, body }, idx) => (
               <motion.div key={n}
                 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
@@ -270,15 +267,15 @@ export function HomePage() {
               initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}
             >
-              <p className="section-label mb-4">{t('home.trust.sectionLabel')}</p>
+              <p className="section-label mb-4">Por que mais de 1.800 jogadores confiam em nós</p>
               <h2 className="text-4xl md:text-5xl font-black text-ink mb-6 leading-tight">
-                {t('home.trust.title')}
+                Sua conta está em boas mãos.
               </h2>
               <p className="text-ink-secondary text-lg mb-7 leading-relaxed">
-                {t('home.trust.desc')}
+                As credenciais enviadas pela plataforma são criptografadas antes de serem armazenadas e ficam disponíveis apenas para o booster atribuído e para a equipe autorizada quando necessário. Cada sessão roda através de VPN. Você tem um histórico completo no histórico de pedidos ao vivo.
               </p>
               <Button asChild size="lg" variant="secondary">
-                <Link to="/security">{t('home.trust.policy')}</Link>
+                <Link to="/security">Leia nossa política de segurança →</Link>
               </Button>
             </motion.div>
 
@@ -393,8 +390,8 @@ export function HomePage() {
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
           >
-            <p className="section-label mb-3">{t('home.reviewsSection.sectionLabel')}</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">{t('home.reviewsSection.title')}</h2>
+            <p className="section-label mb-3">Clientes reais</p>
+            <h2 className="text-4xl md:text-5xl font-black text-ink">O que os jogadores dizem</h2>
           </motion.div>
         </div>
 
@@ -418,16 +415,16 @@ export function HomePage() {
             </div>
 
             <h2 className="text-4xl md:text-6xl font-black text-ink mb-6 leading-tight">
-              {t('home.cta.title')}
+              Pronto para alcançar seu rank objetivo?
             </h2>
             <p className="text-ink-secondary text-xl mb-10">
-              {t('home.cta.desc')}
+              Junte-se a mais de 1.800 jogadores. Configure seu boost acima e comece em minutos.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button asChild size="xl">
                 <Link to="/orders/new">
-                  {t('home.cta.button')} <ArrowRight className="h-5 w-5" />
+                  Começar Seu Boost <ArrowRight className="h-5 w-5" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="ghost">

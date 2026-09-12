@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
 import { adminAssignPendingReviewOrder, adminCancelPendingReviewOrder, adminSetPendingReviewLock } from '@/api/orders/mutations'
-import { getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases, listPendingReviewOrders } from './queries'
+import {
+  getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases, listPendingReviewOrders,
+  getProfileUsername, listProfileUsernames, getOrderParties,
+} from './queries'
 import { adminAdjustBoosterBalance, resolveDropRequest } from './mutations'
 
 export function useAdminReviewCases() {
@@ -137,6 +140,35 @@ export function useAdminDropRequests() {
     queryKeys: [queryKeys.admin.drops()],
   })
   return query
+}
+
+export function useProfileUsername(profileId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.admin.profileUsername(profileId ?? ''),
+    queryFn: () => getProfileUsername(profileId!),
+    enabled: !!profileId,
+  })
+}
+
+export function useProfileUsernames(profileIds: string[]) {
+  return useQuery({
+    queryKey: queryKeys.admin.profileUsernames(profileIds),
+    queryFn: () => listProfileUsernames(profileIds),
+    enabled: profileIds.length > 0,
+  })
+}
+
+export function useOrderParties(
+  customerId: string | undefined,
+  assignedBoosterId: string | null | undefined,
+  preferredBoosterId: string | null | undefined,
+) {
+  const boosterUserIds = [assignedBoosterId, preferredBoosterId].filter((v): v is string => !!v)
+  return useQuery({
+    queryKey: queryKeys.admin.orderParties(customerId, assignedBoosterId, preferredBoosterId),
+    queryFn: () => getOrderParties(customerId!, boosterUserIds),
+    enabled: !!customerId,
+  })
 }
 
 export function useResolveDropRequest() {

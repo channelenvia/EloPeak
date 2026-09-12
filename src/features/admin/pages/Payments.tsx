@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { CreditCard, DollarSign, ReceiptText } from 'lucide-react'
-import { Card, EmptyState, Skeleton } from '@/components/ui'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { cn, formatDateTime, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_COLOR } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminPayments } from '@/api/admin'
+import { usePagedList } from '@/hooks/usePagedList'
 
 function StatusBadge({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -36,8 +37,15 @@ function StatCard({ label, value, icon: Icon, tone }: { label: string; value: st
 export function AdminPaymentsPage() {
   const currency = useCurrency()
 
+  const [search, setSearch] = useState('')
   const { data: paymentSummary, isLoading } = useAdminPayments()
   const payments = paymentSummary?.payments
+  const filtered = (payments ?? []).filter((p) => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return p.order_id.toLowerCase().includes(q) || p.mp_payment_id.toLowerCase().includes(q)
+  })
+  const { page, pageItems, hasNextPage, onPrev, onNext } = usePagedList(filtered, 20, search)
 
   return (
     <div className="space-y-6">
@@ -59,46 +67,47 @@ export function AdminPaymentsPage() {
         <StatCard label="Pedidos realizados" value={String(paymentSummary?.paidOrderCount ?? 0)} icon={ReceiptText} tone="bg-brand/10 text-brand" />
       </div>
 
-      <Card variant="operational" padding="none">
-        {isLoading ? (
-          <div className="p-4"><Skeleton className="h-48 w-full" /></div>
-        ) : !payments?.length ? (
-          <EmptyState icon={CreditCard} title="Nenhum pedido pago encontrado." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID Mercado Pago</TableHead>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Método</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell><span className="font-mono text-xs text-ink-secondary">{payment.mp_payment_id.slice(-12)}</span></TableCell>
-                  <TableCell>
-                    <Link to={`/admin/orders/${payment.order_id}`} className="font-mono text-xs font-bold text-brand hover:underline">
-                      {payment.order_id.slice(0, 8).toUpperCase()}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-semibold text-ink" data-tabular>{currency(payment.amount)}</TableCell>
-                  <TableCell className="capitalize">{payment.payment_method_type ?? '—'}</TableCell>
-                  <TableCell>
-                    <StatusBadge className={PAYMENT_STATUS_COLOR[payment.status] ?? 'border-border-strong bg-bg-raised text-ink-muted'}>
-                      {PAYMENT_STATUS_LABEL[payment.status] ?? payment.status}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>{formatDateTime(payment.created_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+      <SearchInput
+        wrapperClassName="w-full sm:w-64 shrink-0"
+        placeholder="Buscar por código do pedido..."
+        aria-label="Buscar por código do pedido"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
+        </div>
+      ) : !filtered.length ? (
+        <Card variant="operational" padding="none">
+          <EmptyState icon={CreditCard} title={search ? 'Nenhum pagamento encontrado.' : 'Nenhum pedido pago encontrado.'} />
+        </Card>
+      ) : (
+        <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {pageItems.map((payment) => (
+            <Link key={payment.id} to={`/admin/orders/${payment.order_id}`}>
+              <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-xs font-bold text-brand">#{payment.order_id.slice(0, 8).toUpperCase()}</span>
+                  <StatusBadge className={PAYMENT_STATUS_COLOR[payment.status] ?? 'border-border-strong bg-bg-raised text-ink-muted'}>
+                    {PAYMENT_STATUS_LABEL[payment.status] ?? payment.status}
+                  </StatusBadge>
+                </div>
+                <p className="text-lg font-black text-ink" data-tabular>{currency(payment.amount)}</p>
+                <div className="flex items-center justify-between text-[11px] text-ink-muted">
+                  <span className="capitalize">{payment.payment_method_type ?? '—'}</span>
+                  <span className="font-mono">{payment.mp_payment_id.slice(-12)}</span>
+                </div>
+                <p className="text-[11px] text-ink-muted">{formatDateTime(payment.created_at)}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+        <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
+        </>
+      )}
     </div>
   )
 }

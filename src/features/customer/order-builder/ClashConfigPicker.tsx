@@ -15,11 +15,8 @@ import {
 // pra reconsultar rank de conta Duo — não é específico de duo_accounts, só
 // nasceu ali primeiro. Reaproveitado aqui em vez de duplicar o fetch.
 import { lookupDuoAccountRiotRank } from '@/api/duoAccounts'
+import { RIOT_ID_FORMAT } from '@/lib/boostDomain'
 import type { ClashDay, BoostMode } from '@/types'
-
-// Mesmo formato aceito pelo backend (riot-account-rank bodySchema) e usado
-// em StepConfigure.tsx para elo_boost/win_boost/md5.
-const RIOT_ID_FORMAT = /^[^#]{1,16}#[^#]{2,5}$/
 
 const CLASH_DAY_OPTIONS: readonly [ClashDay, ClashDay] = ['saturday', 'sunday']
 const CLASH_MODES: { mode: BoostMode; title: string; desc: string }[] = [

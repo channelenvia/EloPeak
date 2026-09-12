@@ -1,14 +1,12 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { Briefcase, Clock, Sparkles } from 'lucide-react'
 import { Button, Card, Skeleton, ErrorAlert } from '@/components/ui'
 import { RankPerformanceBreakdown } from '@/components/rank/RankPerformanceBreakdown'
-import { supabase } from '@/lib/supabase'
-import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
 import { useAuthStore } from '@/stores/authStore'
-import type { Order, BoosterProfile } from '@/types'
-import { useTranslation } from 'react-i18next'
+import type { Order } from '@/types'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
+import { useOwnBoosterFullProfile } from '@/api/boosters'
+import { useBoosterActiveOrders, useBoosterCompletedOrdersSince } from '@/api/orders'
 
 // Fila de prioridade: pedidos em andamento primeiro, depois concluídos mais
 // recentes -- uma fila só, não duas seções separadas (ativos / concluídos do
@@ -31,67 +29,16 @@ function sortByPriority(orders: Order[]): Order[] {
   })
 }
 
-function useBoosterProfile(userId: string) {
-  return useQuery({
-    queryKey: ['booster-profile-full', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('booster_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (error) throw error
-      return data as unknown as BoosterProfile | null
-    },
-    enabled: !!userId,
-  })
-}
-
-// orders.assigned_booster_id FKs to profiles.id (the auth uid), which is
-// booster_profiles.user_id — NOT booster_profiles.id. Must filter by the
-// auth uid, never by the booster_profiles row's own primary key.
-function useAssignedOrders(boosterUserId: string | undefined) {
-  return useQuery({
-    queryKey: ['booster-assigned-orders', boosterUserId],
-    enabled: !!boosterUserId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(ORDER_SAFE_COLUMNS)
-        .eq('assigned_booster_id', boosterUserId!)
-        .in('status', ['assigned', 'in_progress', 'paused', 'awaiting_customer'])
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      return data as unknown as Order[]
-    },
-    refetchInterval: 15000,
-  })
-}
-
 export function BoosterDashboard() {
   const { profile } = useAuthStore()
-  const { t } = useTranslation()
-  const { data: boosterProfile, isLoading: profileLoading, isError: profileError } = useBoosterProfile(profile?.id ?? '')
-  const { data: activeOrders, isError: activeOrdersError } = useAssignedOrders(profile?.id)
+  const { data: boosterProfile, isLoading: profileLoading, isError: profileError } = useOwnBoosterFullProfile(profile?.id)
+  const { data: activeOrders, isError: activeOrdersError } = useBoosterActiveOrders(profile?.id)
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
-  const { data: monthOrders, isLoading: loadingMonthOrders, isError: monthOrdersError } = useQuery({
-    queryKey: ['booster-month-orders', profile?.id, monthStart],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(ORDER_SAFE_COLUMNS)
-        .eq('assigned_booster_id', profile!.id)
-        .eq('status', 'completed')
-        .gte('completed_at', monthStart)
-        .order('completed_at', { ascending: false })
-      if (error) throw error
-      return data as unknown as Order[]
-    },
-    enabled: !!profile?.id && boosterProfile?.status === 'approved',
-    refetchInterval: 30000,
-  })
+  const { data: monthOrders, isLoading: loadingMonthOrders, isError: monthOrdersError } = useBoosterCompletedOrdersSince(
+    profile?.id, monthStart, boosterProfile?.status === 'approved',
+  )
 
   if (profileLoading) return <Skeleton className="h-64 w-full" />
   if (profileError) return <ErrorAlert message="Não foi possível carregar seu perfil de booster." />
@@ -104,11 +51,11 @@ export function BoosterDashboard() {
           <div className="h-14 w-14 rounded-2xl bg-warning/10 flex items-center justify-center mx-auto mb-4">
             <Clock className="h-7 w-7 text-warning" />
           </div>
-          <h2 className="text-xl font-bold text-ink mb-2">{t('booster.dashboard.pending.title')}</h2>
+          <h2 className="text-xl font-bold text-ink mb-2">Candidatura em Análise</h2>
           <p className="text-ink-secondary text-sm">
-            {t('booster.dashboard.pending.desc')}
+            Sua candidatura está sendo analisada pela nossa equipe. Você será notificado quando aprovado.
           </p>
-          <p className="mt-3 text-xs text-ink-muted">{t('booster.dashboard.pending.statusLabel')} <strong className="text-warning">{boosterProfile?.status ?? 'pending'}</strong></p>
+          <p className="mt-3 text-xs text-ink-muted">Status: <strong className="text-warning">{boosterProfile?.status ?? 'pending'}</strong></p>
         </Card>
       </div>
     )
@@ -128,21 +75,21 @@ export function BoosterDashboard() {
         <div className="relative flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-ink">
-              {t('booster.dashboard.welcome')}, <span className="text-gradient-brand">{profile?.username}</span>
+              Bem-vindo, <span className="text-gradient-brand">{profile?.username}</span>
               <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
             </h1>
             <p className="text-sm text-ink-secondary mt-1">
               {activeOrdersError
                 ? 'Não foi possível carregar seus pedidos ativos.'
                 : activeOrders?.length
-                  ? t('booster.dashboard.activeCount', { count: activeOrders.length })
-                  : t('booster.dashboard.noActive')}
+                  ? `${activeOrders.length} pedido ativo`
+                  : 'Sem pedidos ativos no momento.'}
             </p>
           </div>
           <Button asChild>
             <Link to="/booster/jobs">
               <Briefcase className="h-4 w-4" />
-              {t('booster.dashboard.browseJobs')}
+              Ver Jobs
             </Link>
           </Button>
         </div>

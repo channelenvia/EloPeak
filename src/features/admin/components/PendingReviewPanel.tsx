@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Lock, LockOpen, Search, UserCheck, UserPlus, X } from 'lucide-react'
-import { Button, Card, ErrorAlert, Modal } from '@/components/ui'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Lock, LockOpen, UserCheck, UserPlus, X } from 'lucide-react'
+import { Button, Card, ErrorAlert, Modal, SearchInput } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { usePendingReviewOrders, useAdminAssignPendingReviewOrder, useAdminCancelPendingReviewOrder, useAdminSetPendingReviewLock } from '@/api/admin'
@@ -28,10 +31,17 @@ function timeLeftLabel(releaseAt: string | null, now: number): string {
 }
 
 function CancelModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
-  const [reason, setReason] = useState('')
   const cancelOrder = useAdminCancelPendingReviewOrder()
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
 
-  function close() { onClose(); setReason('') }
+  function close() { onClose(); reset({ reason: '' }) }
+  function submit(data: { reason: string }) {
+    cancelOrder.mutate({ orderId: order.id, reason: data.reason.trim() }, { onSuccess: close })
+  }
 
   return (
     <Modal
@@ -44,8 +54,7 @@ function CancelModal({ order, open, onClose }: { order: Order; open: boolean; on
         <label htmlFor="pending-review-cancel-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
           id="pending-review-cancel-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          {...register('reason')}
           placeholder="Justificativa para o cancelamento..."
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
@@ -59,8 +68,8 @@ function CancelModal({ order, open, onClose }: { order: Order; open: boolean; on
         <Button
           variant="danger"
           loading={cancelOrder.isPending}
-          disabled={reason.trim().length < 10}
-          onClick={() => cancelOrder.mutate({ orderId: order.id, reason: reason.trim() }, { onSuccess: close })}
+          disabled={!isValid}
+          onClick={handleSubmit(submit)}
         >
           Cancelar pedido
         </Button>
@@ -72,9 +81,13 @@ function CancelModal({ order, open, onClose }: { order: Order; open: boolean; on
 function AssignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
-  const [reason, setReason] = useState('')
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const assignOrder = useAdminAssignPendingReviewOrder()
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
   // preferred_booster_id já setado = uma atribuição anterior reservou esse
   // pedido -- reabrir o mesmo modal aqui troca pra outro booster, então o
   // texto muda pra "reatribuir" em vez de "atribuir" (mesma RPC dos dois).
@@ -84,7 +97,11 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
     .filter((b: BoosterWithSlots) => b.status === 'approved')
     .filter((b: BoosterWithSlots) => b.display_name.toLowerCase().includes(search.trim().toLowerCase()))
 
-  function close() { onClose(); setSearch(''); setSelectedBoosterId(null); setReason('') }
+  function close() { onClose(); setSearch(''); setSelectedBoosterId(null); reset({ reason: '' }) }
+  function submit(data: { reason: string }) {
+    if (!selectedBoosterId) return
+    assignOrder.mutate({ orderId: order.id, targetBoosterId: selectedBoosterId, reason: data.reason.trim() }, { onSuccess: close })
+  }
 
   return (
     <Modal
@@ -94,16 +111,13 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
       maxWidth="lg"
       description="Reserva o pedido só pra esse booster -- ele tem 9h pra aceitar, sem passar pelo pool público."
     >
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar booster..."
-          aria-label="Buscar booster"
-          className="input-base w-full pl-9 text-sm"
-        />
-      </div>
+      <SearchInput
+        size="md"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar booster..."
+        aria-label="Buscar booster"
+      />
 
       <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
         {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
@@ -132,8 +146,7 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
         <label htmlFor="pending-review-assign-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
         <textarea
           id="pending-review-assign-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          {...register('reason')}
           placeholder="Justificativa para a atribuição..."
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
@@ -147,11 +160,8 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
         <Button
           variant="primary"
           loading={assignOrder.isPending}
-          disabled={!selectedBoosterId || reason.trim().length < 10}
-          onClick={() => {
-            if (!selectedBoosterId) return
-            assignOrder.mutate({ orderId: order.id, targetBoosterId: selectedBoosterId, reason: reason.trim() }, { onSuccess: close })
-          }}
+          disabled={!selectedBoosterId || !isValid}
+          onClick={handleSubmit(submit)}
         >
           {isReassign ? 'Reatribuir' : 'Atribuir'}
         </Button>

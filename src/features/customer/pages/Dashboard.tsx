@@ -1,5 +1,4 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { Plus, ShoppingBag, MessageCircle, Zap, Sparkles } from 'lucide-react'
 import { Button, Skeleton, EmptyState, StatCard } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
@@ -36,7 +35,6 @@ const RECENT_ORDERS_GRID_LIMIT = 12
 
 export function CustomerDashboard() {
   const { profile } = useAuthStore()
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const currency = useCurrency()
   const { data: orders, isLoading } = useCustomerOrders(profile?.id, 'all', 20)
@@ -46,10 +44,10 @@ export function CustomerDashboard() {
   const recentOrders = sortByPriority(orders ?? [])
 
   const activeMsg = activeCount === 0
-    ? t('customer.dashboard.noActive')
+    ? 'Nenhum pedido ativo no momento.'
     : activeCount === 1
-      ? t('customer.dashboard.activeCount', { count: 1 })
-      : t('customer.dashboard.activeCountPlural', { count: activeCount })
+      ? 'Você tem 1 pedido ativo.'
+      : `Você tem ${activeCount} pedidos ativos.`
 
   return (
     <div className="space-y-6">
@@ -61,7 +59,7 @@ export function CustomerDashboard() {
         <div className="relative flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-ink">
-              {t('customer.dashboard.welcome')}, <span className="text-gradient-brand">{profile?.username}</span>
+              Bem-vindo, <span className="text-gradient-brand">{profile?.username}</span>
               <Sparkles className="ml-2 inline h-5 w-5 text-accent align-[-2px]" />
             </h1>
             <p className="text-sm text-ink-secondary mt-1">{activeMsg}</p>
@@ -69,7 +67,7 @@ export function CustomerDashboard() {
           <Button asChild>
             <Link to="/orders/new">
               <Plus className="h-4 w-4" />
-              {t('customer.dashboard.newOrder')}
+              Novo Pedido
             </Link>
           </Button>
         </div>
@@ -77,10 +75,10 @@ export function CustomerDashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: t('customer.dashboard.stats.active'),    value: activeCount,                          icon: Zap,           color: 'text-brand bg-brand/10' },
-          { label: t('customer.dashboard.stats.total'),     value: stats?.totalOrders ?? 0,               icon: ShoppingBag,   color: 'text-accent bg-accent/10'  },
-          { label: t('customer.dashboard.stats.completed'), value: stats?.completedOrders ?? 0,           icon: ShoppingBag,   color: 'text-success bg-success/10' },
-          { label: t('customer.dashboard.stats.spent'),     value: currency(stats?.totalSpent ?? 0),      icon: MessageCircle, color: 'text-info bg-info/10' },
+          { label: 'Pedidos Ativos',   value: activeCount,                          icon: Zap,           color: 'text-brand bg-brand/10' },
+          { label: 'Total de Pedidos', value: stats?.totalOrders ?? 0,               icon: ShoppingBag,   color: 'text-accent bg-accent/10'  },
+          { label: 'Concluídos',       value: stats?.completedOrders ?? 0,           icon: ShoppingBag,   color: 'text-success bg-success/10' },
+          { label: 'Total Gasto',      value: currency(stats?.totalSpent ?? 0),      icon: MessageCircle, color: 'text-info bg-info/10' },
         ].map(({ label, value, icon, color }) => (
           <StatCard
             key={label}
@@ -101,7 +99,7 @@ export function CustomerDashboard() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-ink">Pedidos recentes</h2>
           <Button asChild variant="link" size="sm">
-            <Link to="/orders">{t('customer.dashboard.viewAll')}</Link>
+            <Link to="/orders">Ver todos →</Link>
           </Button>
         </div>
 
@@ -112,9 +110,9 @@ export function CustomerDashboard() {
         ) : !orders?.length ? (
           <EmptyState
             icon={ShoppingBag}
-            title={t('customer.dashboard.empty')}
-            description={t('customer.dashboard.emptyDesc')}
-            action={{ label: t('customer.dashboard.startBoost'), onClick: () => navigate('/orders/new') }}
+            title="Sem pedidos ainda"
+            description="Faça seu primeiro pedido e comece a subir."
+            action={{ label: 'Começar Boost', onClick: () => navigate('/orders/new') }}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

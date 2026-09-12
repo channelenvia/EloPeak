@@ -38,6 +38,22 @@ export async function listAllActiveCoachingPackages(limit = 100): Promise<Booste
   return (data ?? []) as unknown as BoosterService[]
 }
 
+// Usado ao resolver ?coachPackage= da URL (Order Builder) -- só retorna o
+// pacote se ele ainda estiver ativo e for mesmo de coaching, mesma trava que
+// listPublicCoachingPackages/listAllActiveCoachingPackages já aplicam pra
+// exibição pública (evita ativar um link antigo pra pacote pausado/removido).
+export async function getActiveCoachingPackage(id: string): Promise<BoosterService | null> {
+  const { data, error } = await supabase
+    .from('booster_services')
+    .select('*')
+    .eq('id', id)
+    .eq('service_type', 'coaching')
+    .eq('is_active', true)
+    .maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return data as unknown as BoosterService | null
+}
+
 export async function getBoosterServiceById(id: string): Promise<BoosterService | null> {
   const { data, error } = await supabase
     .from('booster_services')

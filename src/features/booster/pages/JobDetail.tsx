@@ -47,18 +47,29 @@ import {
     Wallet,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 function BoosterDropModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
-  const [dropReason, setDropReason] = useState('')
   const requestDrop = useRequestOrderDrop(order.id)
   const remainingDrops = Math.max(0, 2 - order.drop_count)
+  const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
+    resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
+    defaultValues: { reason: '' },
+    mode: 'onChange',
+  })
+
+  function close() { onClose(); reset({ reason: '' }) }
+  function submit(data: { reason: string }) {
+    requestDrop.mutate(data.reason.trim(), { onSuccess: close })
+  }
 
   return (
     <Modal
       open={open}
-      onOpenChange={(next) => { if (!next) { onClose(); setDropReason('') } }}
+      onOpenChange={(next) => { if (!next) close() }}
       title="Solicitar Drop de Pedido"
       description="Enviado ao admin para aprovação. Pagamento proporcional ao progresso já concluído."
     >
@@ -69,18 +80,18 @@ function BoosterDropModal({ order, open, onClose }: { order: Order; open: boolea
         <label htmlFor="booster-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea id="booster-drop-reason" value={dropReason} onChange={(e) => setDropReason(e.target.value)} placeholder="Descreva o motivo para abandonar o pedido..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="booster-drop-reason" {...register('reason')} placeholder="Descreva o motivo para abandonar o pedido..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
       )}
       <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={() => { onClose(); setDropReason('') }}>Cancelar</Button>
+        <Button variant="ghost" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={requestDrop.isPending}
-          disabled={dropReason.trim().length < 10}
-          onClick={() => requestDrop.mutate(dropReason.trim(), { onSuccess: () => { onClose(); setDropReason('') } })}
+          disabled={!isValid}
+          onClick={handleSubmit(submit)}
         >
           Enviar Solicitação
         </Button>
@@ -109,7 +120,6 @@ export function JobDetailPage() {
   const { profile } = useAuthStore()
   const [dropModalOpen, setDropModalOpen] = useState(false)
   const [nickCopied, setNickCopied] = useState(false)
-  const { t } = useTranslation()
   const currency = useCurrency()
 
   const { data: isTop3 } = useOwnBoosterTop3Status(profile?.id)
@@ -245,7 +255,7 @@ export function JobDetailPage() {
       ? [{ icon: Shuffle, label: 'Modo do pedido', value: modeLabel }]
       : []),
     ...(isBoostFlow
-      ? [{ icon: Users, label: t('booster.job.queue'), value: order.queue_type === 'solo_duo' ? t('booster.job.soloQueue') : t('booster.job.flexQueue') }]
+      ? [{ icon: Users, label: 'Fila', value: order.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex' }]
       : isClash && order.clash_day
         ? [{ icon: Users, label: 'Dia', value: (() => {
             const { day, month } = getClashDateParts(order.created_at, order.clash_day!)
@@ -274,7 +284,7 @@ export function JobDetailPage() {
         ? clashClosingLabel
         : (order.estimated_hours ? formatEstimatedDeliveryLabel(order.estimated_hours) : 'Não disponível'),
     },
-    { icon: Wallet, label: t('booster.job.earnings'), value: currency(order.total_price * boosterEarningsShare(isTop3, order.service_type)) },
+    { icon: Wallet, label: 'Ganhos', value: currency(order.total_price * boosterEarningsShare(isTop3, order.service_type)) },
   ]
 
   return (
@@ -344,11 +354,11 @@ export function JobDetailPage() {
       <OrderDetailShell
         order={order}
         viewerRole="booster"
-        detailsTitle={t('booster.job.details')}
+        detailsTitle="Detalhes do Trabalho"
         history={history}
         coachPackage={coachPackage}
         infoItems={infoItems}
-        notesLabel={t('booster.job.customerNotes')}
+        notesLabel="Notas do Cliente"
         syncMatches={syncMatches}
         accountLockedMessage={
           !showDuoAccountWidget && !showAccessTokenWidget

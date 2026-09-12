@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, ShoppingBag, Plus } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { Avatar } from '@/components/ui'
@@ -14,15 +13,14 @@ import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 export function CustomerLayout() {
   const { pathname } = useLocation()
   const { profile } = useAuthStore()
-  const { t } = useTranslation()
   const [panelOpen, setPanelOpen] = useState(false)
   useChatMentionSound()
 
   const NAV_ITEMS = [
-    { href: '/dashboard',  icon: LayoutDashboard, label: t('customer.nav.dashboard') },
-    { href: '/orders/new', icon: Plus,            label: t('customer.nav.newOrder')   },
+    { href: '/dashboard',  icon: LayoutDashboard, label: 'Painel' },
+    { href: '/orders/new', icon: Plus,            label: 'Novo Pedido' },
     {
-      href: '/orders', icon: ShoppingBag, label: t('customer.nav.myOrders'),
+      href: '/orders', icon: ShoppingBag, label: 'Meus Pedidos',
       isActive: (p: string) => p === '/orders' || (p.startsWith('/orders/') && !p.startsWith('/orders/new')),
     },
   ]

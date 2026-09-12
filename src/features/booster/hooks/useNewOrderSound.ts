@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+// Assinatura Realtime bespoke (diff de ids pra decidir se toca som, não um
+// simples invalidate) não cabe em useRealtimeInvalidate (src/api/core/realtime.ts);
+// channel/removeChannel ficam aqui de propósito.
+// eslint-disable-next-line no-restricted-imports
 import { supabase } from '@/lib/supabase'
 import { queryKeys } from '@/api/core/queryKeys'
+import { listAvailableJobIds } from '@/api/orders'
 import { useBoosterSoundStore } from '@/stores/boosterSoundStore'
 import { useUnlockedAudioContext } from '@/hooks/useUnlockedAudioContext'
 import { playOrderSound } from './orderSoundLibrary'
@@ -55,17 +60,10 @@ export function useNewOrderSound() {
     syncingRef.current = true
 
     try {
-      const { data, error } = await supabase
-        .from('available_boost_orders')
-        .select('id')
+      const ids = await listAvailableJobIds().catch(() => null)
+      if (!ids) return
 
-      if (error) return
-
-      const nextIds = new Set(
-        (data ?? [])
-          .map(({ id }) => id)
-          .filter((id): id is string => typeof id === 'string'),
-      )
+      const nextIds = new Set(ids)
       if (!initializedRef.current) {
         knownOrderIdsRef.current = nextIds
         initializedRef.current = true

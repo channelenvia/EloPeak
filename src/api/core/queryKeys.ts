@@ -21,6 +21,8 @@ export const queryKeys = {
     customerNickname: (orderId: string) => ['orders', 'customer-nickname', orderId] as const,
     paidAmount: (orderId: string) => ['orders', 'paid-amount', orderId] as const,
     availableJobs: () => ['orders', 'available-jobs'] as const,
+    boosterActive: (boosterId: string) => ['orders', 'booster-active', boosterId] as const,
+    boosterCompletedSince: (boosterId: string, sinceIso: string) => ['orders', 'booster-completed-since', boosterId, sinceIso] as const,
     chat: (orderId: string) => ['orders', 'chat', orderId] as const,
     chatMentionTargets: (orderId: string) => ['orders', 'chat-mention-targets', orderId] as const,
     matches: (orderId: string) => ['orders', 'matches', orderId] as const,
@@ -46,6 +48,8 @@ export const queryKeys = {
     performance: (boosterUserIds: string[]) => ['boosters', 'performance', [...boosterUserIds].sort()] as const,
     performanceByRank: (boosterUserId: string) => ['boosters', 'performance-by-rank', boosterUserId] as const,
     names: (boosterUserIds: string[]) => ['boosters', 'names', [...boosterUserIds].sort()] as const,
+    slotEligibility: (userId: string) => ['boosters', 'slot-eligibility', userId] as const,
+    ownFullProfile: (userId: string) => ['boosters', 'own-full-profile', userId] as const,
     adminNotes: () => ['boosters', 'admin-notes'] as const,
     // Consolida a disponibilidade de slot num único namespace -- antes,
     // useBoosterSlotInfo (um booster) e useBoostersWithSlots (lista) viviam
@@ -92,6 +96,16 @@ export const queryKeys = {
     payments: () => ['admin', 'payments'] as const,
     pendingReview: () => ['admin', 'pending-review'] as const,
     reviewCases: () => ['admin', 'review-cases'] as const,
+    profileUsername: (profileId: string) => ['admin', 'profile-username', profileId] as const,
+    profileUsernames: (ids: string[]) => ['admin', 'profile-usernames', [...ids].sort()] as const,
+    orderParties: (customerId?: string, assignedBoosterId?: string | null, preferredBoosterId?: string | null) =>
+      ['admin', 'order-parties', customerId, assignedBoosterId, preferredBoosterId] as const,
+  },
+  catalog: {
+    gameId: (slug: string) => ['catalog', 'game-id', slug] as const,
+    serviceId: (gameId: string, serviceType: string) => ['catalog', 'service-id', gameId, serviceType] as const,
+    masterPlusPrice: (currentTier: string, targetTier: string, queueType: string, boostMode: string, pdlFrom: number) =>
+      ['catalog', 'master-plus-price', currentTier, targetTier, queueType, boostMode, pdlFrom] as const,
   },
   reviews: {
     public: (limit: number) => ['reviews', 'public', limit] as const,
