@@ -119,6 +119,23 @@ serve(async (req) => {
         return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
       }
 
+      // Clash é evento único por conta -- bloqueia um segundo pedido Clash
+      // enquanto o cliente já tiver um ativo (trg_cap_active_clash_orders é a
+      // fonte da verdade atômica; isto só evita gastar a validação/preço,
+      // que pode chamar a Riot, numa tentativa que a trigger vai rejeitar).
+      if ((body.intent as { service_type?: unknown }).service_type === 'clash') {
+        const { count: activeClashCount, error: activeClashErr } = await serviceClient
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', user.id)
+          .eq('service_type', 'clash')
+          .not('status', 'in', '(completed,canceled,refunded)')
+        if (activeClashErr) return errorResponse(req, 'Failed to check active Clash orders', 500)
+        if ((activeClashCount ?? 0) > 0) {
+          return badRequest(req, 'Você já tem um pedido de Clash ativo. Finalize ou cancele-o antes de criar outro.')
+        }
+      }
+
       const outcome = await validateAndPriceIntent(
         req, body.intent, user.id, serviceClient, RIOT_API_KEY, body.preferred_booster_id ?? null,
       )
@@ -204,6 +221,10 @@ serve(async (req) => {
           // -- mesma mensagem do pre-check acima, só que cobrindo a corrida
           // entre o count() e este insert.
           return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
+        } else if (insertErr?.code === 'P0001' && insertErr.message.includes('active_clash_order_exists')) {
+          // Trigger trg_cap_active_clash_orders rejeitou -- cobre a corrida
+          // entre o pre-check acima e este insert.
+          return badRequest(req, 'Você já tem um pedido de Clash ativo. Finalize ou cancele-o antes de criar outro.')
         } else {
           // Keep database details out of the HTTP response, but retain enough
           // structured context in Edge Function logs to diagnose constraints.

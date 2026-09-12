@@ -41,7 +41,7 @@ serve(async (req) => {
     const db = supabaseAdmin()
 
     const [{ data: profile, error: profileError }, { data: order, error: orderError }] = await Promise.all([
-      db.from('profiles').select('discord_id').eq('id', userId).single(),
+      db.from('profiles').select('discord_id, role').eq('id', userId).single(),
       db.from('orders').select('id, customer_id, assigned_booster_id').eq('id', orderId).single(),
     ])
     // Uma falha real de banco/rede aqui não pode virar silenciosamente
@@ -64,7 +64,10 @@ serve(async (req) => {
     // Discord vinculado alegando falsamente uma menção num pedido que ele
     // não participa. discord-order-channel já faz o equivalente re-checando
     // o payload contra o banco; aqui replicamos pro mencionado.
-    if (order.customer_id !== userId && order.assigned_booster_id !== userId) {
+    // send_order_message também aceita qualquer admin como alvo válido de @menção
+    // (não só cliente/booster do pedido) -- sem esta exceção, todo admin mencionado
+    // caía aqui e nunca recebia o DM, mesmo com a notificação in-app já gravada.
+    if (order.customer_id !== userId && order.assigned_booster_id !== userId && profile.role !== 'admin') {
       return jsonResponse(req, { ok: false, reason: 'user is not a participant of this order' })
     }
 

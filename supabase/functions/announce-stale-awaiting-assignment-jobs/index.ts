@@ -24,13 +24,22 @@ const GRACE_PERIOD_MS = 2 * 60 * 1000
 // teve o anúncio deste ciclo confirmado (awaiting_assignment_announced_at é
 // zerado por discord-order-channel antes de cada tentativa -- ver migration
 // 20260911010000).
+//
+// A janela de graça conta a partir de awaiting_assignment_announce_
+// attempted_at (marcado bem antes da chamada ao Discord, ver migration
+// 20260911070000) quando já existe uma tentativa registrada -- só cai de
+// volta pra updated_at quando NENHUMA tentativa ainda rodou pra este ciclo.
+// Sem isso, uma chamada ao Discord mais lenta que o grace period fazia este
+// cron reenviar por cima de uma tentativa original ainda em voo (duplicando
+// o DM/anúncio quando ela enfim terminasse).
 async function findStaleAwaitingAssignmentOrders(db: ReturnType<typeof supabaseAdmin>) {
+  const cutoff = new Date(Date.now() - GRACE_PERIOD_MS).toISOString()
   const { data, error } = await db
     .from('orders')
     .select('id')
     .eq('status', 'awaiting_assignment')
     .is('awaiting_assignment_announced_at', null)
-    .lte('updated_at', new Date(Date.now() - GRACE_PERIOD_MS).toISOString())
+    .or(`and(awaiting_assignment_announce_attempted_at.is.null,updated_at.lte.${cutoff}),awaiting_assignment_announce_attempted_at.lte.${cutoff}`)
     .order('updated_at', { ascending: true })
     .limit(BATCH_LIMIT)
 
@@ -71,6 +80,12 @@ serve(async (req) => {
         // invocação, o pedido pode ter mudado de status ou já ter sido
         // anunciado com sucesso nesse meio-tempo.
         if (order.status !== 'awaiting_assignment' || order.awaiting_assignment_announced_at) continue
+
+        // Marca a tentativa ANTES de chamar o Discord, mesmo motivo do
+        // discord-order-channel -- se este próprio envio demorar, uma
+        // invocação seguinte do cron (ou o webhook original, se ainda não
+        // tiver terminado) não deve reenviar por cima.
+        await db.from('orders').update({ awaiting_assignment_announce_attempted_at: new Date().toISOString() }).eq('id', orderId)
 
         if (order.preferred_booster_id) {
           if (preferredBooster?.discord_id) {

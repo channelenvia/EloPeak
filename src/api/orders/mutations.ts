@@ -98,12 +98,20 @@ export async function setOrderCoachingTopicDone(params: { orderId: string; topic
   return assertTopicSuccess(data as { success: boolean; code?: string; message?: string })
 }
 
+const ADMIN_OVERRIDE_STATUS_MESSAGES: Record<string, string> = {
+  unauthorized: 'Você não tem permissão para essa ação.',
+  invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
+  use_admin_drop_order_instead: 'Para este status, use a ação de drop em vez do override direto.',
+  order_not_found: 'Pedido não encontrado.',
+  no_status_change: 'O pedido já está neste status.',
+}
+
 export async function adminOverrideOrderStatus(params: { orderId: string; newStatus: OrderStatus; reason?: string }) {
   const { data, error } = await supabase.rpc('admin_override_order_status', {
     p_order_id: params.orderId, p_new_status: params.newStatus, p_reason: params.reason,
   })
   if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string })
+  return assertRpcSuccess(data as { success: boolean; error?: string }, ADMIN_OVERRIDE_STATUS_MESSAGES)
 }
 
 // O limite de 2 drops não bloqueia mais o admin_drop_order -- a 3ª chamada
@@ -162,6 +170,9 @@ const PENDING_REVIEW_MESSAGES: Record<string, string> = {
   invalid_reason: 'O motivo precisa ter entre 10 e 500 caracteres.',
   target_booster_not_found: 'Booster não encontrado.',
   target_booster_not_approved: 'Este booster não está com status aprovado -- não é possível atribuir o pedido a ele.',
+  // Só admin_assign_pending_review_order devolve este -- pedido já foi
+  // pego por outro booster entre a lista carregar e o admin confirmar.
+  order_has_active_booster: 'Este pedido já tem um booster atribuído -- atualize a página.',
 }
 
 export async function adminSetPendingReviewLock(params: { orderId: string; locked: boolean }) {

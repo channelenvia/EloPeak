@@ -73,7 +73,11 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
   })
 
   const isPending = PENDING_STATUSES.includes(request.status)
-  const canReject = request.status === 'requested' || request.status === 'under_review'
+  // 'approved' também pode ser rejeitado (migration
+  // 20260912060000_allow_rejecting_approved_payout_request) -- sem isso, uma
+  // aprovação feita por engano (ou fraude descoberta depois) travava a
+  // reserva do saldo do booster pra sempre, sem forma de liberar.
+  const canReject = request.status === 'requested' || request.status === 'under_review' || request.status === 'approved'
 
   async function handleMarkPaid() {
     if (!proofFile) return

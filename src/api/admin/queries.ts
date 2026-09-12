@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
 import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
 import type { Order, OrderDropRequest, Payment, Refund } from '@/types'
-import type { AdminDashboardStats, AdminReviewCase } from './types'
+import type { AdminDashboardStats, AdminReviewCase, AuditLogEntry } from './types'
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   const { data, error } = await supabase.rpc('admin_dashboard_stats')
@@ -74,6 +74,23 @@ export async function listAdminDropRequests(limit = 100): Promise<OrderDropReque
     .limit(limit)
   if (error) throw normalizeApiError(error)
   return (data ?? []) as unknown as OrderDropRequest[]
+}
+
+// Toda ação administrativa (drop, reassign, refund, override, ajuste de
+// saldo, resolução de conta duo, etc.) já grava aqui com o motivo dado pelo
+// admin -- só nunca teve tela nenhuma pra ler de volta (audit_logs tinha a
+// RLS policy certa desde sempre, mas faltava o grant de tabela, ver
+// migration 20260911080000). Mesmo padrão de limit fixo + aviso usado em
+// listAdminDropRequests/listAdminPayments -- paginação real de servidor não
+// vale a complexidade enquanto o volume não justificar.
+export async function listAuditLogs(limit = 300): Promise<AuditLogEntry[]> {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*, actor:profiles(username)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw normalizeApiError(error)
+  return (data ?? []) as unknown as AuditLogEntry[]
 }
 
 export async function getProfileUsername(profileId: string): Promise<string | null> {

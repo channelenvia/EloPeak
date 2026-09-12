@@ -68,12 +68,9 @@ function useCountdown(expiresAt: string | null) {
 
 export function StepPayment({ insideModal = false }: { insideModal?: boolean } = {}) {
   const { profile } = useAuthStore()
-  // Seletor direcionado (useShallow) só nos campos de fato lidos por este
-  // componente -- StepPayment agora abre como modal por cima de StepReview
-  // (ver comentário em OrderBuilder.tsx), então os dois ficam montados ao
-  // mesmo tempo. Assinar a store inteira sem seletor fazia StepPayment
-  // re-renderizar inteiro a cada campo digitado em StepReview (ex.:
-  // customerNotes), mesmo sem nenhum dos campos abaixo ter mudado.
+  // Seletor direcionado (useShallow) -- StepPayment abre como modal por cima
+  // de StepReview, os dois montados ao mesmo tempo; sem seletor, digitar em
+  // StepReview (ex.: customerNotes) re-renderizava StepPayment inteiro.
   const store = useOrderBuilderStore(useShallow((s) => ({
     basePrice: s.basePrice,
     boostMode: s.boostMode,
@@ -150,13 +147,10 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   const estimatedTotal = estimatedSubtotal - (estimatedCoupon?.couponApplied ? estimatedCoupon.discountPrice : 0)
   const totalPrice = pix.phase === 'waiting' ? pix.total_price : savedTotalPrice ?? estimatedTotal
 
-  // OrderBuilder.tsx grava store.gameId/serviceId com o slug/tipo cru
-  // ('lol', 'win_boost') até resolver os uuids reais de catálogo em segundo
-  // plano; um clique antes disso terminar mandaria o slug pro backend, que
-  // rejeita (.uuid() na Edge Function) — daí o bug de "só funciona no
-  // segundo clique". Derivado direto do store (já subscrito acima), sem
-  // precisar de um campo extra: fica correto assim que gameId/serviceId
-  // virarem uuids de verdade, sem round-trip.
+  // store.gameId/serviceId começam como slug cru ('lol', 'win_boost') até
+  // OrderBuilder.tsx resolver os uuids reais em segundo plano -- clicar
+  // antes disso mandaria o slug pro backend, que rejeita (.uuid() na Edge
+  // Function). Derivado direto do store, sem round-trip extra.
   const catalogReady = isUuid(store.gameId ?? '') && isUuid(store.serviceId ?? '')
   const expiresAt = pix.phase === 'waiting' ? pix.expires_at : null
   const { remaining, label: countdownLabel } = useCountdown(expiresAt)
@@ -396,18 +390,10 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     try {
       pixData = await generatePixRequest(orderId)
     } catch (err) {
-      // Pedido morto -- não existe mais (404, ex.: cancel-pending-order já
-      // apagou a linha) ou não pode mais receber pagamento (400 "Order is
-      // not awaiting payment", ex.: PIX recusado/cancelado no Mercado Pago,
-      // migration 122). Nunca trava o cliente re-tentando o mesmo pedido
-      // morto pra sempre -- limpa a vinculação (mantém a configuração já
-      // feita no store) pra que o próximo "Gerar PIX" crie um pedido novo.
-      // MP já mostra o pagamento como aprovado, mas o webhook ainda não
-      // chegou (create-pix-payment:252) -- vale pra qualquer tipo de
-      // serviço, é só uma corrida de tempo com o MP, não um erro de
-      // verdade. Redireciona igual ao caminho de payment_confirmed em vez
-      // de assustar o cliente com um alerta de erro pedindo pra "atualizar
-      // a página" manualmente.
+      // (comentário do bloco isDeadOrder abaixo descreve pedido 404/"not
+      // awaiting payment"; este ramo é diferente: MP já aprovou o pagamento
+      // mas o webhook ainda não chegou -- corrida de tempo, não erro real.
+      // Redireciona igual a payment_confirmed em vez de mostrar alerta.)
       if (err instanceof EdgeFunctionError && err.code === 'ALREADY_PAID') {
         const state = await getCustomerOrderState(orderId).catch(() => null)
         const requiresCredentials = state?.requires_credentials === true
@@ -417,6 +403,10 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         return
       }
 
+      // Pedido morto -- não existe mais (404) ou não pode mais receber
+      // pagamento (400 "not awaiting payment", ex.: PIX recusado no MP).
+      // Limpa a vinculação (mantém a config no store) pro próximo "Gerar
+      // PIX" criar um pedido novo, em vez de travar tentando o mesmo morto.
       const isDeadOrder = err instanceof EdgeFunctionError
         && (err.status === 404 || (err.status === 400 && /not awaiting payment/i.test(err.message)))
       if (isDeadOrder) {
@@ -498,18 +488,10 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         navigate(`/orders/${pendingOrderId}${requiresCredentials ? '#credentials' : ''}`, { replace: true })
         return
       }
-      // Pedido morto -- state null (não encontrado/não autorizado) ou
-      // status/can_pay indicam que ele já não pode mais receber pagamento
-      // (cancelado, pagamento recusado -- migration 122 -- ou expirado pelo
-      // cron de 048). Nunca insiste em gerar PIX pra um pedido morto -- essa
-      // era a causa de "volto ao site e ele me manda pra um pedido
-      // cancelado": o efeito chamava invokePix incondicionalmente. Mantém a
-      // configuração já feita (rank, extras etc. seguem no store) e só solta
-      // a vinculação com o pedido morto -- inclusive a idempotency key
-      // antiga, que senão faria o próximo persistPendingOrder() reencontrar
-      // e reusar o MESMO pedido morto pelo lookup de idempotency_key em
-      // create-pix-payment -- pra "Gerar PIX" criar um pedido genuinamente
-      // novo em vez de re-tentar o mesmo pra sempre.
+      // Pedido morto (state null, ou can_pay false -- cancelado/recusado/
+      // expirado) -- nunca insiste em gerar PIX pra ele. Solta a vinculação
+      // e gera uma idempotency key nova, senão o próximo
+      // persistPendingOrder() reencontraria e reusaria o mesmo pedido morto.
       if (!state?.can_pay) {
         setSavedOrderId(null)
         setSavedTotalPrice(null)

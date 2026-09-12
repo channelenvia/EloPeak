@@ -4,7 +4,7 @@ import { useRealtimeInvalidate } from '@/api/core/realtime'
 import { adminAssignPendingReviewOrder, adminCancelPendingReviewOrder, adminSetPendingReviewLock } from '@/api/orders/mutations'
 import {
   getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases, listPendingReviewOrders,
-  getProfileUsername, listProfileUsernames, getOrderParties,
+  getProfileUsername, listProfileUsernames, getOrderParties, listAuditLogs,
 } from './queries'
 import { adminAdjustBoosterBalance, resolveDropRequest } from './mutations'
 
@@ -168,6 +168,14 @@ export function useOrderParties(
     queryKey: queryKeys.admin.orderParties(customerId, assignedBoosterId, preferredBoosterId),
     queryFn: () => getOrderParties(customerId!, boosterUserIds),
     enabled: !!customerId,
+  })
+}
+
+export function useAdminAuditLogs() {
+  return useQuery({
+    queryKey: queryKeys.admin.auditLogs(),
+    queryFn: () => listAuditLogs(),
+    refetchInterval: 30_000,
   })
 }
 

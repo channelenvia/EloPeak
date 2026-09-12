@@ -24,6 +24,11 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   commission_clawed_back: AlertTriangle,
   commission_clawed_back_admin: AlertTriangle,
   drop_penalty_applied: AlertTriangle,
+  // drop_fee_applied/drop_request_pending_admin: tipos gravados por RPCs SQL
+  // (apply_order_drop, request_order_drop/request_customer_order_drop) que não
+  // tinham par aqui -- caíam no fallback genérico (Bell) pra sempre.
+  drop_fee_applied: AlertTriangle,
+  drop_request_pending_admin: Search,
   drop_payout_credited: Wallet,
   payment_amount_mismatch: AlertTriangle,
   order_reassigned: RefreshCw,

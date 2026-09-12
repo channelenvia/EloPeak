@@ -131,12 +131,9 @@ interface OrderBuilderState {
   // o MD5.
   setServiceId: (id: string) => void
   setCurrentRank: (rank: Rank) => void
-  // Guarda o rank real (tier+divisão+LP) detectado pela consulta à Riot do
-  // Clash -- puramente informativo pro card de detalhes, não deve disparar
-  // nenhuma das regras específicas de elo_boost do setCurrentRank (forçar
-  // solo em Master+, resetar rank alvo/addons/winPackage etc.), que não se
-  // aplicam a Clash e causariam bugs (ex.: verificar um rank Grão-Mestre
-  // trocaria silenciosamente Duo Clash pra Solo).
+  // Rank real detectado pela consulta Riot do Clash -- só informativo, não
+  // deve disparar as regras de elo_boost do setCurrentRank (forçar solo em
+  // Master+ etc.), que não se aplicam a Clash.
   setClashCurrentRank: (rank: Rank, lp: number) => void
   setTargetRank: (rank: Rank | null) => void
   setQueueType: (queue: QueueType) => void
@@ -177,13 +174,10 @@ interface OrderBuilderState {
   setExtrasPrice: (price: number) => void
   setEstimatedHours: (hours: number | null) => void
   setPdlModifierPct: (pct: number | null) => void
-  // Pedido que o cliente escolheu explicitamente abandonar via "Sair e
-  // reiniciar" (continua pagável em Meus Pedidos, só não deve mais ser
-  // auto-retomado). Persistido (sobrevive a fechar aba/navegar pra Meus
-  // Pedidos e voltar) -- diferente de ?new=1 na URL, que só vale pra UMA
-  // visita. Fica inerte sozinho assim que esse pedido sai de
-  // "awaiting_payment" (pago/cancelado/expirado): get_customer_order_state
-  // nunca mais o devolve, então a comparação simplesmente para de bater.
+  // Pedido dispensado via "Sair e reiniciar" -- continua pagável em Meus
+  // Pedidos, só não deve mais ser auto-retomado. Persistido (diferente de
+  // ?new=1, que só vale pra uma visita); fica inerte sozinho assim que o
+  // pedido sai de "awaiting_payment" e some de get_customer_order_state.
   dismissedOrderId: string | null
   setDismissedOrderId: (id: string | null) => void
   reset: () => void
@@ -270,16 +264,10 @@ function flowFor(serviceType: ServiceType | null, rank: Rank | null, mode: Boost
   return getBoostFlow(rank.tier, mode as BoostFlowMode, queueType)
 }
 
-// Persistido em sessionStorage -- sobrevive a reload e troca de aba dentro da
-// MESMA sessão do navegador (o cliente pode configurar um pedido, trocar de
-// aba, voltar, e o rascunho continua lá), mas nunca sobrevive a fechar a
-// aba/navegador -- diferente de localStorage, que ficaria salvo
-// indefinidamente. Também é limpo explicitamente no logout (ver
-// handleSignOut em UserProfilePanel.tsx) -- sem isso, um rascunho ficaria
-// visível pro próximo usuário que logasse na mesma aba/computador. Continua
-// limpo nos outros pontos certos do ciclo de vida (reset() roda ao confirmar
-// pagamento e ao clicar em "Configurar novo pedido"/"Voltar" para começar do
-// zero), então não acumula lixo indefinido mesmo dentro da sessão.
+// Persistido em sessionStorage -- sobrevive a reload/troca de aba na MESMA
+// sessão, mas não a fechar o navegador (diferente de localStorage). Também
+// limpo explicitamente no logout (UserProfilePanel.tsx), senão um rascunho
+// ficaria visível pro próximo usuário na mesma aba/computador.
 export const useOrderBuilderStore = create<OrderBuilderState>()(
   persist(
     (set, get) => ({
@@ -379,12 +367,10 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
         return {}
       }
     }
-    // Duo Boost chega em Master como alvo normalmente na Solo/Duo -- só
-    // Grão-Mestre/Challenger como alvo bloqueia (isDuoBlockedAtTier), mesma
-    // regra do backend. Se o cliente já escolheu um desses dois alvos (em
-    // Solo) na fila Solo/Duo, trocar pra Duo é rejeitado aqui, mesma defesa
-    // em profundidade acima. A UI trava o próprio botão (StepConfigure.tsx,
-    // eloDuoBlockedByTarget).
+    // Duo Boost aceita Master como alvo, mas não Grão-Mestre/Challenger
+    // (isDuoBlockedAtTier, mesma regra do backend) -- rejeita a troca pra
+    // Duo se um desses dois já estiver escolhido (defesa em profundidade;
+    // a UI também trava o botão, ver StepConfigure.tsx eloDuoBlockedByTarget).
     if (
       boostMode === 'duo' && state.serviceType === 'elo_boost' && state.queueType !== 'flex' && state.targetRank
       && isDuoBlockedAtTier(state.targetRank.tier)

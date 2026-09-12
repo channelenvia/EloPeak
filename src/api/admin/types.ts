@@ -13,6 +13,18 @@ export interface AdminReviewCase {
   updated_at: string
 }
 
+export interface AuditLogEntry {
+  id: string
+  actor_id: string
+  actor_role: string
+  action: string
+  entity_type: string
+  entity_id: string
+  diff: Record<string, unknown> | null
+  created_at: string
+  actor: { username: string | null } | null
+}
+
 export interface AdminDashboardStats {
   total_revenue: number
   total_payouts: number

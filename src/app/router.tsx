@@ -51,6 +51,7 @@ const AdminPayoutsPage    = lazy(() => import('@/features/admin/pages/Payouts').
 const AdminRefundsPage    = lazy(() => import('@/features/admin/pages/Refunds').then(m => ({ default: m.AdminRefundsPage })))
 const AdminDropsPage      = lazy(() => import('@/features/admin/pages/Drops').then(m => ({ default: m.AdminDropsPage })))
 const AdminDuoAccountsPage = lazy(() => import('@/features/admin/pages/DuoAccounts').then(m => ({ default: m.AdminDuoAccountsPage })))
+const AdminAuditLogPage   = lazy(() => import('@/features/admin/pages/AuditLog').then(m => ({ default: m.AdminAuditLogPage })))
 
 export const router = createBrowserRouter([
   // Public routes
@@ -154,7 +155,7 @@ export const router = createBrowserRouter([
           { path: '/admin/payouts',      element: <SuspensePage><AdminPayoutsPage /></SuspensePage> },
           { path: '/admin/refunds',      element: <SuspensePage><AdminRefundsPage /></SuspensePage> },
           { path: '/admin/reviews',      element: <Navigate to="/admin" replace /> },
-          { path: '/admin/audit',        element: <Navigate to="/admin" replace /> },
+          { path: '/admin/audit',        element: <SuspensePage><AdminAuditLogPage /></SuspensePage> },
           // Catálogo de serviços/preços passou a ser gerido só pelo sistema (fórmulas
           // em shared/pricing.ts + migrations) — sem UI de admin dedicada.
           { path: '/admin/services',     element: <Navigate to="/admin" replace /> },

@@ -245,6 +245,14 @@ serve(async (req) => {
       if (order.status !== 'in_progress') {
         return jsonResponse(req, { ok: false, reason: 'order status mismatch, ignoring stale/forged payload' })
       }
+      // Reconfere contra o valor FRESCO do banco, não o snapshot do payload
+      // do webhook -- duas entregas do mesmo evento (retry do pg_net) podiam
+      // ambas passar pelo guard de `existingVoiceChannelId` (calculado do
+      // payload antigo) e criar dois canais de voz, um deles órfão pra
+      // sempre (saveChannelIds é last-write-wins).
+      if (order.discord_voice_channel_id || order.discord_text_channel_id) {
+        return jsonResponse(req, { ok: true, action: 'voice_channel_already_created' })
+      }
 
       const extras: { code?: string }[] = order.extras ?? []
       const needsVoiceChannel = order.service_type === 'coaching'
@@ -285,8 +293,14 @@ serve(async (req) => {
       // awaiting_assignment antes (drop/reatribuição reabrindo de novo), a
       // marca do ciclo anterior não pode fazer announce-stale-awaiting-
       // assignment-jobs achar que este ciclo novo já foi anunciado caso o
-      // envio abaixo falhe.
-      await supabaseAdmin().from('orders').update({ awaiting_assignment_announced_at: null }).eq('id', orderId)
+      // envio abaixo falhe. Marca announce_attempted_at ANTES de chamar o
+      // Discord (não depois) -- se a chamada demorar mais que o grace period
+      // do cron, ele passa a contar a janela a partir daqui em vez de
+      // updated_at, e não reenvia por cima de uma tentativa ainda em voo.
+      await supabaseAdmin().from('orders').update({
+        awaiting_assignment_announced_at: null,
+        awaiting_assignment_announce_attempted_at: new Date().toISOString(),
+      }).eq('id', orderId)
 
       if (order.preferred_booster_id) {
         if (preferredBooster?.discord_id) {

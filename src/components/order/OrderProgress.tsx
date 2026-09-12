@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { RankProgressionRail } from '@/components/rank/RankProgressionRail'
+import { SegmentedBar } from '@/components/ui/SegmentedBar'
 import { useLatestVerification, computeEffectivePoints } from './useOrderRankProgress'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
-import { cn } from '@/lib/utils'
 import { rankStep } from '@/lib/pricing'
 import type { Order, OrderStatus, RankTier, Division } from '@/types'
 
@@ -16,20 +16,6 @@ import type { Order, OrderStatus, RankTier, Division } from '@/types'
 const PROGRESS_STARTED_STATUSES: OrderStatus[] = ['in_progress', 'paused', 'awaiting_customer', 'completed', 'disputed']
 function isProgressLocked(order: Order): boolean {
   return !PROGRESS_STARTED_STATUSES.includes(order.status)
-}
-
-function ProgressBar({ percent, tone = 'brand', locked = false }: { percent: number; tone?: 'brand' | 'success'; locked?: boolean }) {
-  const clamped = Math.max(0, Math.min(100, percent))
-  return (
-    <div className="relative">
-      <div className={cn('h-2 w-full rounded-full bg-bg-raised overflow-hidden', locked && 'blur-[3px] opacity-60')}>
-        <div
-          className={`h-full rounded-full transition-all ${tone === 'success' ? 'bg-success' : 'bg-brand'}`}
-          style={{ width: `${clamped}%` }}
-        />
-      </div>
-    </div>
-  )
 }
 
 function WinBoostProgress({ order }: { order: Order }) {
@@ -56,7 +42,11 @@ function WinBoostProgress({ order }: { order: Order }) {
           <span className="font-semibold text-ink text-sm" data-tabular>{percent.toFixed(0)}%</span>
         </div>
       )}
-      <ProgressBar percent={locked ? 0 : percent} tone={done ? 'success' : 'brand'} locked={locked} />
+      {/* Um bloco por vitória contratada -- mesma unidade de
+          v_win_value_unit (total_price/wins_purchased, ver apply_order_drop):
+          o preenchimento fecha um bloco inteiro por vitória, não uma fração
+          contínua solta do valor pago por progresso entregue. */}
+      <SegmentedBar segments={purchased} filled={locked ? 0 : completed} tone={done ? 'success' : 'brand'} locked={locked} />
       <p className="text-xs text-ink-muted mt-2">
         {locked
           ? 'O progresso começa a contar assim que o booster iniciar o pedido.'
@@ -132,6 +122,12 @@ function EloBoostProgress({ order, hideRankBadges = false }: { order: Order; hid
     currentStep = startStep
   }
   const relativePct = locked || span <= 0 ? 0 : Math.max(0, Math.min(100, ((currentStep - startStep) / span) * 100))
+  // Mesma unidade de quantização do apply_order_drop: 1 bloco por divisão de
+  // rank abaixo de Mestre (v_division_value_full = total_price /
+  // divisions_remaining), ou 4 blocos -- os "quartos" de PDL restante
+  // (v_quarter_value) -- em Mestre+, onde span (rankStep) não mede nada
+  // dentro do tier (Mestre inteiro é 1 step só).
+  const segments = order.pdl_bracket ? 4 : Math.max(1, span)
   // PDL/LP atual mostrado sempre, mesmo com a barra ainda bloqueada -- cai no
   // valor capturado na compra (current_pdl / current_rank.lp) enquanto não
   // há verificação nem partida sincronizada. Só a barra em si (locked prop
@@ -150,6 +146,7 @@ function EloBoostProgress({ order, hideRankBadges = false }: { order: Order; hid
         locked={locked}
         showBadges={!hideRankBadges}
         fillPercentOverride={relativePct}
+        segments={segments}
       />
       <p className="text-xs text-ink-muted mt-3">
         {locked

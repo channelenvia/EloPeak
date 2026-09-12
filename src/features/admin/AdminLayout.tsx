@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingBag, Users, DollarSign,
   Shield,
-  RefreshCw, AlertTriangle, Landmark, Banknote,
+  RefreshCw, AlertTriangle, Landmark, Banknote, History,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui'
@@ -31,6 +31,7 @@ export function AdminLayout() {
         { href: '/admin/customers', icon: Users,           label: 'Clientes'    },
         { href: '/admin/drops',     icon: AlertTriangle,   label: 'Drops'       },
         { href: '/admin/duo-accounts', icon: Landmark,     label: 'Contas Duo'  },
+        { href: '/admin/audit',     icon: History,         label: 'Auditoria'   },
       ],
     },
     {

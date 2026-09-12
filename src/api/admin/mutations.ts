@@ -13,6 +13,13 @@ export async function resolveDropRequest(params: { requestId: string; approve: b
   return assertRpcSuccess(data as { success: boolean; error?: string }, {
     order_not_found_or_unassigned: 'Não foi possível calcular o valor do drop -- pedido não encontrado ou sem booster atribuído.',
     missing_rank_data: 'Este pedido está sem rank atual/alvo definido -- não é possível calcular o valor do drop.',
+    unauthorized: 'Você não tem permissão para essa ação.',
+    request_not_found: 'Solicitação de drop não encontrada.',
+    already_resolved: 'Esta solicitação já foi resolvida.',
+    order_not_found: 'Pedido não encontrado.',
+    // Corrida com admin_flag_order_under_review (ver migration
+    // 20260911030000) -- o pedido saiu de drop_requested antes deste resolve.
+    order_not_drop_requested: 'O status do pedido mudou -- atualize a página e tente novamente.',
   })
 }
 

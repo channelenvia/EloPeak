@@ -100,6 +100,7 @@ export const queryKeys = {
     profileUsernames: (ids: string[]) => ['admin', 'profile-usernames', [...ids].sort()] as const,
     orderParties: (customerId?: string, assignedBoosterId?: string | null, preferredBoosterId?: string | null) =>
       ['admin', 'order-parties', customerId, assignedBoosterId, preferredBoosterId] as const,
+    auditLogs: () => ['admin', 'audit-logs'] as const,
   },
   catalog: {
     gameId: (slug: string) => ['catalog', 'game-id', slug] as const,

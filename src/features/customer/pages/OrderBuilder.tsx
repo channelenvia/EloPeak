@@ -112,23 +112,15 @@ export function OrderBuilderPage() {
   } = useOrderBuilderStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
-  // Popup do PIX aberto por cima da própria revisão -- "Ir para Pagamento"
-  // não navega mais pro step 'payment' (esse continua existindo só pra
-  // retomar um pedido pendente após reload, ver efeito de resumableOrder
-  // abaixo). Fecha sozinho se o step sair de 'review' por qualquer motivo
-  // (ex.: PIX expirou e o fluxo reinicia em 'service') -- sem isso, reabrir
-  // a revisão numa sessão nova podia reabrir o popup por engano.
+  // Pagamento é um popup sobre a revisão, não mais o step 'payment' (esse
+  // some do stepper, só serve pra retomar após reload -- ver resumableOrder
+  // abaixo). Fecha sozinho ao sair de 'review' por qualquer motivo.
   const [pixModalOpen, setPixModalOpen] = useState(false)
-  // Confirmação antes de fechar o popup com um pedido já persistido
-  // (?order= setado assim que "Gerar PIX" roda) -- sem isso, o cliente
-  // fechava o X sem aviso, o configurador continuava com a MESMA
-  // configuração em memória, e um clique novo em "Ir para Pagamento"
-  // reabria o mesmo pedido (sem duplicar) -- mas nada impedia ele de trocar
-  // ?new=1 (fluxo "novo pedido") e configurar/pagar um SEGUNDO pedido
-  // parecido enquanto o primeiro seguia pendente em Meus Pedidos, dando a
-  // real impressão de duplicidade. Sair aqui agora reseta o configurador de
-  // propósito (evita esse caminho) -- o pedido em si NUNCA é cancelado,
-  // continua pagável em Meus Pedidos.
+  // Confirma antes de fechar o popup com um pedido já persistido (?order=
+  // setado por "Gerar PIX"): fechar sem aviso e configurar de novo (?new=1)
+  // dava a impressão de pedido duplicado, com o antigo órfão em "aguardando
+  // pagamento". Sair aqui reseta o configurador de propósito -- o pedido em
+  // si nunca é cancelado, continua pagável em Meus Pedidos.
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const currency = useCurrency()
   const pendingOrderId = searchParams.get('order')
@@ -174,18 +166,13 @@ export function OrderBuilderPage() {
     if (step !== 'review') setPixModalOpen(false)
   }, [step])
 
-  // Clicar em "Voltar" na revisão é a única forma de reconfigurar (extras,
-  // rank etc.) DEPOIS de já ter gerado um PIX/pedido pendente pra essa
-  // revisão (StepPayment persiste o pedido e gera o PIX sozinho assim que o
-  // popup abre, ver auto-start em StepPayment.tsx). Só derrubar ?order= não
-  // bastava: o pedido antigo continuava "aguardando pagamento" órfão em Meus
-  // Pedidos pra sempre (só some quando o cron de expiração do PIX o cancela,
-  // minutos depois) -- e cada ida-e-volta na revisão criava outro, dando a
-  // real impressão de pedidos duplicados. Cancela esse pedido abandonado no
-  // servidor antes de sair -- mesma edge function/RPC usada quando o cliente
-  // cancela manualmente ou quando o PIX expira sozinho (já defensiva contra
-  // um pagamento que tenha acabado de ser aprovado: recusa cancelar nesse
-  // caso). Fire-and-forget -- nunca trava a navegação por causa disso.
+  // "Voltar" na revisão é a única forma de reconfigurar depois que
+  // StepPayment já persistiu o pedido/gerou o PIX. Só limpar ?order= não
+  // bastava -- o pedido antigo ficava órfão em "aguardando pagamento" até o
+  // cron de expiração cancelar, e cada ida-e-volta criava outro (parecendo
+  // duplicidade). Cancela no servidor antes de sair (mesma rota do cancelamento
+  // manual/expiração do PIX, já defensiva contra pagamento recém-aprovado);
+  // fire-and-forget, nunca trava a navegação.
   function goBackFromReview() {
     const orderId = searchParams.get('order')
     if (orderId) {
@@ -234,12 +221,8 @@ export function OrderBuilderPage() {
     setSearchParams({ new: '1' }, { replace: true })
   }
 
-  // "Reiniciar" na aside da Revisão -- mesmo destino final de
-  // confirmExitPixModal (reset completo + volta pro step 'service'), só que
-  // disparado direto do botão em vez de fechar o popup do PIX. Com um pedido
-  // já persistido (?order= setado), pede confirmação primeiro (reaproveita o
-  // mesmo modal "Sair sem pagar?"); sem pedido persistido ainda, não há nada
-  // a perder e reinicia direto.
+  // "Reiniciar" na aside -- mesmo destino de confirmExitPixModal, só que
+  // pede confirmação primeiro quando já existe pedido persistido.
   function handleReiniciarClick() {
     if (pendingOrderId) {
       setShowExitConfirm(true)
@@ -278,12 +261,10 @@ export function OrderBuilderPage() {
     if (resolvedServiceId && resolvedServiceId !== serviceId) setServiceId(resolvedServiceId)
   }, [resolvedServiceId, serviceId, setServiceId])
 
-  // `?new=1` sozinho (sem parâmetro de catálogo) só significa "descarte a
-  // configuração em memória e volte pro primeiro passo" -- usado depois de um
-  // PIX expirado ou ao voltar de "Meus pedidos"/detalhe do pedido. Roda uma
-  // vez por chegada nessa condição; `startNewOrder()` (StepPayment.tsx) já
-  // faz o reset diretamente pro clique em "Configurar novo pedido", então
-  // isto cobre só quem chega aqui via navegação de fora (rota diferente).
+  // ?new=1 sozinho descarta a config em memória e volta ao passo 1 (após PIX
+  // expirado ou vindo de "Meus pedidos"). `startNewOrder()` (StepPayment.tsx)
+  // já reseta direto no clique de "Configurar novo pedido" -- isto cobre só
+  // quem chega aqui por navegação externa.
   useEffect(() => {
     if (explicitlyStartingNewOrder && !hasCatalogEntryIntent) {
       reset()
@@ -292,40 +273,16 @@ export function OrderBuilderPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Vínculo com um booster específico sobrevive a reload/troca de aba de
-  // propósito (ver comentário do persist acima), mas só deveria sobreviver
-  // ENQUANTO o pedido vinculado ainda está em aberto. O reset normal (linha
-  // ~150/189/221/379 em StepPayment.tsx) só roda se o cliente ainda estiver
-  // nesta aba quando a confirmação do pagamento chega -- se ele pagar o PIX
-  // por fora (app do banco) e só voltar depois, esse reset nunca dispara, e
-  // o vínculo antigo (já consumido) reaparecia sozinho no próximo pedido sem
-  // o cliente escolher de novo. `resumableOrder === null` (não `undefined`)
-  // confirma que a consulta já rodou e não há NENHUM pedido aguardando
-  // pagamento -- só então é seguro concluir que o vínculo é lixo de uma
-  // sessão anterior já paga/encerrada.
-  //
-  // staleBoosterCheckedRef trava esse diagnóstico pra rodar UMA vez só, na
-  // primeira vez que resumableOrder resolve -- sem isso, o efeito reagia a
-  // toda mudança de preferredBoosterId (dep antiga), inclusive uma escolha
-  // AO VIVO durante a própria configuração (CoachPackagePicker::selectPackage
-  // chama setPreferredBooster ao clicar num pacote). Nesse momento ainda não
-  // existe pedido persistido (Configurar não salva nada, só "Gerar PIX" em
-  // StepPayment.tsx salva) -- então resumableOrder já era null de verdade, e
-  // o efeito tratava a escolha recém-feita como "lixo de sessão anterior" e
-  // chamava reset(), apagando o configurador inteiro (só Coaching passa por
-  // isso durante a configuração; os outros serviços nunca vinculam um
-  // booster nesse ponto).
-  //
-  // initialPreferredBoosterIdRef congela o valor de preferredBoosterId no
-  // MOUNT (useRef só usa o argumento na primeira chamada) -- só travar por
-  // "já rodou uma vez" não bastava: se o cliente escolhesse um pacote de
-  // coach ENQUANTO a query de resumableOrder ainda estava em voo (undefined),
-  // ela ficaria pendurada até resolver e, ao resolver pra null, rodava pela
-  // primeira vez lendo o preferredBoosterId JÁ atualizado pela escolha ao
-  // vivo -- mesmo bug de antes, só que só na janela de corrida do
-  // carregamento inicial em vez da sessão inteira. Usar o valor congelado no
-  // mount responde "isso já estava vinculado ANTES de qualquer interação
-  // nesta visita" independente de quando a query termina.
+  // Vínculo com um booster (persistido, sobrevive a reload) só deve
+  // desaparecer sozinho quando é lixo de sessão anterior já paga/encerrada
+  // (`resumableOrder === null`, não `undefined`, confirma nenhum pedido
+  // pendente) -- nunca quando o cliente acabou de escolher um pacote de
+  // coach agora (CoachPackagePicker chama setPreferredBooster sem nenhum
+  // pedido ainda persistido, então resumableOrder também dá null nesse
+  // instante). staleBoosterCheckedRef roda esse diagnóstico só uma vez;
+  // initialPreferredBoosterIdRef congela o valor no MOUNT -- sem isso, uma
+  // escolha ao vivo durante o carregamento inicial da query (undefined →
+  // null) seria lida como "vínculo antigo" e apagada por engano.
   const initialPreferredBoosterIdRef = useRef(preferredBoosterId)
   const staleBoosterCheckedRef = useRef(false)
   useEffect(() => {
@@ -338,15 +295,10 @@ export function OrderBuilderPage() {
     reset()
   }, [resumableOrder, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, reset])
 
-  // Processa um link de entrada de catálogo (?service=/?booster=/?coach_package=)
-  // -- reage a MUDANÇAS nesses parâmetros, não só ao mount. Antes rodava com
-  // deps: [] (uma vez só), então navegar para outro link de catálogo (ex.:
-  // trocar de serviço, ou escolher outro booster) enquanto esta página já
-  // estava montada (React Router não remonta a rota só porque a query string
-  // mudou) deixava a configuração antiga intacta -- inclusive um pedido
-  // "aguardando pagamento" anterior continuava aparecendo na etapa de
-  // pagamento com o QR/valor do pedido errado. Guard via ref evita reprocessar
-  // o mesmo parâmetro assim que ele é consumido/limpo abaixo.
+  // Reage a MUDANÇAS em ?service=/?booster=/?coach_package=, não só ao mount
+  // -- trocar de link de catálogo com a página já montada (React Router não
+  // remonta só porque a query string muda) deixava a config antiga intacta.
+  // Ref evita reprocessar o mesmo parâmetro após consumido.
   const processedCatalogIntentRef = useRef<string | null>(null)
   useEffect(() => {
     const service = serviceParam as ServiceType | null
@@ -426,12 +378,9 @@ export function OrderBuilderPage() {
   const totalPrice = subtotal - discountPrice
   const canGoBack = currentIdx > 0 && step !== 'payment'
   const isLastStep = currentIdx === steps.length - 1
-  // A aside de valores só existe a partir do step 2 (configure em diante) --
-  // no step 'service' o cliente pode clicar em qualquer card pra ver o
-  // destaque de seleção sem que a tela já encolha; a transição só acontece
-  // ao clicar em "Continuar" e o step de fato mudar. Depende do step, não
-  // de serviceType, senão o widget encolheria assim que a service escolhida
-  // vira serviceType (antes de "Continuar"), no meio do próprio step 1.
+  // Aside só existe a partir do step 2 -- no step 'service' o cliente pode
+  // clicar em qualquer card sem a tela encolher; depende do step (não de
+  // serviceType, senão encolheria antes de "Continuar", ainda no step 1).
   const showSummary = step !== 'service'
   const stepComplete = isStepComplete(step, {
     serviceType, selectedCoachPackage, currentRank, targetRank,
@@ -473,12 +422,9 @@ export function OrderBuilderPage() {
         />
       </div>
 
-      {/* Grid (não flex) pra travar a proporção 70/30 (col-span 7/3 de 10) --
-          só depois que a aside de valores existe (showSummary). Antes
-          disso, uma única coluna: o step 'service' vira um widget cheio,
-          sem a aside. motion.div/layout no conteúdo principal anima o
-          encolhimento pra 7/10 quando a aside aparece (AnimatePresence
-          abaixo), em vez de um salto seco de largura. */}
+      {/* Grid (não flex) trava a proporção 70/30 só depois que a aside
+          existe; motion.div/layout anima o encolhimento em vez de um
+          salto seco de largura. */}
       <div className={cn('grid grid-cols-1 gap-6 lg:items-start', showSummary ? 'lg:grid-cols-10' : 'lg:grid-cols-1')}>
         {/* Main step content */}
         <motion.div layout transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
@@ -486,11 +432,9 @@ export function OrderBuilderPage() {
             {step === 'service' ? <StepService fullWidth={!showSummary} /> : <StepContent />}
 
             {/* Navigation — Voltar/Continuar sempre no widget da esquerda,
-                em todo o configurador (inclusive na Revisão, onde antes
-                sumiam e viravam um par diferente lá na aside). Na Revisão,
-                "Continuar" fica bloqueado (não há próximo step -- pagar
-                acontece pelo par Reiniciar/Pagar na aside), mesmo padrão
-                visual do "Voltar" já bloqueado no primeiro step. */}
+                inclusive na Revisão (onde antes viviam na aside);
+                "Continuar" fica bloqueado ali (pagar é o par Reiniciar/
+                Pagar na aside). */}
             {step !== 'payment' && (
               <div className="flex items-center justify-between mt-8 pt-5 border-t border-border-subtle">
                 <Button
@@ -535,11 +479,9 @@ export function OrderBuilderPage() {
           </Modal>
         </motion.div>
 
-        {/* Summary panel — só existe a partir do step 2 (ver showSummary
-            acima); acompanha o pedido dali em diante, não só na revisão
-            final. AnimatePresence anima a entrada (desliza da direita) em
-            sincronia com o encolhimento do conteúdo principal ao lado, os
-            dois disparados juntos pela troca de step ao clicar Continuar. */}
+        {/* Summary panel — só existe a partir do step 2 (ver showSummary).
+            AnimatePresence anima a entrada em sincronia com o encolhimento
+            do conteúdo principal, os dois disparados pela troca de step. */}
         <AnimatePresence>
           {showSummary && (
             <motion.aside
@@ -580,15 +522,10 @@ export function OrderBuilderPage() {
                   </div>
                 ))}
 
-                {/* Cupom fixo — aplicado automaticamente pelo store
-                    (couponCode inicia em DEFAULT_COUPON_CODE), sem o cliente
-                    precisar digitar nada. Só aparece quando de fato se aplica
-                    (elo boost/vitórias/md5/clash — Coaching fica fora porque
-                    o preço é o pacote do próprio booster, ver
-                    COUPON_ELIGIBLE_SERVICE_TYPES em shared/pricing.ts) E já
-                    existe um valor calculado -- caso contrário mostraria
-                    "cupom aplicado" sobre um subtotal ainda zerado, antes do
-                    cliente configurar qualquer coisa. */}
+                {/* Cupom fixo — aplicado automaticamente pelo store, sem o
+                    cliente digitar nada. Só elo boost/vitórias/md5/clash são
+                    elegíveis (COUPON_ELIGIBLE_SERVICE_TYPES); exige subtotal
+                    > 0 pra não mostrar "aplicado" sobre valor ainda zerado. */}
                 {coupon?.couponApplied && subtotal > 0 && (
                   <div className="flex items-center gap-1.5 py-2 text-xs text-success font-medium">
                     <Tag className="h-3.5 w-3.5 shrink-0" />

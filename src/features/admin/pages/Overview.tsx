@@ -64,6 +64,7 @@ export function AdminOverview() {
               icon={Users}
               color={needsAttention ? 'text-warning bg-warning/10' : 'text-brand bg-brand/10'}
               valueSize="lg"
+              interactive
             />
           </Link>
           <StatCard
