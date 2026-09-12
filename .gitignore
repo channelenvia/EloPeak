@@ -1,0 +1,101 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist_new/
+dist_v2/
+build/
+
+# Booster Launcher desktop app — only its generated/build output is ignored;
+# src/, scripts/, package.json, etc. stay tracked.
+launcher/node_modules/
+launcher/dist/
+launcher/release/
+launcher/build/
+launcher/config.json
+launcher/*.log
+Booster Launcher/
+Booster Launcher.exe
+
+# Environment - NEVER commit secrets
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env.*.example
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.cursor/
+.windsurf/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs and test coverage / reports
+*.log
+coverage/
+playwright-report/
+test-results/
+
+# Supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+supabase/.env.*
+supabase/functions/.env
+supabase/functions/.env.local
+!supabase/functions/.env.example
+
+# Migrations ja substituidas por CREATE OR REPLACE mais recente -- ficam so
+# em migrations/ as ainda relevantes; o historico fica local (backup manual
+# ao trocar de maquina). shared/*.test.ts que leem daqui pulam graciosamente
+# quando o arquivo nao existe (ver skipIf nesses arquivos).
+supabase/migrations_archive/
+
+# Historical migrations are versioned because the active migrations depend on
+# objects introduced before the current baseline. Keeping the archive in Git
+# makes fresh database reconstruction and schema-regression tests reproducible.
+
+# Deploy tooling
+.vercel/
+
+# AI, MCP & Local Tooling - not part of the codebase
+.claude/
+.serena/
+.agents/
+.gemini/
+.planning/
+.superpowers/
+.cxpak/
+graphify-out/
+.playwright/
+.playwright-mcp/
+.mcp.json
+mcp.json
+.mcp/
+
+# Keys and certs — never commit
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+*.mobileprovision
