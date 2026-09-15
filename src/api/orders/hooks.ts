@@ -199,7 +199,7 @@ export function useAdminOrders(tab: OrderListTab = 'all', serviceType?: ServiceT
   const query = useQuery({
     queryKey: queryKeys.orders.adminList({ status: tab, serviceType, includeCanceled }),
     queryFn: () => listAdminOrders(tab, serviceType, undefined, includeCanceled),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-orders',

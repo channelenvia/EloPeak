@@ -102,6 +102,14 @@ export function orderListTabStatuses(tab: OrderListTab, includeCanceled = false)
   }
 }
 
+// A janela de revisão é uma fila operacional exclusiva do admin. Para cliente
+// e booster, as abas continuam com a semântica anterior.
+export function adminOrderListTabStatuses(tab: OrderListTab, includeCanceled = false): OrderStatus[] | null {
+  const statuses = orderListTabStatuses(tab, includeCanceled)
+  if (tab !== 'in_progress' || !statuses) return statuses
+  return ['pending_review', ...statuses]
+}
+
 // String pronta pro filtro `.not('status', 'in', ...)` do Postgrest -- só
 // draft fica de fora de "Todos" agora.
 export const HIDDEN_STATUSES_FILTER = '(draft)'

@@ -3,7 +3,7 @@ import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
 import { adminAssignPendingReviewOrder, adminCancelPendingReviewOrder, adminSetPendingReviewLock } from '@/api/orders/mutations'
 import {
-  getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases, listPendingReviewOrders,
+  getAdminDashboardStats, listAdminDropRequests, listAdminPayments, listAdminRefunds, listAdminReviewCases,
   getProfileUsername, listProfileUsernames, getOrderParties, listAuditLogs,
 } from './queries'
 import { adminAdjustBoosterBalance, resolveDropRequest } from './mutations'
@@ -31,38 +31,20 @@ export function useAdminAdjustBoosterBalance() {
   })
 }
 
-export function usePendingReviewOrders() {
-  const query = useQuery({
-    queryKey: queryKeys.admin.pendingReview(),
-    queryFn: listPendingReviewOrders,
-    refetchInterval: 10_000,
-  })
-  useRealtimeInvalidate({
-    channel: 'admin-pending-review',
-    table: 'order_status_events',
-    event: 'INSERT',
-    queryKeys: [queryKeys.admin.pendingReview()],
-  })
-  return query
-}
-
-// invalidateOrder também dispara o refetch da própria página de detalhe do
-// pedido (AdminOrderDetailPage usa useOrder, chave orders.detail) -- essas
-// mutations agora são chamadas tanto do painel do dashboard (PendingReviewPanel)
-// quanto do menu de ações da página do pedido, então precisam invalidar as
-// duas chaves em vez de só admin.pendingReview().
-function invalidateOrderAndPendingReview(queryClient: ReturnType<typeof useQueryClient>, orderId: string) {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.admin.pendingReview() })
+// As ações podem partir do card da lista ou da página de detalhe. Atualizamos
+// as duas visões e os contadores imediatamente depois de cada mutation.
+function invalidateAdminOrderQueries(queryClient: ReturnType<typeof useQueryClient>, orderId: string) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() })
   void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId) })
   void queryClient.invalidateQueries({ queryKey: queryKeys.orders.state(orderId) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
 }
 
 export function useAdminSetPendingReviewLock() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminSetPendingReviewLock,
-    onSuccess: (_data, variables) => invalidateOrderAndPendingReview(queryClient, variables.orderId),
+    onSuccess: (_data, variables) => invalidateAdminOrderQueries(queryClient, variables.orderId),
   })
 }
 
@@ -70,7 +52,7 @@ export function useAdminCancelPendingReviewOrder() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminCancelPendingReviewOrder,
-    onSuccess: (_data, variables) => invalidateOrderAndPendingReview(queryClient, variables.orderId),
+    onSuccess: (_data, variables) => invalidateAdminOrderQueries(queryClient, variables.orderId),
   })
 }
 
@@ -79,7 +61,7 @@ export function useAdminAssignPendingReviewOrder() {
   return useMutation({
     mutationFn: adminAssignPendingReviewOrder,
     onSuccess: (_data, variables) => {
-      invalidateOrderAndPendingReview(queryClient, variables.orderId)
+      invalidateAdminOrderQueries(queryClient, variables.orderId)
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
     },
   })
@@ -196,4 +178,3 @@ export function useResolveDropRequest() {
     },
   })
 }
-

@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
-import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
-import type { Order, OrderDropRequest, Payment, Refund } from '@/types'
+import type { OrderDropRequest, Payment, Refund } from '@/types'
 import type { AdminDashboardStats, AdminReviewCase, AuditLogEntry } from './types'
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
@@ -44,22 +43,6 @@ export async function listAdminPayments(limit = 150): Promise<{
   }
 }
 
-export async function listPendingReviewOrders(): Promise<Order[]> {
-  // admin_review_locked/review_release_at ficam de fora de ORDER_SAFE_COLUMNS
-  // de propósito (é a projeção também usada pra cliente/booster, que não
-  // precisam ver o estado interno da janela de revisão) -- por isso são
-  // selecionados à parte aqui, só nesta lista admin-only. Sem eles, o toggle
-  // de cadeado do PendingReviewPanel sempre lia `undefined` (falsy) e nunca
-  // refletia o travamento real nem a contagem regressiva.
-  const { data, error } = await supabase
-    .from('orders')
-    .select(`${ORDER_SAFE_COLUMNS},admin_review_locked,review_release_at`)
-    .eq('status', 'pending_review')
-    .order('created_at', { ascending: true })
-  if (error) throw normalizeApiError(error)
-  return (data ?? []) as unknown as Order[]
-}
-
 export async function listAdminReviewCases(): Promise<AdminReviewCase[]> {
   const { data, error } = await supabase.rpc('admin_list_review_cases')
   if (error) throw normalizeApiError(error)
@@ -69,7 +52,7 @@ export async function listAdminReviewCases(): Promise<AdminReviewCase[]> {
 export async function listAdminDropRequests(limit = 100): Promise<OrderDropRequest[]> {
   const { data, error } = await supabase
     .from('order_drop_requests')
-    .select('*, order:orders(drop_count, service_type)')
+    .select('*, order:orders(drop_count, service_type, customer_id)')
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw normalizeApiError(error)

@@ -3,9 +3,14 @@
 // pelas 3 telas de pedidos (cliente/booster/admin), então testar aqui cobre
 // as 3 de uma vez.
 import { describe, expect, it } from 'vitest'
-import { orderListTabStatuses } from './types'
+import { adminOrderListTabStatuses, orderListTabStatuses } from './types'
 
 describe('orderListTabStatuses', () => {
+  it('inclui pedidos recém-pagos em revisão apenas na lista do admin', () => {
+    expect(adminOrderListTabStatuses('in_progress')).toContain('pending_review')
+    expect(orderListTabStatuses('in_progress')).not.toContain('pending_review')
+  })
+
   it('não inclui awaiting_payment na aba "em andamento"', () => {
     expect(orderListTabStatuses('in_progress')).not.toContain('awaiting_payment')
   })

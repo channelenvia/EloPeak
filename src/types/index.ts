@@ -338,7 +338,7 @@ export interface OrderDropRequest {
   // solicitação vai cancelar o pedido (limite de 2 drops já atingido) em vez
   // de reatribuir; service_type pra mostrar o campo de % de conclusão
   // manual só em pedidos de coaching (sem métrica automática de progresso).
-  order?: { drop_count: number; service_type: ServiceType } | null
+  order?: { drop_count: number; service_type: ServiceType; customer_id: string | null } | null
 }
 
 export interface OrderMatch {

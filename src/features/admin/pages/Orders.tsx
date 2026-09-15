@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ShoppingBag } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Clock, ShoppingBag } from 'lucide-react'
 import { Skeleton, EmptyState, ErrorAlert, Button, Pagination, SearchInput } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
@@ -8,10 +8,16 @@ import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterD
 import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminOrders, useAdminOrderTabCounts } from '@/api/orders'
+import { AssignModal, CancelModal } from '../components/PendingReviewPanel'
+import { usePendingReviewNow } from '../components/pendingReviewTime'
+import type { Order } from '@/types'
 
 export function AdminOrdersPage() {
   const statusFilter = useOrderStatusFilter('in_progress')
   const [search, setSearch] = useState('')
+  const [assignOrder, setAssignOrder] = useState<Order | null>(null)
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null)
+  const nowTick = usePendingReviewNow()
   const currency = useCurrency()
 
   // Categoria/subtipo (fila, tier+dia de Clash) filtrados no cliente -- mesmo
@@ -27,10 +33,24 @@ export function AdminOrdersPage() {
     !search || o.id.toLowerCase().includes(search.toLowerCase())
   )
 
+  // Prioriza pedidos em pending_review no topo da listagem para revisão ágil
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aPending = a.status === 'pending_review' ? 1 : 0
+      const bPending = b.status === 'pending_review' ? 1 : 0
+      if (aPending !== bPending) return bPending - aPending
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [filtered])
+
+  const pendingReviewCount = useMemo(() => {
+    return orders?.filter((o) => o.status === 'pending_review').length ?? 0
+  }, [orders])
+
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
-  const pageOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const hasNextPage = page * PAGE_SIZE < filtered.length
+  const pageOrders = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const hasNextPage = page * PAGE_SIZE < sorted.length
   // Reseta pra página 1 em qualquer mudança de filtro/busca -- só clampar
   // pra maxPage (comportamento anterior) deixava o admin "preso" na página
   // 2+ do conjunto ANTIGO ao trocar de filtro. Mesmo padrão de
@@ -43,7 +63,15 @@ export function AdminOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">Pedidos</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold text-ink">Pedidos</h1>
+        {pendingReviewCount > 0 && (
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-warning/15 text-warning border border-warning/30 flex items-center gap-1.5 animate-pulse-slow">
+            <Clock className="h-3.5 w-3.5" />
+            {pendingReviewCount} em revisão
+          </span>
+        )}
+      </div>
       {(orders?.length ?? 0) >= 100 && (
         <p className="text-xs text-warning">Mostrando os 100 pedidos mais recentes deste filtro — pode haver mais.</p>
       )}
@@ -106,10 +134,26 @@ export function AdminOrdersPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {pageOrders.map((order) => (
-              <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" viewerRole="admin" />
+              <CustomerOrderCard
+                key={order.id}
+                order={order}
+                currency={currency}
+                basePath="/admin/orders"
+                viewerRole="admin"
+                nowTick={nowTick}
+                onAssign={setAssignOrder}
+                onCancel={setCancelOrder}
+              />
             ))}
           </div>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
+
+          {cancelOrder && (
+            <CancelModal order={cancelOrder} open={!!cancelOrder} onClose={() => setCancelOrder(null)} />
+          )}
+          {assignOrder && (
+            <AssignModal order={assignOrder} open={!!assignOrder} onClose={() => setAssignOrder(null)} />
+          )}
         </>
       )}
     </div>

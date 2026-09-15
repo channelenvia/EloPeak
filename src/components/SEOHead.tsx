@@ -17,7 +17,7 @@ const SITE_URL = 'https://elo-peak.vercel.app'
 // compartilhado. title já sai formatado "X | EloPeak", só passar o
 // prefixo específico da página.
 export function SEOHead({ title, description, image = '/images/logo.png' }: SEOHeadProps) {
-  const fullTitle = `${title} | EloPeak`
+  const fullTitle = `${title}`
   // App é CSR puro (sem SSR) -- window sempre disponível em runtime real;
   // pathname sem query string, prática padrão pra canonical.
   const canonicalUrl = `${SITE_URL}${window.location.pathname}`

@@ -94,7 +94,6 @@ export const queryKeys = {
     refunds: (filters?: Record<string, unknown>) => ['admin', 'refunds', filters ?? {}] as const,
     drops: (filters?: Record<string, unknown>) => ['admin', 'drops', filters ?? {}] as const,
     payments: () => ['admin', 'payments'] as const,
-    pendingReview: () => ['admin', 'pending-review'] as const,
     reviewCases: () => ['admin', 'review-cases'] as const,
     profileUsername: (profileId: string) => ['admin', 'profile-username', profileId] as const,
     profileUsernames: (ids: string[]) => ['admin', 'profile-usernames', [...ids].sort()] as const,

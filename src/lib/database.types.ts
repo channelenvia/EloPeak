@@ -2600,6 +2600,14 @@ export type Database = {
           updated_at: string
         }[]
       }
+      admin_list_pending_review_states: {
+        Args: never
+        Returns: {
+          admin_review_locked: boolean
+          order_id: string
+          review_release_at: string | null
+        }[]
+      }
       admin_mark_payout_paid: {
         Args: { p_proof_url: string; p_request_id: string }
         Returns: Json

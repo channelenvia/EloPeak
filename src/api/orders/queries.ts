@@ -6,7 +6,7 @@ import type {
   BoosterDuoMatch, BoosterOrdersPage, CustomerOrderState, DuoAccountHistoryEntry, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch,
   OrderListTab, OrderListTabCounts, OrderRankVerification, OrderStatusHistory, SlotInfo,
 } from './types'
-import { HIDDEN_STATUSES_FILTER, ORDER_LIST_TABS, orderListTabStatuses } from './types'
+import { adminOrderListTabStatuses, HIDDEN_STATUSES_FILTER, ORDER_LIST_TABS, orderListTabStatuses } from './types'
 
 export async function getOrder(orderId: string): Promise<Order> {
   const { data, error } = await supabase.from('orders').select(ORDER_SAFE_COLUMNS).eq('id', orderId).single()
@@ -106,12 +106,30 @@ export async function listBoosterOrdersPage(params: {
 
 export async function listAdminOrders(tab: OrderListTab = 'all', serviceType?: ServiceType | 'all', limit = 100, includeCanceled = false): Promise<Order[]> {
   let query = supabase.from('orders').select(ORDER_SAFE_COLUMNS).order('created_at', { ascending: false }).limit(limit)
-  const statuses = orderListTabStatuses(tab, includeCanceled)
+  const statuses = adminOrderListTabStatuses(tab, includeCanceled)
   query = statuses ? query.in('status', statuses) : query.not('status', 'in', HIDDEN_STATUSES_FILTER)
   if (serviceType && serviceType !== 'all') query = query.eq('service_type', serviceType)
-  const { data, error } = await query
-  if (error) throw normalizeApiError(error, 'Não foi possível carregar os pedidos.')
-  return (data ?? []) as unknown as Order[]
+  const [ordersResult, reviewStatesResult] = await Promise.all([
+    query,
+    supabase.rpc('admin_list_pending_review_states'),
+  ])
+  if (ordersResult.error) throw normalizeApiError(ordersResult.error, 'Não foi possível carregar os pedidos.')
+
+  // Mantém a lista disponível durante o intervalo entre o deploy do frontend
+  // e a aplicação da migration da RPC. Nesse intervalo o card aparece sem o
+  // contador exato, mas os demais pedidos nunca deixam de carregar.
+  const reviewStateByOrderId = new Map(
+    (reviewStatesResult.error ? [] : (reviewStatesResult.data ?? [])).map((state) => [state.order_id, state]),
+  )
+  const orders = (ordersResult.data ?? []) as unknown as Order[]
+  return orders.map((order) => {
+    const reviewState = reviewStateByOrderId.get(order.id)
+    return {
+      ...order,
+      admin_review_locked: reviewState?.admin_review_locked ?? false,
+      review_release_at: reviewState?.review_release_at ?? null,
+    }
+  })
 }
 
 // Contagem por aba pro dropdown de status (ver OrderStatusFilterDropdown) --
@@ -122,7 +140,10 @@ export async function listAdminOrders(tab: OrderListTab = 'all', serviceType?: S
 // ignora o filtro de tipo de serviço e a busca por texto -- mesmo recorte
 // que os contadores de categoria já usam hoje (contam antes do filtro de
 // busca), só que no eixo de status.
-async function orderTabCounts(ownerFilter?: { column: 'customer_id' | 'assigned_booster_id'; value: string }): Promise<OrderListTabCounts> {
+async function orderTabCounts(
+  ownerFilter?: { column: 'customer_id' | 'assigned_booster_id'; value: string },
+  statusesForTab: (tab: OrderListTab) => OrderStatus[] | null = orderListTabStatuses,
+): Promise<OrderListTabCounts> {
   async function countStatuses(statuses: OrderStatus[] | null): Promise<number> {
     let query = supabase.from('orders').select('id', { count: 'exact', head: true })
     if (ownerFilter) query = query.eq(ownerFilter.column, ownerFilter.value)
@@ -133,7 +154,7 @@ async function orderTabCounts(ownerFilter?: { column: 'customer_id' | 'assigned_
   }
 
   const [tabEntries, canceled] = await Promise.all([
-    Promise.all(ORDER_LIST_TABS.map(async (tab) => [tab, await countStatuses(orderListTabStatuses(tab))] as const)),
+    Promise.all(ORDER_LIST_TABS.map(async (tab) => [tab, await countStatuses(statusesForTab(tab))] as const)),
     countStatuses(['canceled']),
   ])
   return { ...Object.fromEntries(tabEntries), canceled } as OrderListTabCounts
@@ -148,7 +169,7 @@ export async function getBoosterOrderTabCounts(boosterId: string): Promise<Order
 }
 
 export async function getAdminOrderTabCounts(): Promise<OrderListTabCounts> {
-  return orderTabCounts()
+  return orderTabCounts(undefined, adminOrderListTabStatuses)
 }
 
 export async function listOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]> {

@@ -7,6 +7,7 @@ import { timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDropRequests, useResolveDropRequest } from '@/api/admin'
 import { useBoosterNames } from '@/api/boosters'
+import { useProfileUsernames } from '@/api/admin'
 import { usePagedList } from '@/hooks/usePagedList'
 
 export function AdminDropsPage() {
@@ -35,6 +36,21 @@ export function AdminDropsPage() {
   // Nome do booster em vez do UUID cru — mesma ideia do admin/pages/OrderDetail.tsx.
   const boosterIds = [...new Set((requests ?? []).map((r) => r.booster_id))]
   const { data: boosterNames } = useBoosterNames(boosterIds)
+
+  // Username do cliente quando requested_by_role === 'customer' e do admin
+  // quando requested_by_role === 'admin' -- batch em vez de N+1 queries por
+  // card, mesmo padrão de useBoosterNames acima.
+  // Para drops de admin, admin_id é quem executou o drop (auth.uid() na
+  // chamada de admin_drop_order) -- não o resolver (que só existe pra drops
+  // originados por booster/cliente que passam pela fila).
+  const profileIds = [...new Set(
+    (requests ?? []).flatMap((r) => {
+      if (r.requested_by_role === 'customer') return r.order?.customer_id ? [r.order.customer_id] : []
+      if (r.requested_by_role === 'admin')    return r.admin_id ? [r.admin_id] : []
+      return []
+    })
+  )]
+  const { data: profileUsernames } = useProfileUsernames(profileIds)
 
   const resolveMutation = useResolveDropRequest()
   const resolve = {
@@ -94,7 +110,8 @@ export function AdminDropsPage() {
         ) : (
           <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {pendingPage.pageItems.map((r) => (
+            {pendingPage.pageItems.map((r) => {
+              return (
               <Card key={r.id} padding="md" className="flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
                   <Link to={`/admin/orders/${r.order_id}`} className="font-mono text-xs font-bold text-brand hover:underline">
@@ -116,14 +133,40 @@ export function AdminDropsPage() {
 
                 <p className="text-xs text-ink-secondary line-clamp-2">{r.reason}</p>
 
+                {/* Quem solicitou o drop */}
                 <div className="text-xs">
-                  {boosterNames?.get(r.booster_id) ? (
-                    <Link to={`/admin/boosters/${boosterNames.get(r.booster_id)!.id}`} className="text-brand hover:underline font-medium">
-                      {boosterNames.get(r.booster_id)!.display_name}
-                    </Link>
-                  ) : (
-                    <span className="font-mono text-ink-muted">{r.booster_id.slice(0, 8)}…</span>
-                  )}
+                  {(() => {
+                    if (r.requested_by_role === 'booster') {
+                      const b = boosterNames?.get(r.booster_id)
+                      return b ? (
+                        <Link to={`/admin/boosters/${b.id}`} className="text-brand hover:underline font-medium">
+                          {b.display_name}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-ink-muted">{r.booster_id.slice(0, 8)}…</span>
+                      )
+                    }
+                    if (r.requested_by_role === 'customer') {
+                      const cid = r.order?.customer_id
+                      const username = cid ? profileUsernames?.get(cid) : null
+                      return username ? (
+                        <Link to={`/admin/customers/${cid}`} className="text-brand hover:underline font-medium">
+                          {username}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-ink-muted">{cid ? `${cid.slice(0, 8)}…` : 'Cliente'}</span>
+                      )
+                    }
+                    if (r.requested_by_role === 'admin') {
+                      const username = r.admin_id ? profileUsernames?.get(r.admin_id) : null
+                      return username ? (
+                        <span className="font-medium text-ink">{username}</span>
+                      ) : (
+                        <span className="font-mono text-ink-muted">{r.admin_id ? `${r.admin_id.slice(0, 8)}…` : 'Admin'}</span>
+                      )
+                    }
+                    return null
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -173,7 +216,8 @@ export function AdminDropsPage() {
                   </Button>
                 </div>
               </Card>
-            ))}
+              )
+            })}
           </div>
           <Pagination page={pendingPage.page} hasNextPage={pendingPage.hasNextPage} onPrev={pendingPage.onPrev} onNext={pendingPage.onNext} />
           </>
@@ -185,7 +229,8 @@ export function AdminDropsPage() {
         <section>
           <h3 className="text-base font-semibold text-ink mb-3">Histórico</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {pastPage.pageItems.map((r) => (
+            {pastPage.pageItems.map((r) => {
+              return (
               <Link key={r.id} to={`/admin/orders/${r.order_id}`}>
                 <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
@@ -198,7 +243,50 @@ export function AdminDropsPage() {
                     <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">
                       {ROLE_LABEL[r.requested_by_role] ?? r.requested_by_role}
                     </span>
-                    <span className={`text-xs font-semibold ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`} data-tabular>
+                    {(() => {
+                      if (r.requested_by_role === 'booster') {
+                        const b = boosterNames?.get(r.booster_id)
+                        const name = b ? b.display_name : `${r.booster_id.slice(0, 8)}…`
+                        return b ? (
+                          <Link
+                            to={`/admin/boosters/${b.id}`}
+                            className="text-xs font-medium text-brand hover:underline truncate"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {name}
+                          </Link>
+                        ) : (
+                          <span className="text-xs font-medium text-ink-muted truncate">{name}</span>
+                        )
+                      }
+                      if (r.requested_by_role === 'customer') {
+                        const cid = r.order?.customer_id
+                        const username = cid ? profileUsernames?.get(cid) : null
+                        return username ? (
+                          <Link
+                            to={`/admin/customers/${cid}`}
+                            className="text-xs font-medium text-brand hover:underline truncate"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {username}
+                          </Link>
+                        ) : (
+                          <span className="text-xs font-medium text-ink-muted truncate">
+                            {cid ? `${cid.slice(0, 8)}…` : 'Cliente'}
+                          </span>
+                        )
+                      }
+                      if (r.requested_by_role === 'admin') {
+                        const username = r.admin_id ? profileUsernames?.get(r.admin_id) : null
+                        return (
+                          <span className="text-xs font-medium text-ink truncate">
+                            {username ? `${username}` : (r.admin_id ? `${r.admin_id.slice(0, 8)}…` : 'Admin')}
+                          </span>
+                        )
+                      }
+                      return null
+                    })()}
+                    <span className={`text-xs font-semibold ml-auto ${r.penalty_amount > 0 ? 'text-success' : r.penalty_amount < 0 ? 'text-danger' : 'text-ink-muted'}`} data-tabular>
                       {currency(r.penalty_amount)}
                     </span>
                   </div>
@@ -206,7 +294,8 @@ export function AdminDropsPage() {
                   <p className="text-[11px] text-ink-muted mt-auto pt-1">{r.resolved_at ? timeAgo(r.resolved_at) : '—'}</p>
                 </Card>
               </Link>
-            ))}
+              )
+            })}
           </div>
           <Pagination page={pastPage.page} hasNextPage={pastPage.hasNextPage} onPrev={pastPage.onPrev} onNext={pastPage.onNext} />
         </section>

@@ -1,36 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Lock, LockOpen, UserCheck, UserPlus, X } from 'lucide-react'
-import { Button, Card, ErrorAlert, Modal, SearchInput } from '@/components/ui'
+import { Button, ErrorAlert, Modal, SearchInput } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { useCurrency } from '@/hooks/useCurrency'
-import { usePendingReviewOrders, useAdminAssignPendingReviewOrder, useAdminCancelPendingReviewOrder, useAdminSetPendingReviewLock } from '@/api/admin'
+import { useAdminAssignPendingReviewOrder, useAdminCancelPendingReviewOrder } from '@/api/admin'
 import { useBoostersWithSlots } from '@/api/boosters'
 import type { BoosterWithSlots } from '@/api/boosters'
 import type { Order } from '@/types'
 
-// Contagem regressiva local, sem round-trip -- review_release_at já vem do
-// servidor, só formata o quanto falta em texto. Reusa o mesmo segundo
-// pra todos os cards do painel (um único setInterval).
-function useNowTick() {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
-  return now
-}
-
-function timeLeftLabel(releaseAt: string | null, now: number): string {
-  if (!releaseAt) return '--'
-  const diffMs = new Date(releaseAt).getTime() - now
-  if (diffMs <= 0) return 'liberando...'
-  return `${Math.ceil(diffMs / 1000)}s`
-}
-
-function CancelModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
+export function CancelModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const cancelOrder = useAdminCancelPendingReviewOrder()
   const { register, handleSubmit, reset, formState: { isValid } } = useForm<{ reason: string }>({
     resolver: zodResolver(z.object({ reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.') })),
@@ -78,7 +57,7 @@ function CancelModal({ order, open, onClose }: { order: Order; open: boolean; on
   )
 }
 
-function AssignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
+export function AssignModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
@@ -167,80 +146,5 @@ function AssignModal({ order, open, onClose }: { order: Order; open: boolean; on
         </Button>
       </div>
     </Modal>
-  )
-}
-
-// Painel só aparece quando há pedido em pending_review -- não ocupa espaço
-// à toa no dashboard. Janela é de 2 minutos, então a lista é live (realtime +
-// refetch de 10s) e a contagem regressiva atualiza a cada segundo local.
-export function PendingReviewPanel() {
-  const { data: orders } = usePendingReviewOrders()
-  const now = useNowTick()
-  const currency = useCurrency()
-  const toggleLock = useAdminSetPendingReviewLock()
-  const [cancelOrder, setCancelOrder] = useState<Order | null>(null)
-  const [assignOrder, setAssignOrder] = useState<Order | null>(null)
-
-  if (!orders || orders.length === 0) return null
-
-  return (
-    <>
-      <Card variant="operational" padding="md" className="border-warning/30 bg-warning/[0.03]">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-ink">Pedidos em revisão ({orders.length})</h3>
-          <span className="text-[10px] text-ink-muted">Janela de 2 minutos antes de ir pro pool</span>
-        </div>
-        <div className="space-y-2">
-          {orders.map((order) => (
-            <div key={order.id} className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-surface px-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-mono text-ink">#{order.id.slice(0, 8).toUpperCase()}</p>
-                <p className="text-[10px] text-ink-muted truncate">
-                  {order.service_type} · {order.boost_mode} · {currency(order.total_price)}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={cn(
-                  'text-[10px] font-semibold px-2 py-1 rounded-full',
-                  order.admin_review_locked ? 'bg-ink-muted/10 text-ink-secondary' : 'bg-warning/10 text-warning',
-                )}>
-                  {order.admin_review_locked ? 'Travado' : timeLeftLabel(order.review_release_at, now)}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className={order.admin_review_locked
-                    ? 'bg-danger/10 text-danger hover:bg-danger/20'
-                    : 'bg-success/10 text-success hover:bg-success/20'}
-                  loading={toggleLock.isPending && toggleLock.variables?.orderId === order.id}
-                  onClick={() => toggleLock.mutate({ orderId: order.id, locked: !order.admin_review_locked })}
-                  title={order.admin_review_locked ? 'Travado -- clique para destravar (libera agora)' : 'Liberado -- clique para travar'}
-                >
-                  {order.admin_review_locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setAssignOrder(order)}
-                  title={order.preferred_booster_id ? 'Reatribuir a outro booster' : 'Atribuir a um booster'}
-                >
-                  {order.preferred_booster_id ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
-                </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setCancelOrder(order)} title="Cancelar pedido">
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {cancelOrder && (
-        <CancelModal order={cancelOrder} open={!!cancelOrder} onClose={() => setCancelOrder(null)} />
-      )}
-      {assignOrder && (
-        <AssignModal order={assignOrder} open={!!assignOrder} onClose={() => setAssignOrder(null)} />
-      )}
-    </>
   )
 }

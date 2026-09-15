@@ -6,7 +6,6 @@ import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDashboardStats } from '@/api/admin'
-import { PendingReviewPanel } from '../components/PendingReviewPanel'
 
 // Cores do gráfico lidas dos mesmos tokens usados no resto do app (ver
 // globals.css) em vez de hex cravado -- Recharts não consegue ler classes
@@ -46,8 +45,6 @@ export function AdminOverview() {
         <ErrorAlert message="Não foi possível carregar as estatísticas. Valores podem estar desatualizados." />
       )}
 
-      <PendingReviewPanel />
-
       {/* KPIs -- mesmo widget (StatCard) usado no dashboard do cliente, pra
           manter a formatação consistente entre papéis. Boosters pendentes
           continua clicável e muda de cor quando precisa de atenção. */}
@@ -74,13 +71,16 @@ export function AdminOverview() {
             color="text-success bg-success/10"
             valueSize="lg"
           />
-          <StatCard
-            label="Pedidos Ativos"
-            value={stats?.active_orders_count ?? 0}
-            icon={ShoppingBag}
-            color="text-info bg-info/10"
-            valueSize="lg"
-          />
+          <Link to="/admin/orders">
+            <StatCard
+              label="Pedidos Ativos"
+              value={stats?.active_orders_count ?? 0}
+              icon={ShoppingBag}
+              color="text-info bg-info/10"
+              valueSize="lg"
+              interactive
+            />
+          </Link>
         </div>
       )}
 
