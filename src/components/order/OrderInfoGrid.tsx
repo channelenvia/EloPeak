@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Card } from '@/components/ui/Card'
 import type { LucideIcon } from 'lucide-react'
 import { Check, ChevronDown, Sparkles } from 'lucide-react'
 import { cn, sortOrderExtras } from '@/lib/utils'
@@ -10,31 +11,27 @@ export interface OrderInfoGridItem {
   value: React.ReactNode
 }
 
-// Grid de informações do pedido (modo, fila, Riot ID, entrega, booster,
-// valor...) -- texto minimalista (ícone + label acima, valor abaixo), sem
-// virar um card/badge por item (isso foi tentado e revertido: usuário
-// preferia o estilo antigo mais limpo). Continua full width e responsivo
-// (2/3/4 colunas conforme o espaço) pra não voltar a apertar tudo no centro.
-// Extras ficam em uma subseção compacta abaixo do grid -- só nome, sem valor,
-// já que o preço deles está embutido no total do pedido mostrado acima.
+// Grid de informações do pedido (ícone + rótulo acima, valor abaixo), em 2/3/4
+// colunas. Os extras ficam numa subseção compacta (só o nome; o preço já está
+// no total).
 export function OrderInfoGrid({ items, extras }: { items: OrderInfoGridItem[]; extras?: OrderExtra[] }) {
   const [expanded, setExpanded] = useState(false)
   if (!items.length) return null
   const sortedExtras = extras?.length ? sortOrderExtras(extras) : []
   return (
     <div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-6">
         {items.map(({ icon: Icon, label, value }) => (
-          <div key={label} className="text-center">
+          <div key={label} className="min-w-0 text-center">
             <p className="text-xs text-ink-muted flex items-center justify-center gap-1">
               <Icon className="h-3 w-3 shrink-0" />{label}
             </p>
-            <div className="text-sm font-semibold text-ink mt-0.5" data-tabular>{value}</div>
+            <div className="mt-1 break-words text-base font-semibold text-ink" data-tabular>{value}</div>
           </div>
         ))}
       </div>
       {sortedExtras.length > 0 && (
-        <div className="mt-5 rounded-xl border border-border-subtle bg-bg-raised/40 px-3 py-2.5">
+        <Card variant="inset" padding="none" className="mt-6 px-4 py-3">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
@@ -42,7 +39,7 @@ export function OrderInfoGrid({ items, extras }: { items: OrderInfoGridItem[]; e
           >
             <Sparkles className="h-3.5 w-3.5 text-brand" />
             <p className="text-xs font-semibold text-ink-secondary">Adicionais</p>
-            <span className="text-[10px] text-ink-muted" data-tabular>({sortedExtras.length})</span>
+            <span className="text-2xs text-ink-muted" data-tabular>({sortedExtras.length})</span>
             <ChevronDown className={cn('ml-auto h-3.5 w-3.5 text-ink-muted transition-transform', expanded && 'rotate-180')} />
           </button>
           {expanded && (
@@ -60,7 +57,7 @@ export function OrderInfoGrid({ items, extras }: { items: OrderInfoGridItem[]; e
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
     </div>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { Volume2, VolumeX, Play, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBoosterSoundStore } from '@/stores/boosterSoundStore'
@@ -65,14 +66,14 @@ export function OrderSoundSettings() {
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors"
+        variant="ghost" size="icon" className="relative"
         aria-label="Som de novo pedido"
       >
         {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 bg-bg-surface/90 backdrop-blur-xl border border-border-subtle rounded-2xl shadow-2xl z-50 p-4 space-y-4">
@@ -81,7 +82,7 @@ export function OrderSoundSettings() {
             <button
               onClick={() => toggleMuted()}
               className={cn(
-                'flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors',
+                'flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors',
                 muted
                   ? 'bg-danger/10 text-danger border-danger/20'
                   : 'bg-success/10 text-success border-success/20',
@@ -127,13 +128,13 @@ export function OrderSoundSettings() {
                     {soundId === id && <Check className="h-3.5 w-3.5 shrink-0" />}
                     {label}
                   </button>
-                  <button
+                  <Button
                     onClick={() => preview(id)}
                     aria-label={`Ouvir ${label}`}
-                    className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors shrink-0"
+                    variant="ghost" size="icon-sm" className="shrink-0"
                   >
                     <Play className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>

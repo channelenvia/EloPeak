@@ -29,10 +29,10 @@ interface OrderStatusFilterDropdownProps {
 
 function SubFilterCheckbox({ label, checked, count, onChange }: { label: string; checked: boolean; count?: number; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-1.5 pl-6 pr-3 py-1 text-[11px] text-ink-secondary hover:bg-bg-raised cursor-pointer">
+    <label className="flex items-center gap-1.5 pl-6 pr-3 py-1 text-xs text-ink-secondary hover:bg-bg-raised cursor-pointer">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-brand h-3 w-3" />
       <span className="flex-1">{label}</span>
-      {count !== undefined && <span className="text-[10px] text-ink-muted">{count}</span>}
+      {count !== undefined && <span className="text-2xs text-ink-muted">{count}</span>}
     </label>
   )
 }
@@ -60,7 +60,7 @@ export function OrderStatusFilterDropdown({
         aria-label={open ? 'Fechar filtro de status' : 'Trocar filtro de status'}
       >
         {TAB_LABEL[tab]}
-        {subActiveCount > 0 && <span className="text-[10px] text-brand/70">{subActiveCount}</span>}
+        {subActiveCount > 0 && <span className="text-2xs text-brand/70">{subActiveCount}</span>}
         <ChevronDown className={cn(FILTER_CHEVRON_CLASS, open && 'rotate-180')} />
       </button>
 
@@ -69,7 +69,7 @@ export function OrderStatusFilterDropdown({
           <div key={value}>
             <button type="button" aria-pressed={tab === value} onClick={() => { onTabChange(value); setOpen(false) }} className={filterOptionRowClass(tab === value)}>
               <span className="flex-1">{TAB_LABEL[value]}</span>
-              {counts && <span className="text-[10px] text-ink-muted">{counts[value]}</span>}
+              {counts && <span className="text-2xs text-ink-muted">{counts[value]}</span>}
             </button>
             {value === 'in_progress' && (
               <div className="pb-1">

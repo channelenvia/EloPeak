@@ -14,7 +14,7 @@ function DiscordSupportLink({ children }: { children: React.ReactNode }) {
 
 export function PendingScreen() {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-warning/10 border border-warning/25 flex items-center justify-center mx-auto">
         <Clock className="h-8 w-8 text-warning" />
       </div>
@@ -34,7 +34,7 @@ export function PendingScreen() {
 
 export function RejectedScreen() {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-danger/10 border border-danger/25 flex items-center justify-center mx-auto">
         <span className="text-2xl font-black text-danger">×</span>
       </div>
@@ -59,7 +59,7 @@ function hoursRemaining(suspendedUntil: string): number {
 
 export function SuspendedScreen({ suspendedUntil }: { suspendedUntil: string | null }) {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-danger/10 border border-danger/25 flex items-center justify-center mx-auto">
         <Ban className="h-8 w-8 text-danger" />
       </div>
@@ -80,7 +80,7 @@ export function SuspendedScreen({ suspendedUntil }: { suspendedUntil: string | n
 
 export function RemovedScreen() {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-danger/10 border border-danger/25 flex items-center justify-center mx-auto">
         <Ban className="h-8 w-8 text-danger" />
       </div>
@@ -99,7 +99,7 @@ export function RemovedScreen() {
 
 export function NoApplicationScreen() {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-danger/10 border border-danger/25 flex items-center justify-center mx-auto">
         <X className="h-8 w-8 text-danger" />
       </div>
@@ -118,7 +118,7 @@ export function NoApplicationScreen() {
 
 export function BoosterStatusErrorScreen() {
   return (
-    <div className="max-w-sm text-center space-y-5">
+    <div className="max-w-sm text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-danger/10 border border-danger/25 flex items-center justify-center mx-auto">
         <AlertTriangle className="h-8 w-8 text-danger" />
       </div>

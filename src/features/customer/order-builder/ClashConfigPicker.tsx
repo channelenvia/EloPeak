@@ -178,11 +178,11 @@ export function ClashConfigPicker() {
             disabled={riotLookupLoading}
             className={cn(
               'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
-              'bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
+              'bg-brand text-ink-inverse hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
             )}
           >
             <Search className="h-4 w-4" />
-            {riotLookupLoading ? 'Consultando...' : 'Verificar elo'}
+            {riotLookupLoading ? 'Consultando…' : 'Verificar elo'}
           </button>
         </div>
         {riotLookupMessage && <p className="mt-2 text-xs text-success">{riotLookupMessage}</p>}

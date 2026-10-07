@@ -1,4 +1,7 @@
 import { useState, type ReactNode } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { X } from 'lucide-react'
 import { CurrencyMaskedInput } from '@/components/ui'
 import { EMPTY_SERVICE_FORM, type ServiceFormData } from '@/features/booster/utils/boosterServiceForm'
@@ -146,9 +149,9 @@ export function BoosterServiceForm({
     data.specialties.length > 0
 
   return (
-    <div className="card border-brand/30 p-5 space-y-4">
+    <Card variant="standard" padding="md" className="border-brand/30 space-y-4">
       <div className="space-y-1.5">
-        <label htmlFor="booster-service-title" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Título <span className="text-danger">*</span></label>
+        <label htmlFor="booster-service-title" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Título <span className="text-danger">*</span></label>
         <input
           id="booster-service-title"
           value={data.title}
@@ -161,8 +164,8 @@ export function BoosterServiceForm({
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label htmlFor="booster-service-description" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Descrição <span className="text-danger">*</span></label>
-          <span className="text-[10px] text-ink-muted">{data.description.length}/300</span>
+          <label htmlFor="booster-service-description" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Descrição <span className="text-danger">*</span></label>
+          <span className="text-2xs text-ink-muted">{data.description.length}/300</span>
         </div>
         <textarea
           id="booster-service-description"
@@ -170,21 +173,21 @@ export function BoosterServiceForm({
           onChange={field('description')}
           maxLength={300}
           rows={3}
-          placeholder="Descreva o que está incluso na sessão..."
+          placeholder="Descreva o que está incluso na sessão…"
           className="input-base w-full text-sm resize-none"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <label htmlFor="booster-service-tempo" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Duração <span className="text-danger">*</span></label>
+          <label htmlFor="booster-service-tempo" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Duração <span className="text-danger">*</span></label>
           <select
             id="booster-service-tempo"
             value={data.tempo}
             onChange={e => setData(d => ({ ...d, tempo: e.target.value }))}
             className="input-base w-full text-sm"
           >
-            <option value="" disabled>Selecione...</option>
+            <option value="" disabled>Selecione…</option>
             {data.tempo && !(TEMPO_OPTIONS as readonly string[]).includes(data.tempo) && (
               <option value={data.tempo}>{data.tempo}</option>
             )}
@@ -194,7 +197,7 @@ export function BoosterServiceForm({
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Valor (R$) <span className="text-danger">*</span></label>
+          <label className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Valor (R$) <span className="text-danger">*</span></label>
           <CurrencyMaskedInput
             valueCents={priceCents}
             onChangeCents={handlePriceCentsChange}
@@ -259,7 +262,7 @@ export function BoosterServiceForm({
         existingValues={data.specialties}
         onAdd={value => setData(d => ({ ...d, specialties: [...d.specialties, value] }))}
         onRemove={value => setData(d => ({ ...d, specialties: d.specialties.filter(s => s !== value) }))}
-        placeholder="Adicionar especialidade própria..."
+        placeholder="Adicionar especialidade própria…"
         maxLength={40}
       >
         <div className="flex flex-wrap gap-2">
@@ -288,21 +291,21 @@ export function BoosterServiceForm({
         </div>
       </TagListInput>
 
-      <div className="flex gap-2 justify-end pt-1">
-        <button
+      <ActionBar>
+        <Button
           onClick={onCancel}
-          className="px-4 py-2 rounded-xl text-sm text-ink-secondary hover:bg-bg-raised transition-colors"
+          variant="secondary"
         >
           Cancelar
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => onSave(data)}
           disabled={!valid || saving}
-          className="px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors"
+          variant="primary"
         >
-          {saving ? 'Salvando...' : 'Salvar'}
-        </button>
-      </div>
-    </div>
+          {saving ? 'Salvando…' : 'Salvar'}
+        </Button>
+      </ActionBar>
+    </Card>
   )
 }

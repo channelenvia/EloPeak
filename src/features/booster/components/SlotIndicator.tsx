@@ -1,4 +1,5 @@
 import { Sparkles, Swords, Users } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 
 export interface SlotInfo {
   solo_count: number
@@ -16,18 +17,18 @@ export function SlotIndicator({ slots }: { slots: SlotInfo }) {
   const color = remaining === 0 ? 'text-danger' : remaining === 1 ? 'text-warning' : 'text-success'
 
   return (
-    <div className="flex items-center gap-3 bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl px-4 py-2.5">
+    <div className="flex items-center gap-3 bg-bg-surface/80 backdrop-blur-xs border border-border-subtle rounded-xl px-4 py-2.5">
       {is_top3 && (
-        <span className="text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">
+        <Badge variant="warning" size="tag">
           TOP 3
-        </span>
+        </Badge>
       )}
       <div className="flex items-center gap-1.5 text-xs">
         <span className="text-ink-muted">Slots:</span>
         <span className={`font-bold ${color}`}>{total_count}/{max_total}</span>
       </div>
       <div className="h-3 w-px bg-bg-raised" />
-      <div className="flex items-center gap-2 text-[11px] text-ink-secondary">
+      <div className="flex items-center gap-2 text-xs text-ink-secondary">
         <span className="flex items-center gap-1">
           <Swords className="h-3 w-3" />
           Solo: {solo_count}
@@ -38,7 +39,7 @@ export function SlotIndicator({ slots }: { slots: SlotInfo }) {
         </span>
       </div>
       <div className="h-3 w-px bg-bg-raised" />
-      <span className={`flex items-center gap-1 text-[11px] font-medium ${exclusive_slot_used ? 'text-ink-muted' : 'text-accent'}`}>
+      <span className={`flex items-center gap-1 text-xs font-medium ${exclusive_slot_used ? 'text-ink-muted' : 'text-accent'}`}>
         <Sparkles className="h-3 w-3" />
         Exclusivo: {exclusive_slot_used ? 1 : 0}/1
       </span>

@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
 import { Star } from 'lucide-react'
 import { Button, ErrorAlert, Modal } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { useOwnReview, useCreateReview } from '@/api/reviews'
+import { useCreateReview } from '@/api/reviews'
 import type { Order } from '@/types'
 
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -26,55 +27,27 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-// Só existe pra pedidos 'completed' -- a policy reviews_customer_insert
-// (migration archive 137) exige isso no banco também, então tentar antes
-// sempre falharia. Uma review por pedido (order_id é unique em reviews).
-//
-// Rende como pill compacta ao lado do código do pedido (ver OrderPageHeader
-// `statusActions`) em vez de um card cheio na página -- antes existiam os
-// dois ao mesmo tempo (duplicado).
-export function OrderReviewSection({ order }: { order: Order }) {
-  const isCompleted = order.status === 'completed'
-  const { data: review, isLoading } = useOwnReview(isCompleted ? order.id : undefined)
+// Modal de avaliação do booster, aberto pelo badge de status de um pedido
+// 'completed' (a policy reviews_customer_insert exige isso no banco também).
+// Uma review por pedido (order_id é unique em reviews).
+export function OrderReviewSection({ order, open, onOpenChange }: { order: Order; open: boolean; onOpenChange: (open: boolean) => void }) {
   const createReview = useCreateReview(order.id)
-  const [showModal, setShowModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [content, setContent] = useState('')
 
-  if (!isCompleted || isLoading) return null
+  if (order.status !== 'completed') return null
 
   function closeModal() {
-    setShowModal(false)
+    onOpenChange(false)
     setRating(0)
     setContent('')
   }
 
-  if (review) {
-    return (
-      <span
-        title={review.content ?? undefined}
-        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30"
-      >
-        <Star className="h-3 w-3 fill-warning" />
-        Avaliado · {review.rating}/5
-      </span>
-    )
-  }
-
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setShowModal(true)}
-        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-colors"
-      >
-        <Star className="h-3 w-3" />
-        Avaliar booster
-      </button>
-
       <Modal
-        open={showModal}
-        onOpenChange={(open) => { if (!open) closeModal() }}
+        open={open}
+        onOpenChange={(next) => { if (!next) closeModal() }}
         title="Avalie seu booster"
         description="Conte como foi sua experiência com o serviço."
       >
@@ -93,8 +66,8 @@ export function OrderReviewSection({ order }: { order: Order }) {
             message={createReview.error instanceof Error ? createReview.error.message : 'Erro ao enviar avaliação'}
           />
         )}
-        <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={closeModal}>Cancelar</Button>
+        <ActionBar>
+          <Button disabled={createReview.isPending} variant="secondary" onClick={closeModal}>Cancelar</Button>
           <Button
             variant="success"
             loading={createReview.isPending}
@@ -106,7 +79,7 @@ export function OrderReviewSection({ order }: { order: Order }) {
           >
             Enviar avaliação
           </Button>
-        </div>
+        </ActionBar>
       </Modal>
     </>
   )

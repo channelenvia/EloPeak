@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Badge, LiveDot } from '@/components/ui/Badge'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Clock, CheckCircle2, Trophy, Package, MessageSquare, ExternalLink, Eye, DollarSign } from 'lucide-react'
 import { Button, Card, Modal, RankBadge, Avatar, Skeleton, EmptyState } from '@/components/ui'
@@ -54,7 +55,7 @@ export function BoosterPublicProfilePage() {
   // avaliações repetidas. Só habilita a esteira quando há avaliações
   // suficientes pra uma única cópia já preencher a largura máxima do
   // container (container-wide = 1536px - padding ≈ 1408px; cards w-80 +
-  // gap-5 ≈ 340px cada => ~5 preenchem; 6 dá margem de sobra).
+  // gap-6 ≈ 340px cada => ~5 preenchem; 6 dá margem de sobra).
   const MIN_REVIEWS_FOR_MARQUEE = 6
   const useMarquee = reviewsWithContent.length >= MIN_REVIEWS_FOR_MARQUEE
 
@@ -101,18 +102,18 @@ export function BoosterPublicProfilePage() {
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <h1 className="text-xl font-extrabold text-ink">{booster.display_name}</h1>
                 {booster.is_top3 && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                  <Badge variant="warning" size="tag">
                     <Trophy className="h-3 w-3" /> Top 3
-                  </span>
+                  </Badge>
                 )}
               </div>
               {isBoosterOnline(booster.last_active_at) ? (
-                <p className="text-[10px] font-semibold text-success flex items-center justify-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                <p className="text-2xs font-semibold text-success flex items-center justify-center gap-1">
+                  <LiveDot />
                   Online
                 </p>
               ) : (
-                <p className="text-[10px] font-medium text-ink-muted">
+                <p className="text-2xs font-medium text-ink-muted">
                   {formatLastSeen(booster.last_active_at)}
                 </p>
               )}
@@ -130,7 +131,7 @@ export function BoosterPublicProfilePage() {
                     </span>
                   ) : null}
                   <p className="text-xs font-bold text-ink text-center leading-tight">{value}</p>
-                  <p className="text-[10px] text-ink-muted uppercase tracking-wide">{label}</p>
+                  <p className="text-2xs text-ink-muted uppercase tracking-wide">{label}</p>
                 </div>
               ))}
             </div>
@@ -178,13 +179,13 @@ export function BoosterPublicProfilePage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {services.map(s => (
-              <div key={s.id} className="rounded-xl border border-border-subtle bg-bg-raised/30 overflow-hidden flex flex-col">
+              <Card key={s.id} variant="inset" padding="none" className="overflow-hidden flex flex-col">
                 <div className="h-1 bg-success shrink-0" />
-                <div className="p-5 flex flex-col gap-2.5 flex-1">
+                <div className="p-5 flex flex-col gap-3 flex-1">
                 <div>
                   <p className="text-sm font-bold text-ink">{s.title}</p>
                   {s.service_type && (
-                    <p className="text-[10px] font-semibold text-brand uppercase tracking-wide mt-0.5">{getServiceLabel(s.service_type)}</p>
+                    <p className="text-2xs font-semibold text-brand uppercase tracking-wide mt-0.5">{getServiceLabel(s.service_type)}</p>
                   )}
                 </div>
                 {s.description && (
@@ -195,7 +196,7 @@ export function BoosterPublicProfilePage() {
                   {s.tempo && (
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3 text-ink-muted" />
-                      <span className="text-[11px] text-ink-secondary">{s.tempo}</span>
+                      <span className="text-xs text-ink-secondary">{s.tempo}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-1 ml-auto">
@@ -206,7 +207,7 @@ export function BoosterPublicProfilePage() {
                   <Eye className="h-3.5 w-3.5" /> Visualizar
                 </Button>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         </Card>
@@ -227,7 +228,7 @@ export function BoosterPublicProfilePage() {
           // animação desloca -50% (só entra aqui com avaliações suficientes,
           // ver useMarquee acima, senão as duas cópias aparecem juntas).
           <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
-            <div className="flex w-max gap-5 animate-marquee group-hover:[animation-play-state:paused]">
+            <div className="flex w-max gap-6 animate-marquee group-hover:[animation-play-state:paused]">
               {[...reviewsWithContent, ...reviewsWithContent].map((review, i) => (
                 <TestimonialCard
                   key={`${review.id}-${i}`}
@@ -245,7 +246,7 @@ export function BoosterPublicProfilePage() {
         ) : (
           // Poucas avaliações: lista estática, cada uma renderizada uma única
           // vez (sem duplicar pro loop da esteira, que faria parecer repetida).
-          <div className="flex flex-wrap gap-5">
+          <div className="flex flex-wrap gap-6">
             {reviewsWithContent.map((review) => (
               <TestimonialCard
                 key={review.id}
@@ -270,9 +271,9 @@ export function BoosterPublicProfilePage() {
         maxWidth="lg"
       >
         {viewingService && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {viewingService.service_type && (
-              <p className="text-[10px] font-semibold text-brand uppercase tracking-wide">{getServiceLabel(viewingService.service_type)}</p>
+              <p className="text-2xs font-semibold text-brand uppercase tracking-wide">{getServiceLabel(viewingService.service_type)}</p>
             )}
             {viewingService.description && (
               <p className="text-sm text-ink-secondary leading-relaxed">{viewingService.description}</p>

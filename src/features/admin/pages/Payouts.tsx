@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -27,7 +29,7 @@ const PENDING_STATUSES = PAYOUT_PENDING_STATUSES
 
 function StatusBadge({ status }: { status: PayoutRequestStatus }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold', STATUS_COLOR[status])}>
+    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold', STATUS_COLOR[status])}>
       {STATUS_LABEL[status]}
     </span>
   )
@@ -108,7 +110,7 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
 
   return (
     <Modal open onOpenChange={(open) => !open && onClose()} title={`Solicitação de saque · ${request.booster_legal_name_snapshot ?? request.booster_id.slice(0, 8)}`}>
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><p className="text-xs text-ink-muted">CPF</p><p className="font-semibold text-ink" data-tabular>{request.booster_cpf_snapshot ?? '—'}</p></div>
           <div><p className="text-xs text-ink-muted">Nome legal</p><p className="font-semibold text-ink">{request.booster_legal_name_snapshot ?? '—'}</p></div>
@@ -121,7 +123,7 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
         <div>
           <p className="mb-2 text-xs font-bold uppercase text-ink-secondary">Pedidos que compõem este saque</p>
           {isLoading ? <Skeleton className="h-24 w-full" /> : !breakdown?.length ? (
-            <p className="text-[10px] text-ink-muted">Nenhum pedido encontrado para composição.</p>
+            <p className="text-2xs text-ink-muted">Nenhum pedido encontrado para composição.</p>
           ) : (
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {breakdown.map((row) => (
@@ -205,13 +207,7 @@ export function AdminPayoutsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="section-label mb-2">Financeiro</p>
-        <h1 className="text-2xl font-bold text-ink">Solicitações de saque</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-          Repasses aos boosters, sacados do saldo acumulado no ledger financeiro — não são mais uma ação por pedido.
-        </p>
-      </div>
+      <PageHeader eyebrow="Financeiro" title="Solicitações de saque" description="Repasses aos boosters, sacados do saldo acumulado no ledger financeiro — não são mais uma ação por pedido." />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <StatCard label="Aguardando" value={currency(pendingTotal)} icon={Clock3} tone="bg-warning/10 text-warning" />
@@ -221,7 +217,7 @@ export function AdminPayoutsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchInput
           wrapperClassName="w-full sm:w-64 shrink-0"
-          placeholder="Buscar por booster ou CPF..."
+          placeholder="Buscar por booster ou CPF…"
           aria-label="Buscar por booster ou CPF"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -240,16 +236,16 @@ export function AdminPayoutsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">
           <EmptyState icon={Banknote} title="Nenhuma solicitação encontrada." />
         </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {pageItems.map((row) => (
             <Card
               key={row.id}
@@ -261,21 +257,21 @@ export function AdminPayoutsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink text-sm truncate">{row.booster_legal_name_snapshot ?? '—'}</p>
-                  <p className="text-[11px] text-ink-muted" data-tabular>{row.booster_cpf_snapshot ?? '—'}</p>
+                  <p className="text-xs text-ink-muted" data-tabular>{row.booster_cpf_snapshot ?? '—'}</p>
                 </div>
                 <StatusBadge status={row.status} />
               </div>
               <p className="text-lg font-black text-ink" data-tabular>{currency(row.amount)}</p>
-              <div className="flex items-center justify-between text-[11px] text-ink-muted">
+              <div className="flex items-center justify-between text-xs text-ink-muted">
                 <span>Solicitado {formatDateTime(row.requested_at)}</span>
               </div>
-              <p className="text-[11px] text-ink-muted -mt-1">Atualizado {formatDateTime(row.updated_at)}</p>
-              <p className="text-[11px] font-semibold text-brand mt-1">
+              <p className="text-xs text-ink-muted -mt-1">Atualizado {formatDateTime(row.updated_at)}</p>
+              <p className="text-xs font-semibold text-brand mt-1">
                 {PENDING_STATUSES.includes(row.status) ? 'Ver ação →' : 'Ver detalhes →'}
               </p>
             </Card>
           ))}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}

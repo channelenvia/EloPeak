@@ -84,7 +84,7 @@ function MatchListPanel({
 
   return (
     <div>
-      {label && <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-2">{label}</p>}
+      {label && <p className="text-2xs font-semibold text-ink-muted uppercase tracking-wide mb-2">{label}</p>}
       {isLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-12 w-full" />
@@ -166,30 +166,30 @@ function MatchListPanel({
                     <p className="text-xs font-semibold text-ink truncate">
                       {match.champion ?? 'Campeão desconhecido'}
                     </p>
-                    <p className="text-[10px] text-ink-muted" data-tabular>
+                    <p className="text-2xs text-ink-muted" data-tabular>
                       {match.kills}/{match.deaths}/{match.assists} KDA
                       {cs != null && ` · ${cs} CS${csPerMin != null ? ` (${csPerMin.toFixed(1)}/min)` : ''}`}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     {match.result === 'remake' ? (
-                      <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide">Remake</p>
+                      <p className="text-2xs font-semibold text-ink-muted uppercase tracking-wide">Remake</p>
                     ) : pdlValue != null && (
                       <p className={cn('text-xs font-bold', match.result === 'win' ? 'text-success' : 'text-danger')} data-tabular>
                         {match.result === 'win' ? '+' : '−'}{pdlValue} {pdlEstimate!.label}
                       </p>
                     )}
-                    <p className="flex items-center gap-1 text-[10px] text-ink-muted justify-end" data-tabular>
+                    <p className="flex items-center gap-1 text-2xs text-ink-muted justify-end" data-tabular>
                       <Clock className="h-3 w-3" /> {formatDuration(match.duration_seconds)}
                     </p>
-                    <p className="text-[10px] text-ink-muted mt-0.5">{timeAgo(match.played_at)}</p>
+                    <p className="text-2xs text-ink-muted mt-0.5">{timeAgo(match.played_at)}</p>
                   </div>
                 </div>
               )
             })}
           </div>
           {pdlEstimate && (
-            <p className="mt-3 text-[10px] text-ink-muted text-center">
+            <p className="mt-3 text-2xs text-ink-muted text-center">
               {pdlEstimate.label} por partida é uma estimativa (média informada no pedido) — a Riot não expõe esse valor por partida.
             </p>
           )}

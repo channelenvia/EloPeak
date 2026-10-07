@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { LiveDot } from '@/components/ui/Badge'
 import { ShoppingBag, Users, TrendingUp } from 'lucide-react'
 import { Card, OrderStatusBadge, Skeleton, StatCard, ErrorAlert } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
@@ -33,13 +35,10 @@ export function AdminOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">Visão Geral</h1>
-        <div className="flex items-center gap-2 text-xs text-ink-muted">
-          <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
-          Ao vivo
-        </div>
-      </div>
+      <PageHeader
+        title="Visão Geral"
+        actions={<div className="flex items-center gap-2 text-xs text-ink-muted"><LiveDot />Ao vivo</div>}
+      />
 
       {isError && (
         <ErrorAlert message="Não foi possível carregar as estatísticas. Valores podem estar desatualizados." />
@@ -84,7 +83,7 @@ export function AdminOverview() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-5">
+      <div className="grid lg:grid-cols-2 gap-6">
         {/* Orders chart -- centralizado verticalmente no card, altura maior
             que a versão anterior (ficava espremido demais). */}
         <Card variant="operational" padding="md" className="flex flex-col">
@@ -119,12 +118,12 @@ export function AdminOverview() {
                 <div className="flex items-center justify-between py-2 hover:bg-bg-interactive rounded-lg px-2 -mx-2 transition-colors cursor-pointer">
                   <div>
                     <p className="text-xs font-mono text-ink">#{order.id?.slice(0, 8).toUpperCase()}</p>
-                    <p className="text-[10px] text-ink-muted">{order.created_at && timeAgo(order.created_at)}</p>
+                    <p className="text-2xs text-ink-muted">{order.created_at && timeAgo(order.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-semibold text-ink tabular-figures" data-tabular>{currency(order.total_price ?? 0)}</span>
                     {order.status && (
-                      <OrderStatusBadge order={{ status: order.status, assigned_booster_id: order.assigned_booster_id ?? null }} />
+                      <OrderStatusBadge order={{ status: order.status, assigned_booster_id: order.assigned_booster_id ?? null }} viewerRole="admin" align="right" />
                     )}
                   </div>
                 </div>

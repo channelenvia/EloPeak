@@ -30,3 +30,8 @@ export function EmptyState({ icon: Icon = Inbox, title, description, action, cla
     </div>
   )
 }
+
+// Estado vazio inline (dentro de card/lista/modal) -- só texto, sem ícone.
+export function InlineEmpty({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn('py-4 text-center text-sm text-ink-muted', className)}>{children}</p>
+}

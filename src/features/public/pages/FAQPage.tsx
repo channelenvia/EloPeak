@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Card } from '@/components/ui/Card'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEOHead } from '@/components/SEOHead'
@@ -61,13 +62,13 @@ export function FAQPage() {
           </p>
         </ScrollReveal>
 
-        <div className="card p-0 divide-y-0">
+        <Card variant="standard" padding="none" className="divide-y-0">
           <div className="px-6">
             {FAQS.map(({ q, a }) => (
               <FAQItem key={q} q={q} a={a} />
             ))}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   )

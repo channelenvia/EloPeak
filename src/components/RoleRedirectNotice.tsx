@@ -25,7 +25,7 @@ export function RoleRedirectNotice() {
         type="button"
         aria-label="Dispensar aviso"
         onClick={() => setDismissed(true)}
-        className="focus-ring rounded p-0.5 hover:text-warning/80"
+        className="focus-ring rounded-sm p-0.5 hover:text-warning/80"
       >
         <X className="h-3.5 w-3.5" />
       </button>

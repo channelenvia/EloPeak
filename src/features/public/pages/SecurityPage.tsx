@@ -1,4 +1,5 @@
 import { Shield, Lock, Eye, Cpu, Server, CreditCard, Check } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
 import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
 
@@ -81,9 +82,9 @@ export function SecurityPage() {
           </p>
         </ScrollReveal>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {PILLARS.map(({ icon: Icon, title, items }) => (
-            <div key={title} className="card p-6 space-y-4">
+            <Card key={title} variant="standard" padding="lg" className="space-y-4">
               <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
                 <Icon className="h-5 w-5 text-success" />
               </div>
@@ -96,7 +97,7 @@ export function SecurityPage() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </Card>
           ))}
         </div>
       </div>

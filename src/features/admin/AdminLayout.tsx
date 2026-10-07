@@ -1,97 +1,36 @@
-import { useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, ShoppingBag, Users, DollarSign,
-  Shield,
+  LayoutDashboard, ShoppingBag, Users, DollarSign, Shield,
   RefreshCw, AlertTriangle, Landmark, Banknote, History,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Avatar } from '@/components/ui'
-import { useAuthStore } from '@/stores/authStore'
-import { NotificationBell } from '@/components/NotificationBell'
-import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'
-import { UserProfilePanel } from '@/components/UserProfilePanel'
-import { AppSidebar, type SidebarNavSection } from '@/components/layout/AppSidebar'
+import { AppShell } from '@/components/layout/AppShell'
+import type { SidebarNavSection } from '@/components/layout/AppSidebar'
 import { useChatMentionSound } from '@/hooks/useChatMentionSound'
 
+const NAV_SECTIONS: SidebarNavSection[] = [
+  {
+    label: 'Operações',
+    items: [
+      { href: '/admin',              icon: LayoutDashboard, label: 'Visão Geral' },
+      { href: '/admin/orders',       icon: ShoppingBag,     label: 'Pedidos'     },
+      { href: '/admin/boosters',     icon: Shield,          label: 'Boosters'    },
+      { href: '/admin/customers',    icon: Users,           label: 'Clientes'    },
+      { href: '/admin/drops',        icon: AlertTriangle,   label: 'Drops'       },
+      { href: '/admin/duo-accounts', icon: Landmark,        label: 'Contas Duo'  },
+      { href: '/admin/audit',        icon: History,         label: 'Auditoria'   },
+    ],
+  },
+  {
+    label: 'Finanças',
+    items: [
+      { href: '/admin/payments', icon: DollarSign, label: 'Pagamentos' },
+      { href: '/admin/payouts',  icon: Banknote,   label: 'Saques' },
+      { href: '/admin/refunds',  icon: RefreshCw,  label: 'A analisar' },
+    ],
+  },
+]
+
 export function AdminLayout() {
-  const { pathname } = useLocation()
-  const { profile } = useAuthStore()
-  const [panelOpen, setPanelOpen] = useState(false)
   useChatMentionSound()
   useChatMentionSound('order_pending_review')
-
-  const NAV_SECTIONS: SidebarNavSection[] = [
-    {
-      label: 'Operações',
-      items: [
-        { href: '/admin',           icon: LayoutDashboard, label: 'Visão Geral' },
-        { href: '/admin/orders',    icon: ShoppingBag,     label: 'Pedidos'     },
-        { href: '/admin/boosters',  icon: Shield,          label: 'Boosters'    },
-        { href: '/admin/customers', icon: Users,           label: 'Clientes'    },
-        { href: '/admin/drops',     icon: AlertTriangle,   label: 'Drops'       },
-        { href: '/admin/duo-accounts', icon: Landmark,     label: 'Contas Duo'  },
-        { href: '/admin/audit',     icon: History,         label: 'Auditoria'   },
-      ],
-    },
-    {
-      label: 'Finanças',
-      items: [
-        { href: '/admin/payments', icon: DollarSign, label: 'Pagamentos' },
-        { href: '/admin/payouts',  icon: Banknote,    label: 'Saques' },
-        { href: '/admin/refunds',  icon: RefreshCw,  label: 'A analisar' },
-      ],
-    },
-  ]
-  const navItems = NAV_SECTIONS.flatMap(section => section.items)
-  const isActive = (href: string) => pathname === href || (href !== '/admin' && pathname.startsWith(`${href}/`))
-
-  return (
-    <div className="h-screen overflow-hidden flex">
-      <AppSidebar scope="admin" homeHref="/admin" sections={NAV_SECTIONS} breakpoint="lg" />
-
-      {/* ── Main area ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <RoleRedirectNotice />
-        <nav className="lg:hidden flex items-center gap-2 border-b border-border-subtle bg-bg-surface/90 backdrop-blur-xl shrink-0 px-3 py-2" aria-label="Navegação administrativa">
-          <div className="flex-1 overflow-x-auto">
-            <div className="flex min-w-max gap-1">
-              {navItems.map(({ href, icon: Icon, label }) => (
-                <Link
-                  key={href}
-                  to={href}
-                  className={cn(
-                    'flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
-                    isActive(href) ? 'bg-brand/15 text-brand' : 'text-ink-secondary hover:bg-bg-raised hover:text-ink',
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {label}
-                </Link>
-              ))}
-            </div>
-          </div>
-          {/* Perfil/notificações no mobile -- antes vinham do header, removido. */}
-          <div className="flex items-center gap-1 shrink-0">
-            <NotificationBell />
-            <button
-              onClick={() => setPanelOpen(true)}
-              className="rounded-full hover:ring-2 hover:ring-brand/40 transition-all"
-            >
-              <Avatar src={profile?.avatar_url} name={profile?.username} size="sm" />
-            </button>
-          </div>
-        </nav>
-
-        {/* Largura padronizada — mesma régua do painel de cliente e booster. */}
-        <main className="flex-1 overflow-auto p-6 lg:p-9">
-          <div className="mx-auto w-full max-w-[1600px]">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-
-      <UserProfilePanel open={panelOpen} onClose={() => setPanelOpen(false)} />
-    </div>
-  )
+  return <AppShell scope="admin" homeHref="/admin" sections={NAV_SECTIONS} mobileNav="scroll" navLabel="Navegação administrativa" />
 }

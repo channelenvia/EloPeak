@@ -39,7 +39,7 @@ export function MultiSelectPopover({ label, options, selected, onToggle }: Multi
       >
         {label}
         {selected.size > 0 && (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand/20 text-brand">
+          <span className="text-2xs font-bold px-1.5 py-0.5 rounded-full bg-brand/20 text-brand">
             {selected.size}
           </span>
         )}
@@ -68,7 +68,7 @@ export function MultiSelectPopover({ label, options, selected, onToggle }: Multi
             >
               <span className={cn(
                 'h-4 w-4 rounded-md border flex items-center justify-center shrink-0',
-                on ? 'border-brand bg-brand text-white' : 'border-border-subtle',
+                on ? 'border-brand bg-brand text-ink-inverse' : 'border-border-subtle',
               )}>
                 {on && <Check className="h-3 w-3" />}
               </span>

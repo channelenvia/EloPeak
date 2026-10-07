@@ -1,8 +1,8 @@
 import type {
-  BoosterDuoMatch, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch, OrderRankVerification, OrderStatus, OrderStatusHistory, Payment,
+  BoosterDuoMatch, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch, OrderRankVerification, OrderStatus, OrderStatusHistory,
 } from '@/types'
 
-export type { BoosterDuoMatch, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch, OrderRankVerification, OrderStatusHistory, Payment }
+export type { BoosterDuoMatch, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch, OrderRankVerification, OrderStatusHistory }
 
 export interface DuoAccountHistoryEntry {
   riot_id: string

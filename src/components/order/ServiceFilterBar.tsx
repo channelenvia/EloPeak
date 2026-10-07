@@ -82,7 +82,7 @@ export function ServiceFilterBar({
             <button key={value} type="button" aria-pressed={category === value} onClick={() => { onCategoryChange(value); setCategoryOpen(false) }} className={filterOptionRowClass(category === value)}>
               <Icon className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1">{label}</span>
-              <span className="text-[10px] text-ink-muted">{counts[value]}</span>
+              <span className="text-2xs text-ink-muted">{counts[value]}</span>
             </button>
           ))}
         </Popover>
@@ -99,7 +99,7 @@ export function ServiceFilterBar({
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Subfiltros
-            {activeCount > 0 && <span className="text-[10px] text-brand/70">{activeCount}</span>}
+            {activeCount > 0 && <span className="text-2xs text-brand/70">{activeCount}</span>}
             <ChevronDown className={cn(FILTER_CHEVRON_CLASS, open && 'rotate-180')} />
           </button>
 

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
@@ -105,11 +107,11 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <div className="card p-6 space-y-4">
+      <Card variant="standard" padding="lg" className="space-y-4">
         <Skeleton className="h-4 w-1/3" />
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-8 w-full" />
-      </div>
+      </Card>
     )
   }
 
@@ -121,7 +123,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -138,10 +140,10 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       </button>
 
       {open && (
-      <div className="card p-6 space-y-6">
+      <Card variant="standard" padding="lg" className="space-y-6">
       {/* Nome de exibição */}
       <div className="space-y-1.5">
-        <label htmlFor="booster-display-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição <span className="text-danger">*</span></label>
+        <label htmlFor="booster-display-name" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Nome de exibição <span className="text-danger">*</span></label>
         <input
           id="booster-display-name"
           value={displayName}
@@ -161,22 +163,22 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       {/* Bio */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="booster-bio" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Apresentação / Bio <span className="text-danger">*</span></label>
-          <span className="text-[10px] text-ink-muted">{bio.length}/256</span>
+          <label htmlFor="booster-bio" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Apresentação / Bio <span className="text-danger">*</span></label>
+          <span className="text-2xs text-ink-muted">{bio.length}/256</span>
         </div>
         <textarea
           id="booster-bio"
           value={bio}
           onChange={e => setBio(e.target.value.slice(0, 256))}
           rows={3}
-          placeholder="Conte sobre sua experiência, estilo de jogo e o que te diferencia..."
+          placeholder="Conte sobre sua experiência, estilo de jogo e o que te diferencia…"
           className="input-base w-full text-sm resize-none"
         />
       </div>
 
       {/* Rank de pico */}
       <div className="space-y-2">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Rank de Pico <span className="text-danger">*</span></label>
+        <label className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Rank de Pico <span className="text-danger">*</span></label>
         <div className="grid grid-cols-2 gap-3 max-w-xs">
           {PEAK_OPTIONS.map(({ value, label }) => (
             <button
@@ -198,7 +200,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
       {/* OP.GG */}
       <div className="space-y-1.5">
-        <label htmlFor="booster-opgg-link" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Link do OP.GG <span className="text-danger">*</span></label>
+        <label htmlFor="booster-opgg-link" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Link do OP.GG <span className="text-danger">*</span></label>
         <input
           id="booster-opgg-link"
           value={opggLink}
@@ -211,7 +213,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
             type="checkbox"
             checked={opggLinkVisible}
             onChange={e => setOpggLinkVisible(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-border-subtle accent-brand"
+            className="h-3.5 w-3.5 rounded-sm border-border-subtle accent-brand"
           />
           <span className="text-xs text-ink-secondary">Exibir link do OP.GG no meu perfil público</span>
         </label>
@@ -219,7 +221,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
       {/* Disponibilidade de horários */}
       <div className="space-y-3">
-        <label className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Disponibilidade <span className="text-danger">*</span></label>
+        <label className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Disponibilidade <span className="text-danger">*</span></label>
         <div className="flex gap-1.5 flex-wrap">
           {DAYS.map(({ key, label }) => {
             const selected = availableDays.includes(key)
@@ -256,17 +258,17 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
 
       <div className="flex items-center justify-end gap-3 pt-1">
         {saved && <span className="text-xs text-success" role="status" aria-live="polite">Perfil salvo!</span>}
-        <button
+        <Button
           type="button"
           onClick={handleSave}
           disabled={saving || !formValid}
           title={!formValid ? 'Preencha todos os campos obrigatórios para salvar' : undefined}
-          className="px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors"
+          variant="primary" size="md"
         >
-          {saving ? 'Salvando...' : 'Salvar perfil'}
-        </button>
+          {saving ? 'Salvando…' : 'Salvar perfil'}
+        </Button>
       </div>
-      </div>
+      </Card>
       )}
     </div>
   )

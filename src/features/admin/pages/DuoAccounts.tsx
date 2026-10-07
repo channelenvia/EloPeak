@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { InlineEmpty } from '@/components/ui/EmptyState'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -46,7 +50,7 @@ function DuoAccountHistoryModal({ account, onClose }: { account: AdminDuoAccount
         <div className="space-y-4">
           {account.reserved_by && (
             <div className="rounded-xl border border-warning/25 bg-warning/5 px-4 py-3">
-              <p className="text-[10px] font-bold text-warning uppercase tracking-wide mb-1">Reserva ativa agora</p>
+              <p className="text-2xs font-bold text-warning uppercase tracking-wide mb-1">Reserva ativa agora</p>
               <p className="text-sm font-bold text-ink">{account.reserved_by_name ?? 'Booster'}</p>
               {account.reserved_at && (
                 <p className="text-xs text-ink-muted mt-0.5">
@@ -61,20 +65,20 @@ function DuoAccountHistoryModal({ account, onClose }: { account: AdminDuoAccount
           <div className="grid grid-cols-3 gap-2 rounded-xl bg-bg-raised p-3 text-center" data-tabular>
             <div>
               <p className="text-sm font-bold text-ink">{data.stats.total_reservations}</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">Reservas totais</p>
+              <p className="text-2xs text-ink-muted mt-0.5">Reservas totais</p>
             </div>
             <div>
               <p className="text-sm font-bold text-ink">{data.stats.distinct_boosters}</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">Boosters distintos</p>
+              <p className="text-2xs text-ink-muted mt-0.5">Boosters distintos</p>
             </div>
             <div>
               <p className="text-sm font-bold text-ink">{formatDurationSeconds(data.stats.total_seconds)}</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">Tempo total reservada</p>
+              <p className="text-2xs text-ink-muted mt-0.5">Tempo total reservada</p>
             </div>
           </div>
 
           {data.history.length === 0 ? (
-            <p className="text-xs text-ink-muted py-4 text-center">Nenhuma reserva registrada ainda.</p>
+            <InlineEmpty>Nenhuma reserva registrada ainda.</InlineEmpty>
           ) : (
             <div className="max-h-80 space-y-1.5 overflow-y-auto pr-0.5">
               {data.history.map((h) => (
@@ -286,20 +290,14 @@ export function AdminDuoAccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Contas Duo Boost</h1>
-          <p className="text-sm text-ink-secondary mt-1">Pool de contas smurf da empresa disponibilizadas aos boosters.</p>
-        </div>
-        <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setModal({ mode: 'create' })}>
-          Adicionar Conta
-        </Button>
-      </div>
+      <PageHeader title="Contas Duo Boost" description="Pool de contas smurf da empresa disponibilizadas aos boosters." actions={<><Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setModal({ mode: 'create' })}>
+          Adicionar conta
+        </Button></>} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchInput
           wrapperClassName="w-full sm:w-64 shrink-0"
-          placeholder="Buscar por Riot ID..."
+          placeholder="Buscar por Riot ID…"
           aria-label="Buscar por Riot ID"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -317,9 +315,9 @@ export function AdminDuoAccountsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-56 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : isError ? (
         <Card padding="md"><ErrorAlert message={accountsError instanceof Error ? accountsError.message : 'Não foi possível carregar as contas Duo.'} /></Card>
       ) : !filtered.length ? (
@@ -332,34 +330,34 @@ export function AdminDuoAccountsPage() {
         </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {pageItems.map((a) => {
             const rev = revealed[a.id]
             return (
-              <Card key={a.id} padding="md" className="flex flex-col gap-2.5">
+              <Card key={a.id} padding="md" className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold text-ink text-sm truncate">{a.riot_id ?? a.label}</p>
                     {a.current_rank ? (
                       <div className="flex items-center gap-1.5 mt-1">
                         <RankBadge tier={a.current_rank.tier} division={a.current_rank.division} size="xs" showLabel={false} />
-                        <span className="text-[11px] text-ink-secondary">
+                        <span className="text-xs text-ink-secondary">
                           {RANK_TIER_LABEL[a.current_rank.tier]}{a.current_rank.division ? ` ${a.current_rank.division}` : ''}
                         </span>
                       </div>
-                    ) : <span className="text-[10px] text-ink-muted">Sem rank</span>}
+                    ) : <span className="text-2xs text-ink-muted">Sem rank</span>}
                   </div>
                   <button
                     onClick={() => toggleActive.mutate(a)}
                     disabled={toggleActiveMutation.isPending && toggleActiveMutation.variables?.accountId === a.id}
-                    className={`badge text-[10px] shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
+                    className={`badge text-2xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${a.is_active ? 'text-success bg-success/10' : 'text-ink-muted bg-bg-raised'}`}
                   >
                     {a.is_active ? 'Ativa' : 'Inativa'}
                   </button>
                 </div>
 
                 <div className="rounded-xl bg-bg-raised/40 p-2">
-                  <p className="text-[9px] text-ink-muted uppercase tracking-wide mb-1">Credenciais</p>
+                  <p className="text-2xs text-ink-muted uppercase tracking-wide mb-1">Credenciais</p>
                   {rev && rev !== 'loading' && rev !== 'error' ? (
                     <div className="text-xs font-mono text-ink space-y-0.5">
                       <div className="flex items-center gap-1">
@@ -387,7 +385,7 @@ export function AdminDuoAccountsPage() {
                     <button
                       type="button"
                       onClick={() => setHistoryTarget(a)}
-                      className="badge text-[10px] text-warning bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer"
+                      className="badge text-2xs text-warning bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer"
                       title={a.reserved_by_name ? `Reservada por ${a.reserved_by_name} — ver histórico` : 'Ver histórico de reservas'}
                     >
                       Reservada
@@ -400,14 +398,14 @@ export function AdminDuoAccountsPage() {
                   <button
                     type="button"
                     onClick={() => setHistoryTarget(a)}
-                    className="badge text-[10px] text-ink-muted bg-bg-raised hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1 w-fit"
+                    className="badge text-2xs text-ink-muted bg-bg-raised hover:bg-bg-interactive transition-colors cursor-pointer inline-flex items-center gap-1 w-fit"
                     title="Ver histórico de reservas"
                   >
                     <History className="h-3 w-3" /> Livre
                   </button>
                 )}
 
-                <p className="text-[11px] text-ink-muted">Criada em {formatDate(a.created_at)}</p>
+                <p className="text-xs text-ink-muted">Criada em {formatDate(a.created_at)}</p>
 
                 <div className="flex items-center gap-1 mt-auto pt-1 border-t border-border-subtle">
                   <Button size="xs" variant="ghost" onClick={() => toggleReveal(a)} loading={rev === 'loading'}>
@@ -430,7 +428,7 @@ export function AdminDuoAccountsPage() {
               </Card>
             )
           })}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}
@@ -438,7 +436,7 @@ export function AdminDuoAccountsPage() {
       <Modal
         open={!!modal}
         onOpenChange={(open) => !open && setModal(null)}
-        title={modal?.mode === 'edit' ? 'Editar Conta Duo' : 'Adicionar Conta Duo'}
+        title={modal?.mode === 'edit' ? 'Editar Conta Duo' : 'Adicionar conta Duo'}
         description="Login e senha são criptografados no banco e só podem ser revelados por admins e boosters aprovados."
         maxWidth="2xl"
       >
@@ -468,21 +466,21 @@ export function AdminDuoAccountsPage() {
                 disabled={modal?.mode === 'edit'}
                 maxLength={32}
               />
-              <button
+              <Button
                 type="button"
                 onClick={() => lookupRiot.mutate()}
                 disabled={lookupRiot.isPending || !form.riot_id.trim()}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all bg-brand text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                variant="primary" size="md" className="disabled:cursor-not-allowed shrink-0"
               >
                 <Search className="h-4 w-4" />
-                {lookupRiot.isPending ? 'Consultando...' : 'Verificar'}
-              </button>
+                {lookupRiot.isPending ? 'Consultando…' : 'Verificar'}
+              </Button>
             </div>
             {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
           </FormField>
 
           {riotVerified && (
-            <div className="flex items-center gap-5 rounded-xl border border-brand/25 bg-brand/10 px-5 py-4">
+            <div className="flex items-center gap-6 rounded-xl border border-brand/25 bg-brand/10 px-5 py-4">
               <RankBadge tier={form.tier} division={form.division} size="lg" showLabel={false} />
               <div className="min-w-0 flex-1">
                 <p className="text-base font-bold text-ink">
@@ -511,7 +509,7 @@ export function AdminDuoAccountsPage() {
               Verifique o Riot ID acima para liberar os campos de login e senha.
             </p>
           ) : (
-            <div className="grid sm:grid-cols-2 gap-5">
+            <div className="grid sm:grid-cols-2 gap-6">
               <FormField label={`Login${modal?.mode === 'edit' ? ' (deixe em branco p/ manter)' : ''}`} id="duo-account-login">
                 <input
                   id="duo-account-login"
@@ -551,7 +549,7 @@ export function AdminDuoAccountsPage() {
             />
           </FormField>
 
-          <label className="flex items-center gap-2.5 text-sm text-ink-secondary rounded-xl border border-border-subtle bg-bg-raised/40 px-5 py-3.5 w-fit">
+          <label className="flex items-center gap-3 text-sm text-ink-secondary rounded-xl border border-border-subtle bg-bg-raised/40 px-5 py-3.5 w-fit">
             <input
               type="checkbox"
               {...register('is_active')}
@@ -562,10 +560,10 @@ export function AdminDuoAccountsPage() {
 
           {saveMutation.isError && <ErrorAlert message={(saveMutation.error as Error).message} />}
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-border-subtle -mx-6 px-6 -mb-6 pb-6 mt-2">
-            <Button variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
+          <ActionBar className="border-t border-border-subtle -mx-6 px-6 -mb-6 pb-6 mt-2">
+            <Button disabled={saveMutation.isPending} variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
             <Button loading={saveMutation.isPending} onClick={handleSubmit(onSubmit)}>Salvar</Button>
-          </div>
+          </ActionBar>
         </div>
       </Modal>
 
@@ -581,8 +579,8 @@ export function AdminDuoAccountsPage() {
           {deleteAccount.isError && (
             <ErrorAlert message={deleteAccount.error instanceof Error ? deleteAccount.error.message : 'Erro ao excluir'} />
           )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+          <ActionBar>
+            <Button disabled={deleteAccount.isPending} variant="secondary" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
             <Button
               variant="danger"
               loading={deleteAccount.isPending}
@@ -590,7 +588,7 @@ export function AdminDuoAccountsPage() {
             >
               Excluir
             </Button>
-          </div>
+          </ActionBar>
         </div>
       </Modal>
 
@@ -600,8 +598,8 @@ export function AdminDuoAccountsPage() {
         title="Liberar reserva"
         description={`Isso força a liberação da conta "${releaseTarget?.riot_id ?? releaseTarget?.label}", mesmo que um booster esteja usando ela agora no meio de um boost.`}
       >
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={() => setReleaseTarget(null)}>Cancelar</Button>
+        <ActionBar>
+          <Button disabled={releaseReservation.isPending} variant="secondary" onClick={() => setReleaseTarget(null)}>Cancelar</Button>
           <Button
             variant="danger"
             loading={releaseReservation.isPending}
@@ -609,7 +607,7 @@ export function AdminDuoAccountsPage() {
           >
             Liberar
           </Button>
-        </div>
+        </ActionBar>
       </Modal>
     </div>
   )

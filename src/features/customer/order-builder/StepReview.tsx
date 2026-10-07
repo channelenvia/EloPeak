@@ -1,4 +1,5 @@
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
+import { Card } from '@/components/ui/Card'
 import { formatEstimatedDelivery } from '@/lib/utils'
 import { isMasterPlusCurrentTier } from '@/lib/boostDomain'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
@@ -73,7 +74,7 @@ export function StepReview() {
         {/* Order details */}
         <div>
           <p className="section-label mb-3">Detalhes do Pedido</p>
-          <div className="card p-6">
+          <Card variant="standard" padding="lg">
             {serviceType === 'coaching' && selectedCoachPackage && (
               <div className="space-y-3">
                 {preferredBoosterName && (
@@ -129,7 +130,7 @@ export function StepReview() {
             )}
 
             <OrderInfoGrid items={infoItems} />
-          </div>
+          </Card>
         </div>
 
         {showWinsGuarantee && (
@@ -149,12 +150,12 @@ export function StepReview() {
             id="order-customer-notes"
             value={customerNotes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="ex: Só jogar com Jinx ADC, preferência pela manhã, lane específica..."
+            placeholder="ex: Só jogar com Jinx ADC, preferência pela manhã, lane específica…"
             className="input-base w-full min-h-[96px] resize-none"
             maxLength={500}
           />
           {customerNotes.length > 400 && (
-            <p className="text-[10px] text-ink-muted mt-1 text-right">{customerNotes.length}/500</p>
+            <p className="text-2xs text-ink-muted mt-1 text-right">{customerNotes.length}/500</p>
           )}
         </div>
       </div>

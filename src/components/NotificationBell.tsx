@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
+import { InlineEmpty } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
 import { useNavigate } from 'react-router-dom'
 import { Bell, CheckCheck, MessageCircle, Trophy, CreditCard, Star, UserCheck, Briefcase, RefreshCw, AtSign, Wallet, AlertTriangle, Search, UserX, UserPlus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { Popover } from '@/components/ui'
 import type { Notification, NotificationType } from '@/types'
 import { useNotifications, useMarkNotificationsRead, useMarkAllNotificationsRead, useUnreadNotificationsCount } from '@/api/notifications'
@@ -31,6 +33,7 @@ const TYPE_ICON: Record<NotificationType, React.ElementType> = {
   drop_request_pending_admin: Search,
   drop_payout_credited: Wallet,
   payment_amount_mismatch: AlertTriangle,
+  payment_approved_after_cancellation: AlertTriangle,
   order_reassigned: RefreshCw,
   order_reassigned_by_admin: RefreshCw,
   order_dropped_by_admin: AlertTriangle,
@@ -50,7 +53,7 @@ function timeAgo(iso: string): string {
   if (h < 24) return `${h}h`
   const d = Math.floor(h / 24)
   if (d < 7) return `${d}d`
-  return new Date(iso).toLocaleDateString('pt-BR')
+  return formatDate(iso)
 }
 
 function orderPathForRole(role: string | undefined, orderId: string): string {
@@ -115,19 +118,19 @@ export function NotificationBell() {
 
   return (
     <>
-      <button
+      <Button
         ref={containerRef}
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2.5 rounded-xl text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors"
+        variant="ghost" size="icon" className="relative"
         aria-label="Notificações"
       >
         <Bell className="h-[18px] w-[18px]" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-danger text-white text-[9px] font-bold flex items-center justify-center leading-none">
+          <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-danger text-ink-inverse text-2xs font-bold flex items-center justify-center leading-none">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
       <Popover
         open={open}
@@ -140,7 +143,7 @@ export function NotificationBell() {
           {unreadCount > 0 && (
             <button
               onClick={() => markAllRead.mutate()}
-              className="flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
+              className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
             >
               <CheckCheck className="h-3 w-3" /> Marcar todas
             </button>
@@ -149,7 +152,7 @@ export function NotificationBell() {
 
         <div className="flex-1 overflow-y-auto">
           {notifications.length === 0 ? (
-            <p className="text-sm text-ink-muted text-center py-8">Nenhuma notificação ainda.</p>
+            <InlineEmpty>Nenhuma notificação ainda.</InlineEmpty>
           ) : (
             notifications.map((n) => {
               const Icon = TYPE_ICON[n.type] ?? Bell
@@ -174,7 +177,7 @@ export function NotificationBell() {
                       {!n.is_read && <span className="h-1.5 w-1.5 rounded-full bg-brand shrink-0 mt-1" />}
                     </div>
                     <p className="text-xs text-ink-secondary mt-0.5 line-clamp-2">{n.body}</p>
-                    <p className="text-[10px] text-ink-muted mt-1">{timeAgo(n.created_at)}</p>
+                    <p className="text-2xs text-ink-muted mt-1">{timeAgo(n.created_at)}</p>
                   </div>
                 </button>
               )

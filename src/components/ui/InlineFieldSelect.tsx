@@ -49,7 +49,7 @@ export function InlineFieldSelect<T extends string>({
         type="button"
         onClick={() => setExpanded(v => !v)}
         className={cn(
-          'flex w-full items-center justify-between gap-1 border border-border-subtle bg-bg-surface px-2 py-1 shadow-sm hover:border-brand/40 hover:shadow-brand transition-all',
+          'flex w-full items-center justify-between gap-1 border border-border-subtle bg-bg-surface px-2 py-1 shadow-xs hover:border-brand/40 hover:shadow-brand transition-all',
           expanded ? 'rounded-t-lg border-b-0' : 'rounded-lg',
         )}
         aria-label={expanded ? `Fechar ${fieldLabel}` : `Trocar ${fieldLabel}`}
@@ -60,7 +60,7 @@ export function InlineFieldSelect<T extends string>({
         <ChevronDown className={cn('h-3 w-3 text-ink-muted transition-transform shrink-0', expanded && 'rotate-180')} />
       </button>
       {expanded && (
-        <div id={optionsId} className="absolute inset-x-0 top-full z-20 rounded-b-lg border border-t-0 border-border-subtle bg-bg-surface shadow-sm overflow-hidden animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        <div id={optionsId} className="absolute inset-x-0 top-full z-20 rounded-b-lg border border-t-0 border-border-subtle bg-bg-surface shadow-xs overflow-hidden animate-in fade-in-0 slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={() => {

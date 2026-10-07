@@ -1,4 +1,8 @@
 import { useRef, useState } from 'react'
+import { Badge } from '@/components/ui/Badge'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -50,7 +54,7 @@ function BoosterActionsMenu({
   const isActive = booster.status === 'approved'
   const isSuspended = booster.status === 'suspended'
 
-  const itemClass = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
+  const itemClass = 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors disabled:opacity-50'
 
   return (
     <>
@@ -134,7 +138,7 @@ function BoosterActionsMenu({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Escreva o que quiser sobre este booster..."
+          placeholder="Escreva o que quiser sobre este booster…"
           className="input-base w-full min-h-[260px] resize-none text-sm"
           maxLength={2000}
           autoFocus
@@ -145,15 +149,15 @@ function BoosterActionsMenu({
         {setNote.isError && (
           <ErrorAlert message={setNote.error instanceof Error ? setNote.error.message : 'Erro ao salvar'} />
         )}
-        <div className="flex gap-3 justify-end pt-1">
-          <Button variant="ghost" onClick={() => setNotesOpen(false)}>Fechar</Button>
+        <ActionBar>
+          <Button disabled={setNote.isPending} variant="secondary" onClick={() => setNotesOpen(false)}>Fechar</Button>
           <Button
             loading={setNote.isPending}
             onClick={() => setNote.mutate({ boosterId: booster.id, note: draft }, { onSuccess: () => setNotesOpen(false) })}
           >
             Salvar
           </Button>
-        </div>
+        </ActionBar>
       </Popover>
 
       <Modal
@@ -168,23 +172,23 @@ function BoosterActionsMenu({
           <textarea
             id="booster-expel-reason"
             {...registerExpel('reason')}
-            placeholder="Descreva o motivo da expulsão..."
+            placeholder="Descreva o motivo da expulsão…"
             className="input-base w-full min-h-[100px] resize-none text-sm"
             maxLength={500}
           />
         </div>
         <p className="text-xs text-danger">Ação permanente: o login é banido e não pode ser reativado.</p>
-        <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={closeExpel}>Cancelar</Button>
+        <ActionBar>
+          <Button disabled={expelPending} variant="secondary" onClick={closeExpel}>Cancelar</Button>
           <Button
             variant="danger"
             loading={expelPending}
             disabled={!expelValid}
             onClick={handleExpelSubmit(submitExpel)}
           >
-            Expulsar Permanentemente
+            Expulsar permanentemente
           </Button>
-        </div>
+        </ActionBar>
       </Modal>
 
       <Modal
@@ -193,8 +197,8 @@ function BoosterActionsMenu({
         title={`Suspender ${booster.display_name}`}
         description="O booster fica suspenso por 24h e sai temporariamente dos jobs -- diferente de Expulsar, essa ação é reversível (Reativar)."
       >
-        <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={() => setSuspendConfirmOpen(false)}>Cancelar</Button>
+        <ActionBar>
+          <Button disabled={statusPending} variant="secondary" onClick={() => setSuspendConfirmOpen(false)}>Cancelar</Button>
           <Button
             variant="danger"
             loading={statusPending}
@@ -202,7 +206,7 @@ function BoosterActionsMenu({
           >
             Suspender
           </Button>
-        </div>
+        </ActionBar>
       </Modal>
     </>
   )
@@ -243,14 +247,14 @@ export function AdminBoostersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">Boosters</h1>
+      <PageHeader title="Boosters" />
 
       {/* Toolbar -- busca à esquerda, filtro de status à direita: mesmo
           layout/estilização das listas de pedido (busca + FilterTabs). */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchInput
           wrapperClassName="w-full sm:w-64 shrink-0"
-          placeholder="Buscar por nome do booster..."
+          placeholder="Buscar por nome do booster…"
           aria-label="Buscar por nome do booster"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -279,16 +283,16 @@ export function AdminBoostersPage() {
       )}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
-        <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
+        <Card variant="operational" padding="none">
           <EmptyState icon={Shield} title="Nenhum booster encontrado" />
-        </div>
+        </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {pageItems.map((b) => (
             <Card
               key={b.id}
@@ -302,18 +306,18 @@ export function AdminBoostersPage() {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-brand font-semibold text-sm truncate">{b.display_name}</span>
                     {b.is_top3 && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-1.5 py-0.5 uppercase tracking-wide shrink-0">
-                        <Trophy className="h-2.5 w-2.5" /> TOP3
-                      </span>
+                      <Badge variant="warning" size="tag" className="shrink-0">
+                        <Trophy className="h-3 w-3" /> Top3
+                      </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-ink-muted mt-0.5">Entrou {formatDate(b.created_at)}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">Entrou {formatDate(b.created_at)}</p>
                 </div>
                 <BoosterStatusBadge status={b.status} />
               </div>
 
               {b.status === 'suspended' && b.suspended_until && (
-                <p className="text-[11px] text-ink-muted -mt-2">Suspenso até {formatDateTime(b.suspended_until)}</p>
+                <p className="text-xs text-ink-muted -mt-2">Suspenso até {formatDateTime(b.suspended_until)}</p>
               )}
 
               <div className="grid grid-cols-2 gap-2">
@@ -322,14 +326,14 @@ export function AdminBoostersPage() {
                     <Star className="h-3.5 w-3.5 text-warning fill-warning shrink-0" />
                     <p className="text-sm font-bold text-ink">{b.rating.toFixed(1)}</p>
                   </div>
-                  <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">Avaliação</p>
+                  <p className="text-2xs text-ink-muted mt-1 leading-tight uppercase tracking-wide">Avaliação</p>
                 </div>
                 <div className="rounded-xl bg-bg-raised/40 p-2">
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
                     <p className="text-sm font-bold text-ink">{b.total_completed}</p>
                   </div>
-                  <p className="text-[9px] text-ink-muted mt-1 leading-tight uppercase tracking-wide">Concluídos</p>
+                  <p className="text-2xs text-ink-muted mt-1 leading-tight uppercase tracking-wide">Concluídos</p>
                 </div>
               </div>
 
@@ -348,7 +352,7 @@ export function AdminBoostersPage() {
               </div>
             </Card>
           ))}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}

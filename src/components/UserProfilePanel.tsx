@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/Button'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useNavigate } from 'react-router-dom'
 import { X, LogOut } from 'lucide-react'
@@ -167,7 +168,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
         <Dialog.Content
           asChild
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="fixed right-0 top-0 h-full w-96 bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl focus:outline-none"
+          className="fixed right-0 top-0 h-full w-96 bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl focus:outline-hidden"
         >
           <aside>
             {/* Header */}
@@ -189,7 +190,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
                   <p className="font-semibold text-ink text-sm truncate">{profile?.username}</p>
                   <p className="text-xs text-ink-muted truncate">{profile?.email}</p>
                   {roleBadge && (
-                    <span className={cn('text-[10px] px-2 py-0.5 rounded-full mt-1 inline-block font-semibold', roleBadge.className)}>
+                    <span className={cn('text-2xs px-2 py-0.5 rounded-full mt-1 inline-block font-semibold', roleBadge.className)}>
                       {roleBadge.label}
                     </span>
                   )}
@@ -217,12 +218,12 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
 
               {/* Booster-only fields */}
               {isBooster && (
-                <div className="border-t border-border-subtle pt-4 space-y-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Conta Booster</p>
+                <div className="border-t border-border-subtle pt-4 space-y-4">
+                  <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Conta Booster</p>
 
                   {/* Nome de exibição (público, cooldown de 30 dias) */}
                   <div className="space-y-2">
-                    <label htmlFor="profile-display-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome de exibição</label>
+                    <label htmlFor="profile-display-name" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Nome de exibição</label>
                     <div className="flex gap-2">
                       <input
                         id="profile-display-name"
@@ -233,14 +234,14 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
                         disabled={displayNameLocked}
                         className="input-base flex-1 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                       />
-                      <button
+                      <Button
                         type="button"
                         onClick={handleSaveDisplayName}
                         disabled={displayNameSaving || displayNameLocked || !displayName.trim() || displayName === boosterData?.display_name}
-                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                        variant="primary" size="sm" className="shrink-0"
                       >
-                        {displayNameSaving ? '...' : 'Salvar'}
-                      </button>
+                        {displayNameSaving ? 'Salvando…' : 'Salvar'}
+                      </Button>
                     </div>
                     {displayNameLocked && (
                       <p className="text-xs text-ink-muted">
@@ -253,7 +254,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
 
                   {/* Full name */}
                   <div className="space-y-2">
-                    <label htmlFor="profile-full-name" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Nome completo (PIX)</label>
+                    <label htmlFor="profile-full-name" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Nome completo (PIX)</label>
                     <div className="flex gap-2">
                       <input
                         id="profile-full-name"
@@ -263,21 +264,21 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
                         maxLength={120}
                         className="input-base flex-1 text-sm"
                       />
-                      <button
+                      <Button
                         type="button"
                         onClick={handleSaveFullName}
                         disabled={fullNameSaving || fullName.trim() === (boosterData?.full_name ?? '')}
-                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                        variant="primary" size="sm" className="shrink-0"
                       >
-                        {fullNameSaving ? '...' : 'Salvar'}
-                      </button>
+                        {fullNameSaving ? 'Salvando…' : 'Salvar'}
+                      </Button>
                     </div>
                     {fullNameSaved && <p className="text-xs text-success">Nome salvo!</p>}
                   </div>
 
                   {/* CPF */}
                   <div className="space-y-2">
-                    <label htmlFor="profile-cpf" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">CPF (PIX)</label>
+                    <label htmlFor="profile-cpf" className="text-2xs font-bold uppercase tracking-widest text-ink-muted">CPF (PIX)</label>
                     <div className="flex gap-2">
                       <input
                         id="profile-cpf"
@@ -286,14 +287,14 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
                         placeholder="000.000.000-00"
                         className="input-base flex-1 text-sm"
                       />
-                      <button
+                      <Button
                         type="button"
                         onClick={handleSaveCpf}
                         disabled={cpfSaving || cpf.replace(/\D/g, '').length !== 11}
-                        className="px-3 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand/90 disabled:opacity-40 transition-colors shrink-0"
+                        variant="primary" size="sm" className="shrink-0"
                       >
-                        {cpfSaving ? '...' : 'Salvar'}
-                      </button>
+                        {cpfSaving ? 'Salvando…' : 'Salvar'}
+                      </Button>
                     </div>
                     {cpfError && <p className="text-xs text-danger">{cpfError}</p>}
                     {cpfSaved && <p className="text-xs text-success">CPF salvo!</p>}
@@ -306,13 +307,13 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
 
             {/* Footer */}
             <div className="p-4 border-t border-border-subtle shrink-0">
-              <button
+              <Button
                 onClick={handleSignOut}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-danger/30 text-danger hover:bg-danger/10 transition-colors text-sm font-semibold"
+                variant="danger-ghost" size="md" className="w-full border border-danger/30"
               >
                 <LogOut className="h-4 w-4" />
                 Sair da conta
-              </button>
+              </Button>
             </div>
           </aside>
         </Dialog.Content>

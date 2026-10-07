@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Badge } from '@/components/ui/Badge'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,7 +46,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
     resolver: zodResolver(z.object({
       orderId: z.string().refine((v) => ORDER_ID_PATTERN.test(v.trim()), 'ID inválido — cole o UUID completo do pedido (visível na URL da página do pedido).'),
       reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.').max(500),
-      amountCents: z.number({ invalid_type_error: 'Informe um valor de reembolso.' }).int().min(1, 'Informe um valor de reembolso.'),
+      amountCents: z.number({ error: 'Informe um valor de reembolso.' }).int().min(1, 'Informe um valor de reembolso.'),
     })),
     defaultValues: { orderId: initialOrderId, reason: '', amountCents: 0 },
     mode: 'onChange',
@@ -84,7 +88,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         <input
           id="manual-refund-order-id"
           {...register('orderId')}
-          placeholder="Cole o ID completo do pedido..."
+          placeholder="Cole o ID completo do pedido…"
           className="input-base w-full text-sm font-mono"
         />
         {trimmedId.length > 0 && errors.orderId && (
@@ -118,7 +122,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         <textarea
           id="manual-refund-reason"
           {...register('reason')}
-          placeholder="Descreva o motivo do reembolso..."
+          placeholder="Descreva o motivo do reembolso…"
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -128,8 +132,8 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         <ErrorAlert message={createRefund.error instanceof Error ? createRefund.error.message : 'Erro'} />
       )}
 
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Cancelar</Button>
+      <ActionBar>
+        <Button disabled={createRefund.isPending} variant="secondary" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={createRefund.isPending}
@@ -138,7 +142,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         >
           Registrar reembolso
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }
@@ -160,7 +164,7 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
   const { control, register, handleSubmit, watch, reset, trigger, formState: { isValid } } = useForm<AdjustBalanceFormData>({
     resolver: zodResolver(z.object({
       reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.').max(500),
-      amountCents: z.number({ invalid_type_error: 'Informe um valor.' }).int().min(1, 'Informe um valor.'),
+      amountCents: z.number({ error: 'Informe um valor.' }).int().min(1, 'Informe um valor.'),
     })),
     defaultValues: { reason: '', amountCents: 0 },
     mode: 'onChange',
@@ -227,7 +231,7 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
         <textarea
           id="adjust-balance-reason"
           {...register('reason')}
-          placeholder="Descreva o motivo do ajuste..."
+          placeholder="Descreva o motivo do ajuste…"
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -237,8 +241,8 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
         <ErrorAlert message={adjust.error instanceof Error ? adjust.error.message : 'Erro'} />
       )}
 
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Cancelar</Button>
+      <ActionBar>
+        <Button disabled={adjust.isPending} variant="secondary" onClick={close}>Cancelar</Button>
         <Button
           variant={direction === 'debit' ? 'danger' : 'primary'}
           loading={adjust.isPending}
@@ -247,7 +251,7 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
         >
           Confirmar ajuste
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }
@@ -270,9 +274,9 @@ function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReview
             <Link to={`/admin/orders/${item.order_id}`} className="font-mono text-sm text-brand hover:underline">
               #{item.order_id.slice(0, 8).toUpperCase()}
             </Link>
-            <span className="text-[10px] font-bold bg-danger/10 text-danger px-2 py-0.5 rounded-lg">
+            <Badge variant="danger" size="tag">
               {item.drop_count} drops
-            </span>
+            </Badge>
           </div>
           <p className="text-xs text-ink-secondary mt-1">
             Total do pedido: <span className="font-semibold text-ink">{currency(item.total_price)}</span>
@@ -359,18 +363,9 @@ export function AdminRefundsPage() {
     <div className="space-y-6">
       <ReviewCasesSection onOpenRefund={openRefundFor} />
 
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <p className="section-label mb-2">Financeiro</p>
-          <h1 className="text-2xl font-bold text-ink">A analisar</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-            Reembolsos processados pelo Mercado Pago e reembolsos manuais registrados por um admin.
-          </p>
-        </div>
-        <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNewRefundOpen(true)}>
+      <PageHeader eyebrow="Financeiro" title="A analisar" description="Reembolsos processados pelo Mercado Pago e reembolsos manuais registrados por um admin." actions={<><Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNewRefundOpen(true)}>
           Novo reembolso
-        </Button>
-      </div>
+        </Button></>} />
       {(refunds?.length ?? 0) >= 100 && (
         <p className="text-xs text-warning">Mostrando os 100 reembolsos mais recentes — pode haver mais.</p>
       )}
@@ -378,7 +373,7 @@ export function AdminRefundsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchInput
           wrapperClassName="w-full sm:w-64 shrink-0"
-          placeholder="Buscar por código do pedido..."
+          placeholder="Buscar por código do pedido…"
           aria-label="Buscar por código do pedido"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -396,16 +391,16 @@ export function AdminRefundsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-36 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
-        <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
+        <Card variant="operational" padding="none">
           <EmptyState icon={RefreshCw} title="Nenhum reembolso emitido" />
-        </div>
+        </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {pageItems.map((r) => (
             <Link key={r.id} to={`/admin/orders/${r.order_id}`}>
               <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
@@ -417,9 +412,9 @@ export function AdminRefundsPage() {
                 </div>
                 <p className="text-lg font-black text-ink" data-tabular>{currency(r.amount)}</p>
                 <p className="text-xs text-ink-secondary line-clamp-2">{r.reason}</p>
-                <div className="flex items-center justify-between text-[11px] text-ink-muted mt-auto pt-1">
+                <div className="flex items-center justify-between text-xs text-ink-muted mt-auto pt-1">
                   {r.is_manual ? (
-                    <span className="badge text-[10px] font-bold bg-bg-raised text-ink-secondary">Manual</span>
+                    <span className="badge text-2xs font-bold bg-bg-raised text-ink-secondary">Manual</span>
                   ) : (
                     <span className="font-mono">{r.mp_refund_id?.slice(-10) ?? '—'}</span>
                   )}
@@ -428,7 +423,7 @@ export function AdminRefundsPage() {
               </Card>
             </Link>
           ))}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}

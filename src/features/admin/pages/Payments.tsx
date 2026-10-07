@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useState } from 'react'
 import { CreditCard, DollarSign, ReceiptText } from 'lucide-react'
 import { Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
@@ -9,7 +11,7 @@ import { usePagedList } from '@/hooks/usePagedList'
 
 function StatusBadge({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold', className)}>
+    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold', className)}>
       {children}
     </span>
   )
@@ -49,18 +51,20 @@ export function AdminPaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="section-label mb-2">Financeiro</p>
-        <h1 className="text-2xl font-bold text-ink">Pagamentos de clientes</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-          Cobranças PIX recebidas via Mercado Pago. Para repasses aos boosters, veja Solicitações de saque.
-        </p>
-        {(paymentSummary?.paidOrderCount ?? 0) > (payments?.length ?? 0) && (
-          <p className="mt-1 text-xs text-warning">
+      <PageHeader
+        eyebrow="Financeiro"
+        title="Pagamentos de clientes"
+        description={
+          <>
+            Cobranças PIX recebidas via Mercado Pago. Para repasses aos boosters, veja Solicitações de saque.
+            {(paymentSummary?.paidOrderCount ?? 0) > (payments?.length ?? 0) && (
+          <span className="mt-1 block text-xs text-warning">
             Mostrando os 150 pedidos pagos mais recentes. Os indicadores consideram todo o histórico.
-          </p>
+          </span>
         )}
-      </div>
+          </>
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <StatCard label="Total recebido" value={currency(paymentSummary?.totalReceived ?? 0)} icon={DollarSign} tone="bg-success/10 text-success" />
@@ -69,23 +73,23 @@ export function AdminPaymentsPage() {
 
       <SearchInput
         wrapperClassName="w-full sm:w-64 shrink-0"
-        placeholder="Buscar por código do pedido..."
+        placeholder="Buscar por código do pedido…"
         aria-label="Buscar por código do pedido"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">
           <EmptyState icon={CreditCard} title={search ? 'Nenhum pagamento encontrado.' : 'Nenhum pedido pago encontrado.'} />
         </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <CardGrid cols={4}>
           {pageItems.map((payment) => (
             <Link key={payment.id} to={`/admin/orders/${payment.order_id}`}>
               <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
@@ -96,15 +100,15 @@ export function AdminPaymentsPage() {
                   </StatusBadge>
                 </div>
                 <p className="text-lg font-black text-ink" data-tabular>{currency(payment.amount)}</p>
-                <div className="flex items-center justify-between text-[11px] text-ink-muted">
+                <div className="flex items-center justify-between text-xs text-ink-muted">
                   <span className="capitalize">{payment.payment_method_type ?? '—'}</span>
                   <span className="font-mono">{payment.mp_payment_id.slice(-12)}</span>
                 </div>
-                <p className="text-[11px] text-ink-muted">{formatDateTime(payment.created_at)}</p>
+                <p className="text-xs text-ink-muted">{formatDateTime(payment.created_at)}</p>
               </Card>
             </Link>
           ))}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}

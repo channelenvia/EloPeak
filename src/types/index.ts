@@ -58,6 +58,7 @@ export type NotificationType =
   | 'drop_request_pending_admin'
   | 'drop_payout_credited'
   | 'payment_amount_mismatch'
+  | 'payment_approved_after_cancellation'
   | 'order_reassigned'
   | 'order_reassigned_by_admin'
   | 'order_dropped_by_admin'

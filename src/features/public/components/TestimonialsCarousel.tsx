@@ -21,7 +21,7 @@ export function TestimonialsCarousel() {
 
   if (!USE_PLACEHOLDER && isLoading) {
     return (
-      <div className="max-w-screen-xl mx-auto px-5 sm:px-8 flex gap-5 overflow-hidden">
+      <div className="max-w-screen-xl mx-auto px-5 sm:px-8 flex gap-6 overflow-hidden">
         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-80 shrink-0 rounded-2xl" />)}
       </div>
     )
@@ -47,7 +47,7 @@ export function TestimonialsCarousel() {
 
   return (
     <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
-      <div className="flex w-max gap-5 animate-marquee group-hover:[animation-play-state:paused]">
+      <div className="flex w-max gap-6 animate-marquee group-hover:[animation-play-state:paused]">
         {track.map((review, i) => (
           <TestimonialCard key={`${review.id}-${i}`} {...review} className="w-80 shrink-0" />
         ))}

@@ -1,4 +1,6 @@
 import { useOwnBoosterTop3Status } from '@/api/boosters'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { Badge } from '@/components/ui/Badge'
 import { useMarkOrderChatRead, useOrderChat } from '@/api/chat'
 import { useBoosterServiceDetails } from '@/api/coaching'
 import {
@@ -20,6 +22,7 @@ import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
+import { describeOrderStatus } from '@/lib/orderStatusInfo'
 import { Button, ErrorAlert, Modal, OrderStatusBadge, PageLoader, Skeleton } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
@@ -38,7 +41,6 @@ import {
     Gamepad2,
     Hash,
     History,
-    Lock,
     Play,
     Route,
     Shuffle, Trophy,
@@ -80,22 +82,22 @@ function BoosterDropModal({ order, open, onClose }: { order: Order; open: boolea
         <label htmlFor="booster-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea id="booster-drop-reason" {...register('reason')} placeholder="Descreva o motivo para abandonar o pedido..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="booster-drop-reason" {...register('reason')} placeholder="Descreva o motivo para abandonar o pedido…" className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
       )}
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Cancelar</Button>
+      <ActionBar>
+        <Button disabled={requestDrop.isPending} variant="secondary" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={requestDrop.isPending}
           disabled={!isValid}
           onClick={handleSubmit(submit)}
         >
-          Enviar Solicitação
+          Enviar solicitação
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }
@@ -278,7 +280,7 @@ export function JobDetailPage() {
         ),
       }]
       : []),
-    ...laneDisplayItems.map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
+    ...laneDisplayItems.map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} allLabel={item.allLabel} compact emptyFallback="---" /> })),
     {
       icon: Clock, label: 'Entrega estimada', value: isClash
         ? clashClosingLabel
@@ -292,27 +294,20 @@ export function JobDetailPage() {
       <OrderPageHeader
         backHref="/booster/orders"
         orderIdShort={order.id.slice(0, 8).toUpperCase()}
-        statusBadge={<OrderStatusBadge order={order} />}
-        statusActions={(
-          // "Concluído"/"Aguardando confirmação do cliente" já são o texto
-          // do próprio statusBadge -- só o que soma informação nova (aviso
-          // de bloqueio por drop pendente) fica aqui.
-          <>
-            {(order.status === 'drop_requested' || pendingDrop) && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
-                <Lock className="h-3 w-3" />
-                Travado · em análise
-              </span>
-            )}
-          </>
+        statusBadge={(
+          <OrderStatusBadge
+            order={order}
+            viewerRole="booster"
+            description={pendingDrop ? describeOrderStatus({ ...order, status: 'drop_requested' }, 'booster') : undefined}
+          />
         )}
         extra={(
           <>
             {order.drop_count > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
+              <Badge variant="warning" size="tag">
                 <History className="h-3 w-3" />
                 Pedido reatribuído · confira o histórico
-              </span>
+              </Badge>
             )}
             {['in_progress', 'paused', 'awaiting_customer'].includes(order.status) && (
               <CountdownTimer startedAt={order.match_sync_started_at} estimatedHours={order.estimated_hours} />

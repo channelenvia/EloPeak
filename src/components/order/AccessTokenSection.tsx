@@ -51,8 +51,8 @@ export function AccessTokenSection({ order }: { order: Order }) {
         </div>
       ) : accessToken ? (
         <div className="space-y-2">
-          <textarea readOnly value={accessToken} className="input-base w-full min-h-[96px] text-[11px] font-mono resize-none" spellCheck={false} />
-          <p className="text-[11px] text-ink-muted text-center">
+          <textarea readOnly value={accessToken} className="input-base w-full min-h-[96px] text-xs font-mono resize-none" spellCheck={false} />
+          <p className="text-xs text-ink-muted text-center">
             Expira em {Math.floor(tokenSecondsLeft / 60)}:{String(tokenSecondsLeft % 60).padStart(2, '0')}
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -60,7 +60,7 @@ export function AccessTokenSection({ order }: { order: Order }) {
               Gerar outro token
             </Button>
             <Button size="sm" className="w-full" variant={tokenCopied ? 'success' : 'secondary'} leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copyAccessToken()}>
-              {tokenCopied ? 'Copiado' : 'Copiar token'}
+              {tokenCopied ? 'Copiado!' : 'Copiar token'}
             </Button>
           </div>
         </div>

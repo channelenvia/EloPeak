@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type UIEvent } from 'react'
+import { InlineEmpty } from '@/components/ui/EmptyState'
 import { AtSign, Lock, MessageCircle, Send, ShieldCheck, Unlock, X } from 'lucide-react'
 import { Avatar, Button, Card, ErrorAlert, Skeleton } from '@/components/ui'
 import { cn, formatDateTime } from '@/lib/utils'
@@ -54,7 +55,7 @@ function renderMessageContent(content: string, onBrandBubble = false) {
           key={i}
           className={cn(
             'font-semibold',
-            onBrandBubble ? 'rounded bg-white/20 px-0.5 text-white' : 'text-brand',
+            onBrandBubble ? 'rounded-sm bg-ink-inverse/20 px-0.5 text-ink-inverse' : 'text-brand',
           )}
         >
           {part}
@@ -88,7 +89,7 @@ function MentionPopover({
 
   return (
     <div className="absolute bottom-full left-0 right-0 mb-1.5 rounded-xl border border-border-subtle bg-bg-surface shadow-lg overflow-hidden z-10">
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border-subtle text-[10px] font-semibold text-ink-muted uppercase tracking-wide">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border-subtle text-2xs font-semibold text-ink-muted uppercase tracking-wide">
         <AtSign className="h-3 w-3" /> Mencionar
       </div>
       {targets.map((t, i) => (
@@ -100,14 +101,14 @@ function MentionPopover({
           // já teria fechado o popover via handleCursorMove(null).
           onMouseDown={(event) => { event.preventDefault(); onSelect(t) }}
           className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+            'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
             i === highlight ? 'bg-brand/10' : 'hover:bg-bg-raised',
           )}
         >
           <Avatar src={t.avatar_url} name={t.name} size="sm" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink truncate">{t.name}</p>
-            <p className="text-[10px] text-ink-muted">{ROLE_LABEL[t.role]}</p>
+            <p className="text-2xs text-ink-muted">{ROLE_LABEL[t.role]}</p>
           </div>
         </button>
       ))}
@@ -272,7 +273,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
         <div>
           <h3 className="text-base font-semibold text-ink">Chat do pedido</h3>
           {available && (
-            <p className="text-[11px] text-ink-muted">{messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}</p>
+            <p className="text-xs text-ink-muted">{messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}</p>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -288,14 +289,14 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
             </Button>
           )}
           {onClose && (
-            <button
+            <Button
               type="button"
               onClick={onClose}
               aria-label="Fechar chat"
-              className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors"
+              variant="ghost" size="icon-sm"
             >
               <X className="h-4 w-4" />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -329,13 +330,13 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
             onScroll={handleListScroll}
           >
             {messages.length === 0 ? (
-              <p className="py-12 text-center text-xs text-ink-muted">Nenhuma mensagem enviada.</p>
+              <InlineEmpty>Nenhuma mensagem enviada.</InlineEmpty>
             ) : (
               messages.map((item) => {
                 const isMe = item.sender_id === profile?.id
                 const isAdmin = item.sender_role === 'admin'
                 return (
-                  <div key={item.id} className={cn('flex items-start gap-2.5', isMe && 'flex-row-reverse')}>
+                  <div key={item.id} className={cn('flex items-start gap-3', isMe && 'flex-row-reverse')}>
                     <Avatar src={item.sender_avatar_url} name={item.sender_name} size="sm" />
                     {/* min-w-0 é o que de fato permite a bolha encolher abaixo da
                         largura "natural" do conteúdo -- sem isso, um item flex
@@ -348,21 +349,21 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
                         painel em vez de travar num valor pensado pra sidebar
                         estreita. */}
                     <div className={cn('flex min-w-0 max-w-[78%] flex-col', isMe ? 'items-end' : 'items-start')}>
-                      <div className="mb-1 flex flex-wrap items-center gap-x-2 px-1 text-[10px] text-ink-muted">
+                      <div className="mb-1 flex flex-wrap items-center gap-x-2 px-1 text-2xs text-ink-muted">
                         <span className="font-semibold text-ink-secondary">{item.sender_name}</span>
                         <span>{ROLE_LABEL[item.sender_role]}</span>
                       </div>
                       <div
                         className={cn(
                           'min-w-0 whitespace-pre-wrap break-words rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
-                          isMe && !isAdmin && 'rounded-tr-sm bg-brand text-white',
+                          isMe && !isAdmin && 'rounded-tr-sm bg-brand text-ink-inverse',
                           !isMe && !isAdmin && 'rounded-tl-sm bg-bg-raised text-ink',
                           isAdmin && 'border border-accent/30 bg-accent/10 text-ink',
                         )}
                       >
                         {renderMessageContent(item.content, isMe && !isAdmin)}
                       </div>
-                      <time className="mt-1 px-1 text-[10px] text-ink-muted" dateTime={item.created_at}>
+                      <time className="mt-1 px-1 text-2xs text-ink-muted" dateTime={item.created_at}>
                         {formatDateTime(item.created_at)}
                       </time>
                     </div>
@@ -401,7 +402,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
                   onBlur={() => setMentionState(null)}
                   maxLength={MESSAGE_MAX_LENGTH}
                   rows={1}
-                  placeholder={viewerRole === 'admin' && locked ? 'Mensagem administrativa... (@ para mencionar)' : 'Escreva uma mensagem... (@ para mencionar)'}
+                  placeholder={viewerRole === 'admin' && locked ? 'Mensagem administrativa… (@ para mencionar)' : 'Escreva uma mensagem… (@ para mencionar)'}
                   aria-label="Escrever mensagem"
                   style={{ maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
                   className="input-base min-h-11 min-w-0 flex-1 resize-none overflow-y-auto py-2.5 text-sm"
@@ -424,7 +425,7 @@ export function OrderChat({ orderId, viewerRole, orderStatus, onClose }: { order
                   aviso visual de que ele existe, sem poluir a caixa o tempo todo. */}
               {message.length > MESSAGE_MAX_LENGTH * 0.9 && (
                 <p className={cn(
-                  'mt-1 text-right text-[10px]',
+                  'mt-1 text-right text-2xs',
                   message.length >= MESSAGE_MAX_LENGTH ? 'text-danger font-semibold' : 'text-ink-muted',
                 )}>
                   {message.length}/{MESSAGE_MAX_LENGTH}

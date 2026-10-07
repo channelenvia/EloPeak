@@ -1,4 +1,5 @@
 import { Pencil, Trash2, Clock, DollarSign } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
@@ -28,13 +29,13 @@ export function BoosterServiceCard({
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-bold text-ink text-sm leading-snug min-w-0 flex-1">{service.title}</h3>
         <div className="flex items-center gap-1 shrink-0">
-          <button
+          <Button
             onClick={onEdit}
             aria-label="Editar serviço"
-            className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-bg-raised transition-colors"
+            variant="ghost" size="icon-sm"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
+          </Button>
           <button
             onClick={onDelete}
             disabled={deleting}

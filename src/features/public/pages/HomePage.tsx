@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { m } from 'framer-motion'
 import {
   Shield, Zap, Clock, Users, ChevronRight,
   TrendingUp, MessageCircle, Swords,
@@ -24,14 +24,14 @@ function RankLadder() {
       <div className="relative h-1 rounded-full bg-gradient-rail opacity-80" />
       <div className="flex justify-between mt-3">
         {RANK_TIER_ORDER.map((tier, i) => (
-          <motion.div
+          <m.div
             key={tier}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.5 + i * 0.05 }}
           >
             <RankBadge tier={tier} division={null} size="sm" showLabel={false} />
-          </motion.div>
+          </m.div>
         ))}
       </div>
     </div>
@@ -117,7 +117,7 @@ export function HomePage() {
         <div className="absolute -top-60 right-0 w-[700px] h-[700px] rounded-full bg-brand/6 blur-[140px] pointer-events-none" />
 
         <div className="container-wide py-20 lg:py-24 relative">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55 }}
@@ -160,7 +160,7 @@ export function HomePage() {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
@@ -168,7 +168,7 @@ export function HomePage() {
       <section id="services" className="relative py-16 lg:py-20 scroll-mt-20">
         <SectionTint />
         <div className="container-wide">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
@@ -176,19 +176,19 @@ export function HomePage() {
             <p className="section-label mb-3">O que oferecemos</p>
             <h2 className="text-4xl md:text-5xl font-black text-ink">Serviços disponíveis</h2>
             <p className="mt-4 text-ink-secondary text-lg max-w-xl mx-auto">Todos os serviços incluem chat ao vivo com seu booster, atualizações em tempo real e garantia de reembolso total.</p>
-          </motion.div>
+          </m.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {SERVICES.map(({ icon: Icon, title, href, badge, color, desc }, i) => (
-              <motion.div key={title}
+              <m.div key={title}
                 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.1 }}
               >
                 <Link to={href}
-                  className="card p-6 flex flex-col gap-5 h-full group hover:shadow-card-hover hover:-translate-y-1 hover:border-brand/25 transition-all duration-200"
+                  className="card p-6 flex flex-col gap-6 h-full group hover:shadow-card-hover hover:-translate-y-1 hover:border-brand/25 transition-all duration-200"
                 >
                   {badge && (
-                    <span className="self-start text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-brand/15 text-brand border border-brand/25">
+                    <span className="self-start text-xs font-bold px-2.5 py-0.5 rounded-full bg-brand/15 text-brand border border-brand/25">
                       {badge}
                     </span>
                   )}
@@ -203,12 +203,12 @@ export function HomePage() {
                     Pedir agora <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </Link>
-              </motion.div>
+              </m.div>
             ))}
           </div>
 
           {/* Ver todos os serviços */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.35 }}
             className="mt-8 text-center"
@@ -218,21 +218,21 @@ export function HomePage() {
                 Ver todos os serviços em detalhe <ChevronRight className="h-4 w-4" />
               </Link>
             </Button>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
       <section className="py-16 lg:py-20 relative overflow-hidden">
         <div className="container-wide relative">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
           >
             <p className="section-label mb-3">Processo simples</p>
             <h2 className="text-4xl md:text-5xl font-black text-ink">3 passos para seu rank alvo</h2>
-          </motion.div>
+          </m.div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
@@ -240,17 +240,17 @@ export function HomePage() {
               { n: '02', title: 'Booster Atribuído', body: 'Em minutos, um booster verificado que combina com seu tipo de fila e preferências de campeão aceita seu pedido.' },
               { n: '03', title: 'Acompanhe e Converse', body: 'Acompanhe o progresso ao vivo. Converse direto com seu booster. Pause quando quiser. Receba notificação quando seu rank alvo for atingido.' },
             ].map(({ n, title, body }, idx) => (
-              <motion.div key={n}
+              <m.div key={n}
                 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ duration: 0.45, delay: idx * 0.12 }}
                 className="relative flex flex-col items-center text-center gap-4"
               >
-                <div className="h-16 w-16 rounded-2xl bg-gradient-brand flex items-center justify-center text-white text-xl font-black shadow-brand">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-brand flex items-center justify-center text-ink-inverse text-xl font-black shadow-brand">
                   {n}
                 </div>
                 <h3 className="text-xl font-bold text-ink">{title}</h3>
                 <p className="text-ink-secondary leading-relaxed">{body}</p>
-              </motion.div>
+              </m.div>
             ))}
           </div>
 
@@ -263,7 +263,7 @@ export function HomePage() {
         <div className="container-wide">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}
             >
@@ -277,12 +277,12 @@ export function HomePage() {
               <Button asChild size="lg" variant="secondary">
                 <Link to="/security">Leia nossa política de segurança →</Link>
               </Button>
-            </motion.div>
+            </m.div>
 
             <div>
               <div className="grid grid-cols-2 gap-4">
                 {TRUST_FEATURES.map(({ icon: Icon, label, desc }, i) => (
-                  <motion.div key={label}
+                  <m.div key={label}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
                     className="card p-5 space-y-3 hover:border-success/25 transition-colors"
@@ -294,7 +294,7 @@ export function HomePage() {
                       <h4 className="font-bold text-ink text-sm">{label}</h4>
                       <p className="text-xs text-ink-secondary mt-1 leading-relaxed">{desc}</p>
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))}
               </div>
             </div>
@@ -307,10 +307,10 @@ export function HomePage() {
       {featuredBoosters.length > 0 && (
         <section className="py-16 lg:py-20">
           <div className="container-wide">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}
-              className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-10"
+              className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10"
             >
               <div>
                 <p className="section-label mb-3">Boosters</p>
@@ -324,11 +324,11 @@ export function HomePage() {
                   Ver todos <ChevronRight className="h-4 w-4" />
                 </Link>
               </Button>
-            </motion.div>
+            </m.div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {featuredBoosters.map((booster, index) => (
-                <motion.div
+                <m.div
                   key={booster.id}
                   initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.4, delay: index * 0.08 }}
@@ -361,16 +361,16 @@ export function HomePage() {
 
                     <div className="mt-auto grid grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
                       <div>
-                        <p className="text-[10px] text-ink-muted">Winrate</p>
+                        <p className="text-2xs text-ink-muted">Winrate</p>
                         <p className="text-sm font-extrabold text-brand">{booster.win_rate_pct && booster.win_rate_pct > 0 ? `${booster.win_rate_pct}%` : 'Sem partidas'}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-ink-muted">Partidas</p>
+                        <p className="text-2xs text-ink-muted">Partidas</p>
                         <p className="text-sm font-extrabold text-ink">{booster.total_matches}</p>
                       </div>
                     </div>
                   </Link>
-                </motion.div>
+                </m.div>
               ))}
             </div>
           </div>
@@ -385,14 +385,14 @@ export function HomePage() {
       <section className="relative py-16 lg:py-20 overflow-hidden">
         <SectionTint />
         <div className="container-wide">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10"
           >
             <p className="section-label mb-3">Clientes reais</p>
             <h2 className="text-4xl md:text-5xl font-black text-ink">O que os jogadores dizem</h2>
-          </motion.div>
+          </m.div>
         </div>
 
         <TestimonialsCarousel />
@@ -405,7 +405,7 @@ export function HomePage() {
       <section className="py-16 lg:py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-hero-glow opacity-60 pointer-events-none" />
         <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center relative">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: 0.55 }}
           >
@@ -435,7 +435,7 @@ export function HomePage() {
             <p className="mt-8 text-xs text-ink-muted">
               Pagamento seguro · Sem compromisso · Suporte 24/7
             </p>
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </div>

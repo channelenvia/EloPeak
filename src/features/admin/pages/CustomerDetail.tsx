@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
+import { CardGrid } from '@/components/ui/CardGrid'
 import { ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
 import { Card, DetailPageHeader, Pagination, Skeleton, EmptyState, StarRating } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
@@ -43,7 +44,7 @@ export function AdminCustomerDetailPage() {
                 <Icon className="h-4 w-4" />
               </div>
               <p className="text-base font-bold text-ink">{value}</p>
-              <p className="text-[10px] text-ink-muted">{label}</p>
+              <p className="text-2xs text-ink-muted">{label}</p>
             </div>
           ))}
         </div>
@@ -53,18 +54,18 @@ export function AdminCustomerDetailPage() {
       <div>
         <h3 className="text-base font-semibold text-ink mb-3">Pedidos</h3>
         {loadingOrders ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
-          </div>
+          </CardGrid>
         ) : !orders?.length ? (
           <Card padding="none"><EmptyState icon={ShoppingBag} title="Nenhum pedido ainda" /></Card>
         ) : (
           <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {ordersPage.pageItems.map((order) => (
               <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" viewerRole="admin" />
             ))}
-          </div>
+          </CardGrid>
           <Pagination page={ordersPage.page} hasNextPage={ordersPage.hasNextPage} onPrev={ordersPage.onPrev} onNext={ordersPage.onNext} />
           </>
         )}
@@ -74,29 +75,29 @@ export function AdminCustomerDetailPage() {
       <div>
         <h3 className="text-base font-semibold text-ink mb-3">Avaliações Dadas</h3>
         {loadingReviews ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-2xl" />)}
-          </div>
+          </CardGrid>
         ) : !reviews?.length ? (
           <Card padding="none"><EmptyState icon={Star} title="Nenhuma avaliação ainda" /></Card>
         ) : (
           <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {reviewsPage.pageItems.map((review) => (
               <Link key={review.id} to={`/admin/orders/${review.order_id}`}>
                 <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
                   <div className="flex items-center justify-between">
                     <StarRating rating={review.rating} size="sm" />
-                    <span className="text-[10px] text-ink-muted">{timeAgo(review.created_at)}</span>
+                    <span className="text-2xs text-ink-muted">{timeAgo(review.created_at)}</span>
                   </div>
                   {review.content && <p className="text-xs text-ink-secondary line-clamp-3">{review.content}</p>}
-                  <span className="text-[10px] text-brand mt-auto pt-1">
+                  <span className="text-2xs text-brand mt-auto pt-1">
                     Ver pedido #{review.order_id.slice(0, 8).toUpperCase()}
                   </span>
                 </Card>
               </Link>
             ))}
-          </div>
+          </CardGrid>
           <Pagination page={reviewsPage.page} hasNextPage={reviewsPage.hasNextPage} onPrev={reviewsPage.onPrev} onNext={reviewsPage.onNext} />
           </>
         )}

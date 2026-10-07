@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -36,7 +38,7 @@ function RequestPayoutCard({ available }: { available: number }) {
   // schema é só pra dar feedback imediato e consistente com o resto do
   // projeto (mesmo padrão de zodResolver de BoosterApplicationForm.tsx).
   const schema = z.object({
-    cents: z.number({ invalid_type_error: 'Informe um valor de saque.' })
+    cents: z.number({ error: 'Informe um valor de saque.' })
       .int()
       .min(MIN_PAYOUT_AMOUNT * 100, rangeMessage)
       .max(availableCents, rangeMessage),
@@ -162,10 +164,7 @@ export function BoosterPaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink">Pagamentos</h1>
-        <p className="text-sm text-ink-secondary mt-1">Saldo, saques e histórico de solicitações.</p>
-      </div>
+      <PageHeader title="Pagamentos" description="Saldo, saques e histórico de solicitações." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {BALANCE_BOXES.map(({ label, value, icon, color }) => (
@@ -196,23 +195,23 @@ export function BoosterPaymentsPage() {
           )}
         </div>
         {loadingRequests ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
-          </div>
+          </CardGrid>
         ) : !filtered.length ? (
           <Card padding="md"><EmptyState icon={Wallet} title={requests?.length ? 'Nenhuma solicitação com esse status.' : 'Nenhuma solicitação de saque ainda.'} /></Card>
         ) : (
           <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <CardGrid cols={4}>
             {pageItems.map((r) => (
               <Card key={r.id} padding="md" className="flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-lg font-black text-ink" data-tabular>{currency(r.amount)}</p>
-                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0', STATUS_COLOR[r.status])}>
+                  <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full shrink-0', STATUS_COLOR[r.status])}>
                     {STATUS_LABEL[r.status]}
                   </span>
                 </div>
-                <p className="text-[11px] text-ink-muted">{formatDateTime(r.requested_at)}</p>
+                <p className="text-xs text-ink-muted">{formatDateTime(r.requested_at)}</p>
                 {r.admin_note && <p className="text-xs text-ink-secondary line-clamp-2">{r.admin_note}</p>}
                 {(r.status === 'paid' && r.proof_url) || r.status === 'requested' || r.status === 'under_review' ? (
                   <div className="mt-auto pt-1">
@@ -230,7 +229,7 @@ export function BoosterPaymentsPage() {
                 ) : null}
               </Card>
             ))}
-          </div>
+          </CardGrid>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
           </>
         )}

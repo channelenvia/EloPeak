@@ -4,6 +4,7 @@ import { Card } from '@/components/ui'
 import { ClashDetailsBlock } from './ClashDetailsBlock'
 import { OrderAccountSection } from './OrderAccountSection'
 import { OrderChat } from './OrderChat'
+import { ORDER_CHAT_ANCHOR_ID } from '@/lib/orderStatusInfo'
 import { OrderCoachingTopics } from './OrderCoachingTopics'
 import { OrderDetailWidget } from './OrderDetailWidget'
 import { OrderInfoGrid, type OrderInfoGridItem } from './OrderInfoGrid'
@@ -118,7 +119,7 @@ export function OrderDetailShell({
           )}
         </Card>
 
-        <div className="lg:col-span-2 h-[450px]">
+        <div id={ORDER_CHAT_ANCHOR_ID} className="lg:col-span-2 h-[450px] scroll-mt-6">
           <OrderChat orderId={order.id} viewerRole={viewerRole} orderStatus={order.status} />
         </div>
       </div>

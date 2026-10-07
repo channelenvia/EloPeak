@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useNavigate } from 'react-router-dom'
 import { ShoppingBag } from 'lucide-react'
-import { EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
-import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
+import { OrderListToolbar } from '@/components/order/OrderListToolbar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
-import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
 import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
+import { sortOrdersByStatusPriority } from '@/lib/orderStatusPriority'
 import { useAuthStore } from '@/stores/authStore'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useCustomerOrders, useCustomerOrderTabCounts } from '@/api/orders'
@@ -15,7 +17,7 @@ export function OrderHistoryPage() {
   const navigate = useNavigate()
   const { profile } = useAuthStore()
   const currency = useCurrency()
-  const statusFilter = useOrderStatusFilter('in_progress')
+  const statusFilter = useOrderStatusFilter()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
@@ -33,9 +35,12 @@ export function OrderHistoryPage() {
   const serviceFilters = useServiceFilters(orders)
   const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
 
-  const filtered = statusFilter.applySubFilters(serviceFilters.filtered).filter((o) =>
-    !search || o.id.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = useMemo(() => sortOrdersByStatusPriority(
+    statusFilter.applySubFilters(serviceFilters.filtered).filter((o) =>
+      !search || o.id.toLowerCase().includes(search.toLowerCase())
+    ),
+    'customer',
+  ), [statusFilter, serviceFilters.filtered, search])
 
   const pageOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasNextPage = page * PAGE_SIZE < filtered.length
@@ -53,50 +58,17 @@ export function OrderHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">Histórico de Pedidos</h1>
+      <PageHeader title="Histórico de Pedidos" />
 
       {/* Filters -- busca + status à esquerda, tipo de serviço à direita. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            wrapperClassName="w-full sm:w-64 shrink-0"
-            placeholder="Buscar por ID do pedido..."
-            aria-label="Buscar por ID do pedido..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <OrderStatusFilterDropdown
-            tab={statusFilter.tab}
-            onTabChange={statusFilter.setTab}
-            counts={tabCounts}
-            dropped={statusFilter.dropped}
-            onDroppedChange={statusFilter.setDropped}
-            droppedCount={subCounts.dropped}
-            overdue={statusFilter.overdue}
-            onOverdueChange={statusFilter.setOverdue}
-            overdueCount={subCounts.overdue}
-            includeCanceled={statusFilter.includeCanceled}
-            onIncludeCanceledChange={statusFilter.setIncludeCanceled}
-          />
-        </div>
-        <ServiceFilterBar
-          category={serviceFilters.category}
-          onCategoryChange={serviceFilters.setCategory}
-          counts={serviceFilters.counts}
-          queue={serviceFilters.queue}
-          onQueueChange={serviceFilters.setQueue}
-          queueCounts={serviceFilters.queueCounts}
-          mode={serviceFilters.mode}
-          onModeChange={serviceFilters.setMode}
-          modeCounts={serviceFilters.modeCounts}
-          clashTier={serviceFilters.clashTier}
-          onClashTierChange={serviceFilters.setClashTier}
-          clashTierCounts={serviceFilters.clashTierCounts}
-          clashDay={serviceFilters.clashDay}
-          onClashDayChange={serviceFilters.setClashDay}
-          clashDayCounts={serviceFilters.clashDayCounts}
-        />
-      </div>
+      <OrderListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        statusFilter={statusFilter}
+        tabCounts={tabCounts}
+        subCounts={subCounts}
+        serviceFilters={serviceFilters}
+      />
 
       {hitFetchLimit && (
         <p className="text-xs text-ink-muted">
@@ -106,9 +78,9 @@ export function OrderHistoryPage() {
 
       {/* Order grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CardGrid >
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
         <EmptyState
           icon={ShoppingBag}
@@ -118,11 +90,11 @@ export function OrderHistoryPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {pageOrders.map((order) => (
               <CustomerOrderCard key={order.id} order={order} currency={currency} />
             ))}
-          </div>
+          </CardGrid>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
         </>
       )}

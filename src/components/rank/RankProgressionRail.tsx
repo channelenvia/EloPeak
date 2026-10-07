@@ -43,6 +43,10 @@ export interface RankProgressionRailProps {
    * pago por progresso entregue (v_division_value_full / v_quarter_value).
    * Sem isso (default), mantém o preenchimento contínuo de sempre. */
   segments?: number | null
+  /** Texto/elemento entre o emblema atual e o alvo, na mesma linha (ex.:
+   * "Bronze II → Bronze I") -- tira o vão vazio do meio e dispensa uma linha
+   * de texto separada acima da trilha. */
+  centerLabel?: React.ReactNode
 }
 
 // Componente-assinatura do produto: a "trilha de ascensão", usada no hero
@@ -53,7 +57,7 @@ export interface RankProgressionRailProps {
 export function RankProgressionRail({
   currentTier, currentDivision, currentLp, targetTier, targetDivision, liveCutoffLp,
   size = 'full', className, locked = false, showBar = true, showBadges = true, showBadgeLabels = true, fillPercentOverride = null,
-  segments = null,
+  segments = null, centerLabel,
 }: RankProgressionRailProps) {
   const currentPct = fillPercentOverride != null
     ? Math.max(0, Math.min(100, fillPercentOverride))
@@ -70,7 +74,7 @@ export function RankProgressionRail({
   return (
     <div className={cn('w-full', className)}>
       {showBadges && (
-        <div className={cn('flex items-end', targetTier != null ? 'justify-between' : 'justify-start')}>
+        <div className={cn('flex', centerLabel ? 'items-center gap-3' : 'items-end', targetTier != null ? 'justify-between' : 'justify-start')}>
           <div className="flex flex-col items-center gap-1.5">
             <RankBadge tier={currentTier} division={currentDivision} size={badgeSize} showLabel={showBadgeLabels} />
             {currentLp != null && (
@@ -79,6 +83,7 @@ export function RankProgressionRail({
               </span>
             )}
           </div>
+          {centerLabel && <div className="min-w-0 flex-1 text-center">{centerLabel}</div>}
           {targetTier != null && (
             <div className="flex flex-col items-center gap-1.5">
             <RankBadge tier={targetTier} division={targetDivision ?? null} size={badgeSize} showLabel={showBadgeLabels} />

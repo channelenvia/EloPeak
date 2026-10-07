@@ -1,6 +1,4 @@
-import type { Order, OrderDropRequest, OrderStatus, Refund } from '@/types'
-
-export type { Refund, OrderDropRequest }
+import type { Order, OrderStatus } from '@/types'
 
 export interface AdminReviewCase {
   order_id: string

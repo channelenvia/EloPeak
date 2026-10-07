@@ -12,6 +12,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Moeda BRL — formatter único de módulo (locale/moeda fixos).
+const brlFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
+export function formatCurrency(amount: number): string {
+  return brlFormatter.format(amount)
+}
+
 // Date formatting
 export function formatDate(date: string | Date) {
   return format(new Date(date), 'dd MMM yyyy', { locale: ptBR })

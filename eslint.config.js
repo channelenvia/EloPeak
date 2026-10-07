@@ -19,6 +19,13 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Regras do React Compiler (eslint-plugin-react-hooks 7): consultivas, só
+      // fazem sentido ao adotar o Compiler -- reativar junto com essa migração.
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/incompatible-library': 'off',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
@@ -28,6 +35,10 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
     },
+  },
+  {
+    files: ['src/app/router.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
     // Camada de dados fica em src/api/* (query/mutation/hook nomeado) -- uma

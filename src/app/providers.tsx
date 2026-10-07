@@ -1,5 +1,5 @@
 import { HelmetProvider } from 'react-helmet-async'
-import { MotionConfig } from 'framer-motion'
+import { LazyMotion, MotionConfig, domAnimation } from 'framer-motion'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useEffect, useRef } from 'react'
@@ -186,12 +186,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
           as guardadas manualmente com useReducedMotion()) respeita
           prefers-reduced-motion automaticamente daqui pra frente. */}
       <MotionConfig reducedMotion="user">
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
-        </QueryClientProvider>
+        <LazyMotion features={domAnimation} strict>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+            {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+          </QueryClientProvider>
+        </LazyMotion>
       </MotionConfig>
     </HelmetProvider>
   )

@@ -51,19 +51,19 @@ export function OrderDetailWidget({ icon: Icon, label, status, children, popover
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            'flex items-center gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-left transition-colors',
+            'flex items-center gap-3 rounded-xl border-2 px-3.5 py-2.5 text-left transition-colors',
             open ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
           )}
         >
           <div className={cn(
             'h-8 w-8 rounded-lg flex items-center justify-center shrink-0',
-            open ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
+            open ? 'bg-brand text-ink-inverse' : 'bg-bg-raised text-ink-secondary',
           )}>
             <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <p className={cn('text-xs font-semibold', open ? 'text-brand' : 'text-ink')}>{label}</p>
-            {status && <p className="text-[10px] text-ink-muted truncate">{status}</p>}
+            {status && <p className="text-2xs text-ink-muted truncate">{status}</p>}
           </div>
         </button>
       )}

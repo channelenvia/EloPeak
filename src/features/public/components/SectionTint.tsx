@@ -12,7 +12,7 @@ export function SectionTint() {
   return (
     <div
       aria-hidden
-      className="absolute inset-0 -z-10 bg-bg-surface/35 backdrop-blur-sm pointer-events-none"
+      className="absolute inset-0 -z-10 bg-bg-surface/35 backdrop-blur-xs pointer-events-none"
       style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK }}
     />
   )

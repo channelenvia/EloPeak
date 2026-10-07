@@ -1,6 +1,7 @@
+import { OrderCardHeader } from './OrderCardHeader'
 import { Link } from 'react-router-dom'
 import { Clock, Lock, LockOpen, UserCheck, UserPlus, X } from 'lucide-react'
-import { Button, Card, OrderStatusBadge } from '@/components/ui'
+import { Badge, Button, Card, OrderStatusBadge } from '@/components/ui'
 import { cn, getOrderServiceName } from '@/lib/utils'
 import { useBoosterServiceDetails } from '@/api/coaching'
 import { useAdminSetPendingReviewLock } from '@/api/admin'
@@ -34,7 +35,7 @@ function PendingReviewCardActions({
 
   return (
     <div className="mt-3 pt-2.5 border-t border-border-subtle/80 flex items-center justify-between gap-2">
-      <span className="text-[11px] font-semibold text-ink-secondary">Revisão Admin:</span>
+      <span className="text-xs font-semibold text-ink-secondary">Revisão Admin:</span>
       <div className="flex items-center gap-1.5">
         <Button
           type="button"
@@ -132,22 +133,16 @@ export function CustomerOrderCard({
     >
       <Link
         to={`${basePath}/${order.id}`}
-        className="flex flex-1 flex-col rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        className="flex flex-1 flex-col gap-4 rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/40"
       >
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="text-xs font-mono text-ink-muted">#{order.id.slice(0, 8).toUpperCase()}</p>
-              {order.drop_count > 0 && (
-                <span className="text-[9px] font-bold uppercase tracking-wide text-warning bg-warning/10 px-1.5 py-0.5 rounded">Dropado</span>
-              )}
-            </div>
-            <p className="text-sm font-semibold text-ink truncate">{coachPackage?.title ?? getOrderServiceName(order)}</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+        <OrderCardHeader
+          order={order}
+          title={coachPackage?.title ?? getOrderServiceName(order)}
+          trailing={
+            <>
             {isReviewAdmin && (
               <span className={cn(
-                'text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1',
+                'text-2xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1',
                 order.admin_review_locked ? 'bg-ink-muted/10 text-ink-secondary' : 'bg-warning/10 text-warning'
               )}>
                 {order.admin_review_locked ? (
@@ -163,9 +158,18 @@ export function CustomerOrderCard({
                 )}
               </span>
             )}
-            <OrderStatusBadge order={order} />
-          </div>
-        </div>
+            {isReviewAdmin
+              ? <Badge className="text-warning bg-warning/10" dot>Aguardando Aprovação</Badge>
+              : <OrderStatusBadge order={order} viewerRole={viewerRole} align="right" />}
+                      </>
+          }
+        />
+
+        {isReviewAdmin && (
+          <p className="text-xs text-ink-secondary leading-relaxed">
+            Pedido pago aguardando sua aprovação. Atribua a um booster, cancele ou deixe o prazo acabar para liberar ao pool.
+          </p>
+        )}
 
         <div className="flex-1">
           <OrderCardDetails order={order} viewerRole={viewerRole} />

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { OrderCardHeader } from '@/components/order/OrderCardHeader'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { LiveDot } from '@/components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, History, Lock, Sparkles } from 'lucide-react'
+import { Briefcase, Lock, Sparkles } from 'lucide-react'
 import { Button, Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { timeAgo, boosterEarningsShare, getOrderServiceName, getOrderModeType } from '@/lib/utils'
@@ -123,22 +128,14 @@ export function AvailableJobsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Jobs Disponíveis</h1>
-          <p className="text-sm text-ink-secondary mt-1">
-            {filtered.length} job disponível
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
+      <PageHeader title="Jobs Disponíveis" description={<>{filtered.length} job disponível</>} actions={<><div className="flex items-center gap-3 flex-wrap">
           {slotInfo && <SlotIndicator slots={slotInfo} />}
           <div className="flex items-center gap-2 text-xs text-ink-muted">
-            <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
+            <LiveDot />
             Ao vivo
           </div>
           <OrderSoundSettings />
-        </div>
-      </div>
+        </div></>} />
 
       {/* Slots full warning */}
       {slotInfo && slotInfo.total_count >= slotInfo.max_total && (
@@ -153,7 +150,7 @@ export function AvailableJobsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchInput
           wrapperClassName="w-full sm:w-64 shrink-0"
-          placeholder="Buscar por código do pedido..."
+          placeholder="Buscar por código do pedido…"
           aria-label="Buscar por código do pedido"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -179,14 +176,14 @@ export function AvailableJobsPage() {
 
       {/* Jobs */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CardGrid >
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !filtered.length ? (
         <EmptyState icon={Briefcase} title="Sem jobs disponíveis" description="Volte em breve — jobs chegam frequentemente." />
       ) : (
         <>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CardGrid >
           {pageJobs.map((job) => {
             const isDuo = job.boost_mode === 'duo'
             const blocked = slotInfo && !canAcceptJob(job)
@@ -207,69 +204,57 @@ export function AvailableJobsPage() {
                 // só o botão "Aceitar" lá dentro. Reatribuído usa o mesmo
                 // tom de roxo do rank Mestre (rank-master) já existente no
                 // design system, em vez do amarelo accent do exclusivo.
-                className={`h-full flex flex-col hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out ${reassignedLabel ? 'bg-rank-master/[0.05] border-t-rank-master/40' : exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
+                className={`h-full flex flex-col gap-4 hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out ${reassignedLabel ? 'bg-rank-master/[0.05] border-t-rank-master/40' : exclusiveLabel ? 'bg-accent/[0.03]' : ''}`}
               >
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-mono text-ink-muted">#{job.id.slice(0, 8).toUpperCase()}</p>
-                    <p className="text-sm font-semibold text-ink truncate">{coachPackage?.title ?? getOrderServiceName(job)}</p>
-                  </div>
-                  {job.service_type !== 'coaching' && (
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide shrink-0 ${
-                      isDuo
-                        ? 'bg-brand/10 text-brand border border-brand/20'
-                        : 'bg-bg-raised text-ink-muted'
-                    }`}>
+                <OrderCardHeader
+                  order={job}
+                  title={coachPackage?.title ?? getOrderServiceName(job)}
+                  trailing={job.service_type !== 'coaching' && (
+                    <Badge variant={isDuo ? 'brand' : 'neutral'} size="tag" className={isDuo ? 'border border-brand/20' : 'text-ink-muted'}>
                       {getOrderModeType(job)}
-                    </span>
+                    </Badge>
                   )}
-                </div>
+                />
 
-                {(exclusiveLabel || reassignedLabel || job.drop_count > 0 || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                {(exclusiveLabel || reassignedLabel || job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
+                  <div className="flex flex-wrap gap-1.5">
                     {(job.service_type === 'elo_boost' || job.service_type === 'win_boost' || job.service_type === 'md5') && (
-                      <span className="text-[10px] font-bold bg-bg-raised text-ink-secondary px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                      <Badge variant="neutral" size="tag">
                         {job.queue_type === 'solo_duo' ? 'Solo/Duo' : 'Flex'}
-                      </span>
+                      </Badge>
                     )}
                     {reassignedLabel ? (
-                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-rank-master/15 text-rank-master border border-rank-master/30">
+                      <Badge size="tag" className="bg-rank-master/15 text-rank-master">
                         <Sparkles className="h-3 w-3" />
                         {reassignedLabel}
-                      </span>
+                      </Badge>
                     ) : exclusiveLabel && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-accent/15 text-accent border border-accent/30">
+                      <Badge variant="accent" size="tag">
                         <Sparkles className="h-3 w-3" />
                         {exclusiveLabel}
-                      </span>
-                    )}
-                    {job.drop_count > 0 && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
-                        <History className="h-3 w-3" />
-                        Dropado
-                      </span>
+                      </Badge>
                     )}
                   </div>
                 )}
 
                 {coachPackage && (
-                  <div className="mb-3 space-y-2">
+                  <div className="space-y-2">
                     {coachPackage.description && (
-                      <p className="text-xs text-ink-secondary leading-relaxed line-clamp-2">{coachPackage.description}</p>
+                      <p className="text-sm text-ink-secondary leading-relaxed line-clamp-2">{coachPackage.description}</p>
                     )}
                     <ServiceTagPills lanes={coachPackage.lanes} champions={coachPackage.champions} specialties={coachPackage.specialties} compact />
                     {coachPackage.tempo && (
-                      <p className="text-[10px] text-ink-muted">Duração por sessão: <span className="font-semibold text-ink">{coachPackage.tempo}</span></p>
+                      <p className="text-2xs text-ink-muted">Duração por sessão: <span className="font-semibold text-ink">{coachPackage.tempo}</span></p>
                     )}
                   </div>
                 )}
 
                 <OrderCardDetails order={job} viewerRole="booster" />
 
-                <div className="flex items-center justify-between pt-3 border-t border-border-subtle mt-auto">
+                <div className="mt-auto flex items-center justify-between border-t border-border-subtle pt-4">
                   <div>
-                    <p className="text-sm font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3, job.service_type))}</p>
-                    <p className="text-[10px] text-ink-muted">Seu corte ({Math.round(boosterEarningsShare(slotInfo?.is_top3, job.service_type) * 100)}%)</p>
+                    <p className="text-base font-bold text-success">{currency(job.total_price * boosterEarningsShare(slotInfo?.is_top3, job.service_type))}</p>
+                    <p className="text-2xs text-ink-muted">Seu corte ({Math.round(boosterEarningsShare(slotInfo?.is_top3, job.service_type) * 100)}%)</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Button
@@ -282,18 +267,18 @@ export function AvailableJobsPage() {
                       Aceitar
                     </Button>
                     {acceptJob.isError && (
-                      <p className="text-[10px] text-danger text-right max-w-[140px]">
+                      <p className="text-2xs text-danger text-right max-w-[140px]">
                         {acceptJob.error instanceof Error ? acceptJob.error.message : 'Erro'}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <p className="text-[10px] text-ink-muted mt-2">Publicado {timeAgo(job.created_at)}</p>
+                <p className="-mt-1 text-xs text-ink-muted">Publicado {timeAgo(job.created_at)}</p>
               </Card>
             )
           })}
-        </div>
+        </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
         </>
       )}

@@ -42,7 +42,7 @@ export function DuoAccountHistoryList({ orderId }: { orderId: string }) {
                   do booster -- só o Riot ID e quando foi vinculada (contas
                   próprias não têm timestamp de vínculo, ver own_account no
                   tipo). */}
-              <p className="text-[10px] text-ink-muted">
+              <p className="text-2xs text-ink-muted">
                 {entry.reserved_at ? formatDateTime(entry.reserved_at) : '—'}
               </p>
             </div>

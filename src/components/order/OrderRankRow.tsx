@@ -47,7 +47,7 @@ export function OrderRankRow({ currentTier, currentDivision = null, currentSlot,
           <div className="flex items-center gap-3 min-w-0 shrink-0">
             <RankBadge tier={currentTier!} division={currentDivision} size="lg" showLabel={false} />
             <div className="min-w-0">
-              <p className="text-[10px] text-ink-muted uppercase tracking-wide">{currentLabel}</p>
+              <p className="text-2xs text-ink-muted uppercase tracking-wide">{currentLabel}</p>
               <p className="text-base font-bold text-ink truncate">{formatRank(currentTier!, currentDivision)}</p>
             </div>
           </div>
@@ -68,10 +68,10 @@ export function OrderRankRow({ currentTier, currentDivision = null, currentSlot,
             </div>
 
             {hasTarget ? (
-              <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+              <div className="flex items-center gap-3 min-w-0 shrink-0">
                 <RankBadge tier={targetTier!} division={targetDivision ?? null} size="lg" showLabel={false} />
                 <div className="min-w-0">
-                  <p className="text-[10px] text-ink-muted uppercase tracking-wide">Rank Alvo</p>
+                  <p className="text-2xs text-ink-muted uppercase tracking-wide">Rank Alvo</p>
                   <p className="text-base font-bold text-ink truncate">{formatRank(targetTier!, targetDivision ?? null)}</p>
                 </div>
               </div>

@@ -49,7 +49,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
             <label
               key={topic.id}
               className={cn(
-                'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors',
+                'flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors',
                 topic.is_done ? 'bg-brand/5 border-brand/15' : 'bg-bg-raised/40 border-border-subtle',
               )}
             >
@@ -65,7 +65,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
                   {topic.content}
                 </p>
                 {topic.is_done && topic.completed_at && (
-                  <p className="flex items-center gap-1 text-[10px] text-ink-muted mt-0.5">
+                  <p className="flex items-center gap-1 text-2xs text-ink-muted mt-0.5">
                     <CheckSquare className="h-3 w-3" /> Concluído em {formatDateTime(topic.completed_at)}
                   </p>
                 )}
@@ -81,7 +81,7 @@ export function OrderCoachingTopics({ orderId }: { orderId: string }) {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd() } }}
-          placeholder="ex: Revisar posicionamento em teamfight..."
+          placeholder="ex: Revisar posicionamento em teamfight…"
           aria-label="Novo tópico de coaching"
           maxLength={200}
           className="input-base flex-1 text-sm"

@@ -1,132 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { FormField } from '@/components/ui/FormField'
-import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert, InlineFieldSelect } from '@/components/ui'
-import { useMasterPlusPriceRow } from '@/api/catalog'
-import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
+import { RankLockGrid, WinCountButtons, PdlFieldRow, ErrorAlert } from '@/components/ui'
 import { cn, RANK_TIER_ORDER } from '@/lib/utils'
-import { calcEloPrice, estimateEloBoostHours, getWinBoostPrice, getMd5WinPrice, applyLpModifier, lpModifierPct, applyMasterPlusPdlDiscount, MATCH_DURATION_HOURS, DELIVERY_ESTIMATE_MULTIPLIER, expectedMatchesForWins } from '@/lib/pricing'
-import { isMasterPlusCurrentTier, isDuoBlockedAtTier, RIOT_ID_FORMAT } from '@/lib/boostDomain'
-import type { Division, QueueType, RankTier } from '@/types'
-import { Search, Info, Check } from 'lucide-react'
+import { isMasterPlusCurrentTier, isDuoBlockedAtTier } from '@/lib/boostDomain'
+import { Info, Check } from 'lucide-react'
+import { RiotIdField } from './RiotIdField'
+import { useRiotLookup } from './useRiotLookup'
+import { useBuilderPricing } from './useBuilderPricing'
 import { CoachPackagePicker } from './CoachPackagePicker'
 import { ClashConfigPicker } from './ClashConfigPicker'
 import { LaneSelectField } from '@/components/order/LaneSelectField'
-
-type RiotRankResponse = {
-  found?: boolean
-  ranked?: boolean
-  tier?: RankTier
-  division?: Division | null
-  league_points?: number
-  avg_lp_gain?: number | null
-  avg_lp_loss?: number | null
-  md5_eligible?: boolean
-  matches_remaining?: number
-  message?: string
-}
-
-function fetchRiotRank(riotId: string, queue: QueueType) {
-  return invokeEdgeFunction<RiotRankResponse>('riot-account-rank', {
-    body: { riot_id: riotId, queue },
-    requireAuth: true,
-  })
-}
-
-const QUEUE_TYPE_OPTIONS: readonly [QueueType, QueueType] = ['solo_duo', 'flex']
-const queueTypeLabel = (q: QueueType) => (q === 'solo_duo' ? 'Solo/Duo' : 'Flex')
-
-// Campo Riot ID compartilhado entre elo_boost e win_boost/md5 (mesma
-// estrutura nos dois fluxos, só troca o handler de verificação e as
-// mensagens de baixo) -- card com glow reagindo ao estado (neutro / erro /
-// verificado) em vez de um input solto, consistente com os outros cards
-// desta página.
-function RiotIdField({
-  queueType, onQueueTypeChange,
-  riotId, onRiotIdChange,
-  onVerify, loading, verified, error,
-  children,
-}: {
-  queueType: QueueType
-  onQueueTypeChange: (queue: QueueType) => void
-  riotId: string
-  onRiotIdChange: (value: string) => void
-  onVerify: () => void
-  loading: boolean
-  verified: boolean
-  error?: string
-  children?: React.ReactNode
-}) {
-  return (
-    <FormField error={error}>
-      <div
-        className={cn(
-          'rounded-2xl border p-4 transition-colors duration-200',
-          error
-            ? 'border-danger/40 bg-danger/5'
-            : verified
-              ? 'border-brand/40 bg-brand/5 shadow-brand'
-              : 'border-border-subtle bg-bg-surface/60',
-        )}
-      >
-        {/* Rótulo dentro do card, no mesmo padrão dos cabeçalhos de coluna
-            de Rank/Vitórias mais abaixo (uppercase, micro, top-left) --
-            antes vinha de fora via FormField, deslocado do conteúdo que
-            rotula. */}
-        <div className="flex items-center justify-between mb-3">
-          <label htmlFor="order-riot-id-input" className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
-            Riot ID<span className="text-danger ml-0.5">*</span>
-          </label>
-          {verified && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-success">
-              <Check className="h-3 w-3" />
-              Verificado
-            </span>
-          )}
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <input
-              id="order-riot-id-input"
-              type="text"
-              value={riotId}
-              onChange={e => onRiotIdChange(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  onVerify()
-                }
-              }}
-              placeholder="NomeDoInvocador#TAG"
-              className="input-base w-full pr-[8.5rem]"
-              maxLength={32}
-            />
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-              <InlineFieldSelect
-                value={queueType}
-                options={QUEUE_TYPE_OPTIONS}
-                label={queueTypeLabel}
-                onChange={onQueueTypeChange}
-                fieldLabel="tipo de fila"
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onVerify}
-            disabled={loading}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-brand transition-all hover:shadow-brand disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Search className="h-4 w-4" />
-            {loading ? 'Consultando...' : 'Verificar elo'}
-          </button>
-        </div>
-        {children}
-      </div>
-    </FormField>
-  )
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -135,17 +21,15 @@ export function StepConfigure() {
     serviceType, currentRank, targetRank, queueType, boostMode,
     winsPurchased,
     isMd5, md5MatchesRemaining,
-    currentLp, avgLpGain, avgLpLoss,
+    currentLp, avgLpGain,
     currentPdl, avgPdlGain,
     riotId, riotAutoFilled, riotVerified, riotLookupLoading, stepAttempted,
     customerLanes, setCustomerLanes,
-    setService, setCurrentRank, setTargetRank, setQueueType, setBoostMode,
+    setCurrentRank, setTargetRank, setQueueType, setBoostMode,
     setWinsPurchased,
-    setIsMd5, setMd5MatchesRemainingFromApi,
-    setCurrentLp, setAvgLpGain, setAvgLpLoss,
-    setCurrentPdl, setAvgPdlGain, setAvgPdlLoss,
-    setBasePrice, setEstimatedHours, setPdlModifierPct,
-    setRiotId, setRiotAutoFilled, setRiotVerified, setMd5Blocked, clearRiotLookup, setRiotLookupLoading,
+    setCurrentLp, setAvgLpGain,
+    setCurrentPdl, setAvgPdlGain,
+    setRiotId,
   } = useOrderBuilderStore()
 
   const currentIsMasterPlus = currentRank ? isMasterPlusCurrentTier(currentRank.tier) : false
@@ -166,152 +50,10 @@ export function StepConfigure() {
     ? isDuoBlockedAtTier(targetRank.tier)
     : false
   const eloDuoBlocked = eloDuoBlockedByCurrent || eloDuoBlockedByTarget
-  const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
-  const [riotLookupError, setRiotLookupError] = useState<string | null>(null)
-  const [md5Message, setMd5Message] = useState<string | null>(null)
-  // Oferta de migração pra MD5 quando o eloboost dá unranked na fila — guarda
-  // as partidas restantes detectadas pela Riot; null quando não há oferta.
-  const [unrankedOffer, setUnrankedOffer] = useState<{ matchesRemaining: number } | null>(null)
-
-  function resetLookupMessages() {
-    setRiotLookupMessage(null)
-    setRiotLookupError(null)
-    setMd5Message(null)
-    setUnrankedOffer(null)
-  }
-
-  async function lookupRiotRank() {
-    if (riotLookupLoading) return
-    const trimmed = riotId.trim()
-    resetLookupMessages()
-    if (!RIOT_ID_FORMAT.test(trimmed)) {
-      setRiotLookupError('Riot ID inválido. Use o formato Nome#TAG (ex.: Fulano#BR1).')
-      return
-    }
-    // Zera qualquer resultado da conta consultada antes — o rank novo (ou a
-    // ausência dele, se unranked) substitui totalmente o anterior.
-    clearRiotLookup()
-
-    let result: RiotRankResponse
-    setRiotLookupLoading(true)
-    try {
-      result = await fetchRiotRank(trimmed, queueType)
-    } catch (error) {
-      setRiotLookupError(error instanceof Error ? error.message : 'Não foi possível consultar a Riot agora.')
-      return
-    } finally {
-      setRiotLookupLoading(false)
-    }
-
-    if (!result?.found) {
-      setRiotLookupError('Conta Riot não encontrada.')
-      return
-    }
-    if (!result.ranked || !result.tier) {
-      // Sem rank nesta fila — em vez de barrar, oferecemos migrar pra uma MD5
-      // da MESMA fila (mesmo endpoint já devolve md5_eligible/matches_remaining).
-      // O form segue travado (riotVerified false) até o usuário decidir.
-      const remaining = result.matches_remaining ?? 5
-      if (remaining < 1) {
-        // Unranked mas sem partidas de posicionamento restantes — o backend
-        // rejeitaria a MD5, então não oferecemos (evita um beco sem saída).
-        setRiotLookupError('Conta sem rank e sem partidas de posicionamento restantes nesta fila. Confira a fila selecionada.')
-        return
-      }
-      setUnrankedOffer({ matchesRemaining: remaining })
-      setRiotLookupMessage('Conta sem rank nesta fila.')
-      return
-    }
-
-    setCurrentRank({ tier: result.tier, division: result.division ?? null })
-    if (isMasterPlusCurrentTier(result.tier)) {
-      setCurrentPdl(Math.max(0, Math.min(9999, result.league_points ?? 0)))
-      // Master+ nunca usa a média real vinda da Riot -- progressão comercial
-      // sempre fixa em 30 PDL/partida (mesma regra do backend em orderPricing.ts).
-      setAvgPdlGain(30)
-      setAvgPdlLoss(30)
-    } else {
-      setCurrentLp(Math.max(0, Math.min(99, result.league_points ?? 0)))
-      if (typeof result.avg_lp_gain === 'number') setAvgLpGain(Math.max(1, Math.min(50, result.avg_lp_gain)))
-      if (typeof result.avg_lp_loss === 'number') setAvgLpLoss(Math.max(1, Math.min(50, result.avg_lp_loss)))
-    }
-
-    setRiotAutoFilled(true)
-    setRiotVerified(true)
-    setRiotLookupMessage(result.message ?? 'Rank atual preenchido automaticamente — você pode ajustar se quiser.')
-  }
-
-  // Migra o pedido de eloboost unranked pra uma MD5 na mesma fila, já
-  // configurando riot id (mantido), fila (mantida), partidas restantes e
-  // deixando o número editável. Backend revalida a elegibilidade MD5.
-  function migrateToMd5() {
-    if (!unrankedOffer) return
-    setService('md5', 'md5')
-    setMd5MatchesRemainingFromApi(unrankedOffer.matchesRemaining)
-    setMd5Blocked(false)
-    setRiotVerified(true)
-    setUnrankedOffer(null)
-    setRiotLookupMessage(null)
-    setMd5Message(
-      `Pedido migrado para MD5 nesta fila. Faltam ${unrankedOffer.matchesRemaining} partida(s) — ajuste o número se quiser.`,
-    )
-  }
-
-  async function lookupForWinBoost() {
-    if (riotLookupLoading) return
-    const trimmed = riotId.trim()
-    resetLookupMessages()
-    if (!RIOT_ID_FORMAT.test(trimmed)) {
-      setRiotLookupError('Riot ID inválido. Use o formato Nome#TAG (ex.: Fulano#BR1).')
-      return
-    }
-    clearRiotLookup()
-
-    let result: RiotRankResponse
-    setRiotLookupLoading(true)
-    try {
-      result = await fetchRiotRank(trimmed, queueType)
-    } catch (error) {
-      setRiotLookupError(error instanceof Error ? error.message : 'Não foi possível consultar a Riot agora.')
-      return
-    } finally {
-      setRiotLookupLoading(false)
-    }
-
-    if (!result?.found) {
-      setRiotLookupError('Conta Riot não encontrada.')
-      return
-    }
-
-    if (result.md5_eligible) {
-      // Conta ainda não rankeada nesta fila — não há "rank atual" para
-      // preencher (o usuário ainda precisa escolher manualmente o rank da
-      // última temporada), então a grade de rank NÃO é travada aqui.
-      const remaining = result.matches_remaining ?? 5
-      setIsMd5(true)
-      setMd5Blocked(false)
-      // setMd5MatchesRemainingFromApi já clampa winsPurchased internamente
-      // (Math.max(1, remaining)) -- um setWinsPurchased extra aqui lia
-      // `winsPurchased` de uma closure obsoleta (valor de antes desta busca),
-      // desfazendo o clamp correto que o setter acabou de aplicar.
-      setMd5MatchesRemainingFromApi(remaining)
-      setRiotVerified(true)
-      setMd5Message(`MD5 ativado — faltam ${remaining} partida(s) de posicionamento.`)
-    } else {
-      // Conta já rankeada nesta fila — preenchemos o rank atual e BLOQUEAMOS o
-      // MD5 (anti-fraude): não dá pra comprar garantia de placement de uma
-      // conta que já saiu do posicionamento. O backend rejeita de todo jeito.
-      setMd5MatchesRemainingFromApi(0)
-      setIsMd5(false)
-      setMd5Blocked(true)
-      setRiotVerified(true)
-      setRiotLookupMessage(result.message ?? 'Conta já possui rank nesta fila.')
-      if (result.tier) {
-        setCurrentRank({ tier: result.tier, division: result.division ?? null })
-        setRiotAutoFilled(true)
-      }
-    }
-  }
+  const {
+    riotLookupMessage, riotLookupError, md5Message, unrankedOffer,
+    resetLookupMessages, lookupRiotRank, lookupForWinBoost, migrateToMd5,
+  } = useRiotLookup()
 
   // Grão-Mestre só tem um destino válido (Challenger) — a interface pode
   // preenchê-lo automaticamente, mas o backend valida a combinação de novo.
@@ -321,182 +63,7 @@ export function StepConfigure() {
     }
   }, [currentRank, targetRank, setTargetRank])
 
-  // Diamond- mirando Grão-Mestre/Challenger direto (fluxo padrão): o trecho
-  // Mestre->alvo usa o mesmo preço por PDL do Master+, sempre a partir do
-  // PDL=0 (entra em Mestre do zero). "master" como alvo exato não entra
-  // aqui — já fica coberto pelo preço por divisão (calcEloPrice) abaixo.
-  const isStandardToMasterPlus = !currentIsMasterPlus
-    && (targetRank?.tier === 'grandmaster' || targetRank?.tier === 'challenger')
-
-  // Preço do Master+ vem da tabela comercial — depende do par (tier atual,
-  // tier alvo), da fila e do degrau de PDL atual (varia a cada 100 PDL,
-  // mais barato quanto mais perto do corte do próximo tier). Pega o maior
-  // degrau que não ultrapassa o PDL atual; acima do último degrau
-  // cadastrado usa o preço do último (mais barato). Se a combinação ainda
-  // não tem preço configurado, o preço fica indefinido e o pedido não avança.
-  const masterPlusPriceCurrentTier = currentIsMasterPlus ? currentRank?.tier : 'master'
-  const masterPlusPricePdl = Math.max(0, currentIsMasterPlus ? currentPdl : 0)
-  const { data: masterPlusPriceRow, isFetching: loadingMasterPlusPrice } = useMasterPlusPriceRow({
-    currentTier: masterPlusPriceCurrentTier,
-    targetTier: targetRank?.tier,
-    queueType,
-    boostMode,
-    pdlFrom: masterPlusPricePdl,
-    enabled: (currentIsMasterPlus || isStandardToMasterPlus) && !!currentRank && !!targetRank,
-  })
-
-  // Corte atual (PDL do último colocado) das ligas GM/Challenger na Riot —
-  // usado só na estimativa de prazo do Master+ (nunca no preço, fixo por
-  // tier). Cacheado no servidor (riot_league_cutoffs); staleTime aqui só
-  // evita rebuscar a cada render, o valor em si já "atualiza sozinho" pois o
-  // servidor reconsulta a Riot quando o cache passa de 6h.
-  const { data: leagueCutoffs } = useQuery({
-    queryKey: ['riot-league-cutoffs', queueType],
-    queryFn: () => invokeEdgeFunction<{ grandmaster_cutoff: number | null; challenger_cutoff: number | null }>('riot-league-cutoffs', {
-      body: { queue: queueType },
-      requireAuth: true,
-    }),
-    enabled: serviceType === 'elo_boost',
-    staleTime: 5 * 60 * 1000,
-  })
-  const masterPlusCutoffs = useMemo(
-    () => leagueCutoffs
-      ? { grandmaster: leagueCutoffs.grandmaster_cutoff, challenger: leagueCutoffs.challenger_cutoff }
-      : undefined,
-    [leagueCutoffs],
-  )
-
-  // Cálculo puro extraído do useEffect que só empurrava pra store -- ter isso
-  // num useMemo evita o passo de render extra que um useEffect sempre
-  // adiciona (render -> efeito dispara -> setState -> re-render) a cada
-  // mudança de rank/modo/fila antes do preço atualizar. Chaves ausentes no
-  // resultado = "não mexe nesse campo" (mesma semântica dos early-return do
-  // efeito original, ex.: coaching/clash só resetam pdlModifierPct e nunca
-  // tocam basePrice/estimatedHours, que são setados por outro componente).
-  const pricingUpdate = useMemo((): { basePrice?: number; estimatedHours?: number | null; pdlModifierPct?: number | null } | null => {
-    if (serviceType === 'elo_boost') {
-      if (!currentRank) return null
-
-      if (currentIsMasterPlus) {
-        const price = masterPlusPriceRow?.price
-        // Duo Boost no Master+ só é aceito na fila Flex.
-        if (!targetRank || price == null || (boostMode === 'duo' && queueType !== 'flex')) {
-          // Modificador de PDL nunca se aplica ao Master+ — sempre null aqui.
-          return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
-        }
-        const discountedPrice = applyMasterPlusPdlDiscount(
-          price,
-          targetRank.tier as 'grandmaster' | 'challenger',
-          currentPdl,
-          currentRank.tier,
-          queueType,
-          masterPlusCutoffs,
-        )
-        const masterPlusHours = estimateEloBoostHours({
-          currentRank,
-          targetRank,
-          currentLp: 0,
-          avgLpGain: 30,
-          avgLpLoss: 30,
-          currentPdl,
-          masterPlusCutoffs,
-        })
-        return {
-          basePrice: discountedPrice,
-          estimatedHours: masterPlusHours == null ? null : masterPlusHours * DELIVERY_ESTIMATE_MULTIPLIER,
-          pdlModifierPct: null,
-        }
-      }
-
-      if (!targetRank) return null
-      // Duo Boost com alvo Grão-Mestre/Challenger só é aceito na fila Flex
-      // -- alvo Master em si é permitido normalmente na Solo/Duo.
-      if (boostMode === 'duo' && queueType !== 'flex' && isDuoBlockedAtTier(targetRank.tier)) {
-        return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
-      }
-      const { price } = calcEloPrice(
-        queueType, boostMode,
-        currentRank.tier, currentRank.division ?? null,
-        targetRank.tier, targetRank.division ?? null,
-      )
-      const withLp = applyLpModifier(price, currentRank.tier, currentLp, avgLpGain, undefined, queueType, boostMode)
-      let combined = withLp
-      if (isStandardToMasterPlus) {
-        if (masterPlusPriceRow?.price == null || !targetRank) {
-          return { basePrice: 0, estimatedHours: null, pdlModifierPct: null }
-        }
-        const discountedMasterPlusPrice = applyMasterPlusPdlDiscount(
-          masterPlusPriceRow.price,
-          targetRank.tier as 'grandmaster' | 'challenger',
-          0,
-          currentRank.tier,
-          queueType,
-          masterPlusCutoffs,
-        )
-        combined = Math.round((withLp + discountedMasterPlusPrice) * 100) / 100
-      }
-      const eloHours = estimateEloBoostHours({
-        currentRank,
-        targetRank,
-        currentLp,
-        avgLpGain,
-        avgLpLoss,
-        currentPdl: null,
-        masterPlusCutoffs,
-      })
-      return {
-        basePrice: combined,
-        estimatedHours: eloHours == null ? null : eloHours * DELIVERY_ESTIMATE_MULTIPLIER,
-        pdlModifierPct: lpModifierPct(avgLpGain),
-      }
-
-    } else if (serviceType === 'win_boost') {
-      if (!winsPurchased || !currentRank) return null
-      const pricePerWin = getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
-      const winsTotal = Math.round(winsPurchased * pricePerWin * 100) / 100
-      return {
-        basePrice: winsTotal,
-        estimatedHours: expectedMatchesForWins(winsPurchased) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER,
-        pdlModifierPct: null,
-      }
-    } else if (serviceType === 'md5') {
-      if (!winsPurchased || !currentRank) return null
-      const cappedWins = Math.min(5, winsPurchased)
-      const pricePerWin = getMd5WinPrice(queueType, currentRank.tier, boostMode)
-      const winsTotal = Math.round(cappedWins * pricePerWin * 100) / 100
-      return {
-        basePrice: winsTotal,
-        estimatedHours: expectedMatchesForWins(cappedWins) * MATCH_DURATION_HOURS * DELIVERY_ESTIMATE_MULTIPLIER,
-        pdlModifierPct: null,
-      }
-    } else if (serviceType === 'coaching') {
-      // Preço vem do pacote escolhido em CoachPackagePicker (setBasePrice
-      // chamado lá, não recalculado aqui) — mas o modificador de PDL de uma
-      // configuração elo_boost anterior na mesma sessão não pode vazar para
-      // o resumo de um pedido de coaching.
-      return { pdlModifierPct: null }
-    } else if (serviceType === 'clash') {
-      // Preço/estimativa vêm de ClashConfigPicker (que já chama
-      // setBasePrice/setEstimatedHours diretamente) — só garante que o
-      // modificador de PDL de uma configuração elo_boost anterior não vaza
-      // pro resumo de um pedido de Clash.
-      return { pdlModifierPct: null }
-    }
-    return null
-  }, [
-    serviceType, currentRank, targetRank, boostMode, winsPurchased, queueType,
-    currentLp, avgLpGain, avgLpLoss, currentPdl, currentIsMasterPlus, isStandardToMasterPlus,
-    masterPlusPriceRow, masterPlusCutoffs,
-  ])
-
-  // Único efeito colateral real (escrever num store externo ao componente) --
-  // só espelha o resultado já calculado acima.
-  useEffect(() => {
-    if (!pricingUpdate) return
-    if ('basePrice' in pricingUpdate) setBasePrice(pricingUpdate.basePrice!)
-    if ('estimatedHours' in pricingUpdate) setEstimatedHours(pricingUpdate.estimatedHours!)
-    if ('pdlModifierPct' in pricingUpdate) setPdlModifierPct(pricingUpdate.pdlModifierPct!)
-  }, [pricingUpdate, setBasePrice, setEstimatedHours, setPdlModifierPct])
+  const { masterPlusPriceRow, loadingMasterPlusPrice, leagueCutoffs } = useBuilderPricing()
 
   return (
     <div>
@@ -642,7 +209,7 @@ export function StepConfigure() {
             mesma fila, já configurando tudo. O form segue travado até aqui. */}
         {serviceType === 'elo_boost' && !riotVerified && unrankedOffer && (
           <div className="rounded-2xl border-2 border-warning/30 bg-warning/5 p-4 space-y-3">
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-start gap-3">
               <Info className="h-4 w-4 text-warning shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-bold text-ink">Conta sem rank nesta fila</p>
@@ -654,13 +221,13 @@ export function StepConfigure() {
                 </p>
               </div>
             </div>
-            <button
+            <Button
               type="button"
               onClick={migrateToMd5}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-brand text-white hover:opacity-90 transition-all"
+              variant="primary" size="md" className="w-full"
             >
               Migrar para MD5
-            </button>
+            </Button>
           </div>
         )}
 
@@ -698,7 +265,7 @@ export function StepConfigure() {
             <div className="grid grid-cols-1 md:grid-cols-2">
               {/* ── Rank column ── */}
               <div className="p-4 space-y-4 border-b border-border-subtle md:border-b-0 md:border-r">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+                <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">
                   {isMd5 ? 'Rank Anterior' : 'Rank Atual'}
                 </p>
                 <RankLockGrid
@@ -718,7 +285,7 @@ export function StepConfigure() {
 
               {/* ── Vitórias/Partidas column ── */}
               <div className="p-4 space-y-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+                <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">
                   {isMd5 ? 'Partidas' : 'Vitórias'}
                 </p>
                 <WinCountButtons
@@ -755,7 +322,7 @@ export function StepConfigure() {
               {/* ── Current rank column ── */}
               <div className="p-4 space-y-4 border-b border-border-subtle md:border-b-0 md:border-r">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Rank Atual</p>
+                  <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Rank Atual</p>
                 </div>
 
                 <RankLockGrid
@@ -775,7 +342,7 @@ export function StepConfigure() {
                     não tem PDL alvo — o preço depende da faixa do PDL atual,
                     não de um alvo informado pelo cliente. */}
                 {currentRank && (
-                  <div className="rounded-xl border border-border-subtle bg-bg-raised/20 p-3 space-y-2.5">
+                  <Card variant="inset" padding="xs" className="space-y-3">
                     {currentIsMasterPlus ? (
                       <PdlFieldRow fields={[
                         { label: 'PDL Atual', value: currentPdl, min: 0, max: 9999, onChange: setCurrentPdl, disabled: true },
@@ -787,13 +354,13 @@ export function StepConfigure() {
                         { label: 'Média PDL', value: avgLpGain, min: 1, max: 50, onChange: setAvgLpGain, disabled: true },
                       ]} />
                     )}
-                  </div>
+                  </Card>
                 )}
               </div>
 
               {/* ── Target rank column ── */}
               <div className="p-4 space-y-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Rank Alvo</p>
+                <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Rank Alvo</p>
 
                 {!currentRank ? (
                   <p className="text-xs text-ink-muted pt-2">Selecione o rank atual primeiro.</p>
@@ -826,16 +393,16 @@ export function StepConfigure() {
                     (progressão por degrau, mesma RankLockGrid acima). Não
                     depende de currentIsMasterPlus, só do rank alvo escolhido. */}
                 {targetRank?.tier === 'grandmaster' && leagueCutoffs?.grandmaster_cutoff != null && (
-                  <p className="text-[11px] text-ink-muted">Corte atual do Grão-Mestre: {leagueCutoffs.grandmaster_cutoff} PDL (atualizado automaticamente)</p>
+                  <p className="text-xs text-ink-muted">Corte atual do Grão-Mestre: {leagueCutoffs.grandmaster_cutoff} PDL (atualizado automaticamente)</p>
                 )}
                 {targetRank?.tier === 'challenger' && leagueCutoffs?.challenger_cutoff != null && (
-                  <p className="text-[11px] text-ink-muted">Corte atual do Challenger: {leagueCutoffs.challenger_cutoff} PDL (atualizado automaticamente)</p>
+                  <p className="text-xs text-ink-muted">Corte atual do Challenger: {leagueCutoffs.challenger_cutoff} PDL (atualizado automaticamente)</p>
                 )}
                 {currentIsMasterPlus && (
                   <>
-                    {loadingMasterPlusPrice && <p className="text-[11px] text-ink-muted">Calculando preço…</p>}
+                    {loadingMasterPlusPrice && <p className="text-xs text-ink-muted">Calculando preço…</p>}
                     {!loadingMasterPlusPrice && targetRank && masterPlusPriceRow?.price == null && (
-                      <p className="text-[11px] text-warning">Preço ainda não configurado para esse tier. Fale com o suporte.</p>
+                      <p className="text-xs text-warning">Preço ainda não configurado para esse tier. Fale com o suporte.</p>
                     )}
                   </>
                 )}
@@ -846,7 +413,7 @@ export function StepConfigure() {
                     modalidade pra Duo -- ver o bloqueio do próprio botão Duo
                     Boost em "Modalidade" (eloDuoBlockedByTarget) mais acima. */}
                 {queueType === 'solo_duo' && boostMode === 'duo' && targetRank?.tier === 'challenger' && (
-                  <p className="text-[11px] text-warning">Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo — escolha Solo, mire até Master, ou troque para a fila Flex.</p>
+                  <p className="text-xs text-warning">Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo — escolha Solo, mire até Master, ou troque para a fila Flex.</p>
                 )}
                 {stepAttempted && currentRank && !targetRank && (
                   <p className="text-xs text-danger">Selecione o rank alvo</p>

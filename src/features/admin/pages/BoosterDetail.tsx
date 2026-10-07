@@ -1,4 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
+import { InlineEmpty } from '@/components/ui/EmptyState'
+import { Badge } from '@/components/ui/Badge'
 import { Trophy, Swords, Users, ExternalLink, CheckCircle2, Wallet, Star } from 'lucide-react'
 import { Card, BoosterStatusBadge, DetailPageHeader, OrderStatusBadge, Avatar, RankBadge, Skeleton } from '@/components/ui'
 import { formatDate, formatRank, formatLastSeen, safeOpggUrl, getOrderServiceName } from '@/lib/utils'
@@ -54,9 +56,9 @@ export function AdminBoosterDetailPage() {
           <>
             <BoosterStatusBadge status={booster.status} />
             {booster.is_top3 && (
-              <span className="flex items-center gap-1 text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">
+              <Badge variant="warning" size="tag">
                 <Trophy className="h-3 w-3" /> TOP 3
-              </span>
+              </Badge>
             )}
           </>
         )}
@@ -75,12 +77,12 @@ export function AdminBoosterDetailPage() {
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <h2 className="text-xl font-extrabold text-ink">{booster.display_name}</h2>
                 {booster.is_top3 && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                  <Badge variant="warning" size="tag">
                     <Trophy className="h-3 w-3" /> Top 3
-                  </span>
+                  </Badge>
                 )}
               </div>
-              <p className="text-[10px] font-medium text-ink-muted">{formatLastSeen(booster.last_active_at)}</p>
+              <p className="text-2xs font-medium text-ink-muted">{formatLastSeen(booster.last_active_at)}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -94,7 +96,7 @@ export function AdminBoosterDetailPage() {
                     </span>
                   ) : null}
                   <p className="text-xs font-bold text-ink text-center leading-tight">{value}</p>
-                  <p className="text-[10px] text-ink-muted uppercase tracking-wide">{label}</p>
+                  <p className="text-2xs text-ink-muted uppercase tracking-wide">{label}</p>
                 </div>
               ))}
             </div>
@@ -120,7 +122,7 @@ export function AdminBoosterDetailPage() {
                 menos altura que uma lista de linhas label/valor empilhadas. */}
             <div className="pt-3 border-t border-border-subtle text-left space-y-3">
               <div>
-                <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Dados da Candidatura</p>
+                <p className="text-2xs font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Dados da Candidatura</p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   {[
                     ['Entrou em', formatDate(booster.created_at)],
@@ -132,7 +134,7 @@ export function AdminBoosterDetailPage() {
                       : 'Não informado'],
                   ].map(([l, v]) => (
                     <div key={l} className="min-w-0">
-                      <p className="text-[9px] text-ink-muted uppercase tracking-wide">{l}</p>
+                      <p className="text-2xs text-ink-muted uppercase tracking-wide">{l}</p>
                       <p className="text-xs text-ink font-medium truncate" title={v}>{v}</p>
                     </div>
                   ))}
@@ -140,7 +142,7 @@ export function AdminBoosterDetailPage() {
               </div>
 
               <div>
-                <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Dados Pessoais / PIX</p>
+                <p className="text-2xs font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Dados Pessoais / PIX</p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   {[
                     ['Nome completo', booster.full_name ?? '—'],
@@ -148,7 +150,7 @@ export function AdminBoosterDetailPage() {
                     ['CPF', booster.cpf ? booster.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—'],
                   ].map(([l, v]) => (
                     <div key={l} className="min-w-0">
-                      <p className="text-[9px] text-ink-muted uppercase tracking-wide">{l}</p>
+                      <p className="text-2xs text-ink-muted uppercase tracking-wide">{l}</p>
                       <p className="text-xs text-ink font-medium truncate" title={v}>{v}</p>
                     </div>
                   ))}
@@ -167,7 +169,7 @@ export function AdminBoosterDetailPage() {
 
         {/* Fluxo temporal (histórico de atividade do booster) + uso de
             slots, lado a lado, na mesma largura da seção de estatísticas. */}
-        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card padding="md">
             <h3 className="text-base font-semibold text-ink mb-3">Fluxo Temporal</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -183,7 +185,7 @@ export function AdminBoosterDetailPage() {
                     </div>
                     <p className="text-sm font-bold text-ink truncate">{value}</p>
                   </div>
-                  <p className="text-[9px] text-ink-muted mt-1 leading-tight">{label}</p>
+                  <p className="text-2xs text-ink-muted mt-1 leading-tight">{label}</p>
                 </div>
               ))}
             </div>
@@ -193,9 +195,9 @@ export function AdminBoosterDetailPage() {
             <Card padding="md">
               <h3 className="text-base font-semibold text-ink mb-3 flex items-center gap-2">
                 Uso de Slots
-                <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${slotInfo.is_top3 ? 'bg-warning/10 text-warning' : 'bg-bg-raised text-ink-muted'}`}>
+                <Badge variant={slotInfo.is_top3 ? 'warning' : 'neutral'} size="tag">
                   {slotInfo.is_top3 ? 'Top3' : 'Regular'}
-                </span>
+                </Badge>
               </h3>
               <div className="grid grid-cols-4 gap-2">
                 {[
@@ -213,18 +215,18 @@ export function AdminBoosterDetailPage() {
                       </div>
                       <p className="text-sm font-bold text-ink truncate">{value}</p>
                     </div>
-                    <p className="text-[9px] text-ink-muted mt-1 leading-tight">{label}</p>
+                    <p className="text-2xs text-ink-muted mt-1 leading-tight">{label}</p>
                   </div>
                 ))}
               </div>
 
               {/* Pedidos associados ativos -- clicável, leva pro detalhe do pedido. */}
               <div className="mt-4 pt-4 border-t border-border-subtle">
-                <p className="text-[10px] font-semibold text-ink-muted mb-2 uppercase tracking-wide">Pedidos Associados</p>
+                <p className="text-2xs font-semibold text-ink-muted mb-2 uppercase tracking-wide">Pedidos Associados</p>
                 {loadingOrders ? (
                   <Skeleton className="h-16 w-full" />
                 ) : !boosterOrders?.orders.length ? (
-                  <p className="text-xs text-ink-muted text-center py-2">Nenhum pedido ativo no momento.</p>
+                  <InlineEmpty>Nenhum pedido ativo no momento.</InlineEmpty>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {boosterOrders.orders.map((order) => (
@@ -235,7 +237,7 @@ export function AdminBoosterDetailPage() {
                       >
                         <span className="font-mono text-brand shrink-0">#{order.id.slice(0, 8).toUpperCase()}</span>
                         <span className="text-ink-secondary truncate flex-1">{getOrderServiceName(order)}</span>
-                        <OrderStatusBadge order={order} />
+                        <OrderStatusBadge order={order} viewerRole="admin" align="right" />
                       </Link>
                     ))}
                   </div>

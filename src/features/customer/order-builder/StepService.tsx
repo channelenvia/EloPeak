@@ -114,11 +114,11 @@ export function StepService({ fullWidth }: { fullWidth?: boolean }) {
             {serviceType === type ? (
               <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-brand" />
             ) : badge ? (
-              <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand text-white">
+              <span className="absolute top-3 right-3 text-2xs font-bold px-2 py-0.5 rounded-full bg-brand text-ink-inverse">
                 {badge}
               </span>
             ) : null}
-            <div className={cn('rounded-xl flex items-center justify-center shrink-0', fullWidth ? 'h-11 w-11' : 'h-10 w-10', serviceType === type ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary')}>
+            <div className={cn('rounded-xl flex items-center justify-center shrink-0', fullWidth ? 'h-11 w-11' : 'h-10 w-10', serviceType === type ? 'bg-brand text-ink-inverse' : 'bg-bg-raised text-ink-secondary')}>
               <Icon className="h-5 w-5" />
             </div>
             <div>

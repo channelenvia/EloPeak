@@ -98,7 +98,7 @@ export function Popover({ open, onClose, anchorRef, children, className, align =
       ref={panelRef}
       tabIndex={-1}
       style={pos ? { position: 'fixed', top: pos.top, left: pos.left } : { position: 'fixed', top: -9999, left: -9999 }}
-      className={cn('z-[100] bg-bg-surface border border-border-subtle rounded-xl shadow-2xl focus:outline-none', className)}
+      className={cn('z-[100] bg-bg-surface border border-border-subtle rounded-xl shadow-2xl focus:outline-hidden', className)}
     >
       {children}
     </div>,

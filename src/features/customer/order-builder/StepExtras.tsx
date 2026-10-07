@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { InlineEmpty } from '@/components/ui/EmptyState'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -124,7 +125,7 @@ export function StepExtras() {
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
           </div>
         ) : extras.length === 0 ? (
-          <p className="text-sm text-ink-muted text-center py-8">Nenhum extra disponível no momento.</p>
+          <InlineEmpty>Nenhum extra disponível no momento.</InlineEmpty>
         ) : (
           <div>
             {showWinPackages && (
@@ -155,7 +156,7 @@ export function StepExtras() {
                     )}
                     <div className={cn(
                       'h-9 w-9 rounded-xl flex items-center justify-center shrink-0',
-                      selected ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
+                      selected ? 'bg-brand text-ink-inverse' : 'bg-bg-raised text-ink-secondary',
                     )}>
                       <Icon className="h-4 w-4" />
                     </div>
@@ -205,8 +206,8 @@ export function StepExtras() {
 
                     {/* Discount badge */}
                     <span className={cn(
-                      'text-[10px] font-black px-2 py-0.5 rounded-full',
-                      isSelected ? 'bg-brand text-white' : 'bg-bg-raised text-ink-secondary',
+                      'text-2xs font-black px-2 py-0.5 rounded-full',
+                      isSelected ? 'bg-brand text-ink-inverse' : 'bg-bg-raised text-ink-secondary',
                     )}>
                       -{discountPct}%
                     </span>
@@ -217,7 +218,7 @@ export function StepExtras() {
                       <span className={cn('text-xl font-extrabold leading-none', isSelected ? 'text-brand' : 'text-ink')}>
                         {wins}
                       </span>
-                      <span className={cn('text-[11px] font-semibold', isSelected ? 'text-brand/80' : 'text-ink-secondary')}>
+                      <span className={cn('text-xs font-semibold', isSelected ? 'text-brand/80' : 'text-ink-secondary')}>
                         {wins === 1 ? 'vitória' : 'vitórias'}
                       </span>
                     </div>
@@ -228,12 +229,12 @@ export function StepExtras() {
                     </p>
 
                     {/* Unit price reference */}
-                    <p className="text-[10px] text-ink-muted leading-tight">
+                    <p className="text-2xs text-ink-muted leading-tight">
                       {currency(unitWinPrice)}/vitória
                     </p>
 
                     {/* Savings */}
-                    <span className="text-[10px] font-semibold text-success">
+                    <span className="text-2xs font-semibold text-success">
                       economia {currency(savings)}
                     </span>
                   </button>

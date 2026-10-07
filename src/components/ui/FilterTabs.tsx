@@ -38,11 +38,11 @@ export function FilterTabs<T extends string>({ options, value, onChange, label, 
             onClick={() => onChange(opt.value)}
             className={cn(
               'relative flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap',
-              active ? 'bg-brand text-white' : 'text-ink-secondary hover:text-ink',
+              active ? 'bg-brand text-ink-inverse' : 'text-ink-secondary hover:text-ink',
             )}
           >
             {opt.label}
-            {opt.count != null && <span className={cn('text-[10px]', active ? 'text-white/80' : 'text-ink-muted')}>{opt.count}</span>}
+            {opt.count != null && <span className={cn('text-2xs', active ? 'text-ink-inverse/70' : 'text-ink-muted')}>{opt.count}</span>}
             {opt.dot && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-danger ring-2 ring-bg-surface" />}
           </button>
         )
@@ -54,7 +54,7 @@ export function FilterTabs<T extends string>({ options, value, onChange, label, 
 
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">{label}</p>
+      <p className="text-2xs font-bold uppercase tracking-wide text-ink-muted mb-1.5">{label}</p>
       {pills}
     </div>
   )

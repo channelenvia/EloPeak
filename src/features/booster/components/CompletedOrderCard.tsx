@@ -1,3 +1,4 @@
+import { OrderCardHeader } from '@/components/order/OrderCardHeader'
 import { Link } from 'react-router-dom'
 import { Card, OrderStatusBadge } from '@/components/ui'
 import { getOrderServiceName, boosterEarningsShare } from '@/lib/utils'
@@ -26,19 +27,8 @@ export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
 
   return (
     <Link to={`/booster/orders/${order.id}`}>
-      <Card variant="interactive" className="h-full min-h-[300px] flex flex-col">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="text-xs font-mono text-ink-muted">#{order.id.slice(0, 8).toUpperCase()}</p>
-              {order.drop_count > 0 && (
-                <span className="text-[9px] font-bold uppercase tracking-wide text-warning bg-warning/10 px-1.5 py-0.5 rounded">Dropado</span>
-              )}
-            </div>
-            <p className="text-sm font-semibold text-ink truncate">{coachPackage?.title ?? getOrderServiceName(order)}</p>
-          </div>
-          <OrderStatusBadge order={order} />
-        </div>
+      <Card variant="interactive" className="flex h-full min-h-[300px] flex-col gap-4">
+        <OrderCardHeader order={order} title={coachPackage?.title ?? getOrderServiceName(order)} trailing={<OrderStatusBadge order={order} viewerRole="booster" align="right" />} />
 
         <div className="flex-1">
           <OrderCardDetails order={order} viewerRole="booster" />

@@ -31,7 +31,7 @@ function ClashTierSlot({ clashTier }: { clashTier: ClashTier }) {
     <div className="flex items-center gap-3 min-w-0 shrink-0">
       <ClashTierIcons clashTier={clashTier} />
       <div className="min-w-0">
-        <p className="text-[10px] text-ink-muted uppercase tracking-wide">Tier de Clash</p>
+        <p className="text-2xs text-ink-muted uppercase tracking-wide">Tier de Clash</p>
         <p className="text-base font-bold text-ink truncate">{CLASH_TIER_LABEL[clashTier]}</p>
       </div>
     </div>
@@ -50,7 +50,7 @@ export function ClashDayBadge({ createdAt, clashDay }: { createdAt: string; clas
         <span className="text-lg font-extrabold text-ink leading-none" data-tabular>{day}/{month}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-ink-muted uppercase tracking-wide">Dia do Clash</p>
+        <p className="text-2xs text-ink-muted uppercase tracking-wide">Dia do Clash</p>
         <p className="text-base font-bold text-ink truncate">{CLASH_DAY_LABEL[clashDay]}</p>
       </div>
     </div>

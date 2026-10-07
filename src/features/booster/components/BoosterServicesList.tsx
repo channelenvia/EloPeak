@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { Card } from '@/components/ui/Card'
 import { Plus, Package, ChevronDown } from 'lucide-react'
 import { Button, Modal, Skeleton } from '@/components/ui'
 import { cn } from '@/lib/utils'
@@ -84,7 +86,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
   const canAdd = services.length < MAX_SERVICES
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -107,13 +109,13 @@ export function BoosterServicesList({ userId }: { userId: string }) {
             {services.length}/{MAX_SERVICES}
           </span>
           {canAdd && !adding && (
-            <button
+            <Button
               onClick={() => { setOpen(true); setAdding(true) }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand/90 transition-colors"
+              variant="primary" size="md"
             >
               <Plus className="h-4 w-4" />
               Adicionar
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -134,15 +136,15 @@ export function BoosterServicesList({ userId }: { userId: string }) {
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card p-5 space-y-3">
+            <Card key={i} variant="standard" padding="md" className="space-y-3">
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-3 w-1/2" />
-            </div>
+            </Card>
           ))}
         </div>
       ) : services.length === 0 && !adding ? (
-        <div className="card flex flex-col items-center justify-center py-12 text-center gap-4">
+        <Card variant="standard" padding="none" className="flex flex-col items-center justify-center py-12 text-center gap-4">
           <div className="h-10 w-10 rounded-2xl bg-bg-raised flex items-center justify-center">
             <Package className="h-5 w-5 text-ink-muted" />
           </div>
@@ -150,14 +152,14 @@ export function BoosterServicesList({ userId }: { userId: string }) {
             <p className="font-semibold text-ink text-sm">Você ainda não cadastrou nenhum serviço.</p>
             <p className="text-xs text-ink-muted mt-1">Adicione até {MAX_SERVICES} serviços para oferecer aos clientes.</p>
           </div>
-          <button
+          <Button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand/90 transition-colors"
+            variant="primary" size="md"
           >
             <Plus className="h-4 w-4" />
             Criar primeiro serviço
-          </button>
-        </div>
+          </Button>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {services.map(service =>
@@ -192,8 +194,8 @@ export function BoosterServicesList({ userId }: { userId: string }) {
         title="Excluir serviço"
         description={`Tem certeza que deseja excluir "${services.find((s) => s.id === confirmDeleteId)?.title ?? 'este serviço'}"? Essa ação não pode ser desfeita.`}
       >
-        <div className="flex gap-3 justify-end pt-2">
-          <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
+        <ActionBar>
+          <Button disabled={deletingId === confirmDeleteId} variant="secondary" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
           <Button
             variant="danger"
             loading={deletingId === confirmDeleteId}
@@ -201,7 +203,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
           >
             Excluir
           </Button>
-        </div>
+        </ActionBar>
       </Modal>
     </div>
   )

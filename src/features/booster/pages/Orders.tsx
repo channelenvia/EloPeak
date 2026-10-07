@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { ShoppingBag } from 'lucide-react'
-import { EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { EmptyState, Pagination, Skeleton } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
-import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
+import { OrderListToolbar } from '@/components/order/OrderListToolbar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
-import { OrderStatusFilterDropdown } from '@/components/order/OrderStatusFilterDropdown'
 import { useOrderStatusFilter } from '@/components/order/useOrderStatusFilter'
 import { useBoosterOrdersPage, useBoosterOrderTabCounts } from '@/api/orders'
 import { useOwnBoosterTop3Status } from '@/api/boosters'
+import { sortOrdersByStatusPriority } from '@/lib/orderStatusPriority'
 
 const PAGE_SIZE = 12
 
 export function BoosterOrdersPage() {
   const { profile } = useAuthStore()
-  const statusFilter = useOrderStatusFilter('in_progress')
+  const statusFilter = useOrderStatusFilter()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
@@ -26,8 +28,11 @@ export function BoosterOrdersPage() {
   const rawOrders = data?.orders ?? []
   const serviceFilters = useServiceFilters(rawOrders)
   const subCounts = statusFilter.subFilterCounts(serviceFilters.filtered)
-  const orders = statusFilter.applySubFilters(serviceFilters.filtered)
-    .filter((o) => !search || o.id.toLowerCase().includes(search.toLowerCase()))
+  const orders = sortOrdersByStatusPriority(
+    statusFilter.applySubFilters(serviceFilters.filtered)
+      .filter((o) => !search || o.id.toLowerCase().includes(search.toLowerCase())),
+    'booster',
+  )
   const hasNextPage = data?.nextOffset !== undefined
 
   // Paginação é do servidor (useBoosterOrdersPage busca só a página atual),
@@ -44,64 +49,28 @@ export function BoosterOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink">Pedidos</h1>
-        <p className="text-sm text-ink-secondary mt-1">Todos os pedidos atribuídos a você, organizados por status.</p>
-      </div>
+      <PageHeader title="Pedidos" description="Todos os pedidos atribuídos a você, organizados por status." />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            wrapperClassName="w-full sm:w-64 shrink-0"
-            placeholder="Buscar por ID do pedido..."
-            aria-label="Buscar por ID do pedido"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <OrderStatusFilterDropdown
-            tab={statusFilter.tab}
-            onTabChange={statusFilter.setTab}
-            counts={tabCounts}
-            dropped={statusFilter.dropped}
-            onDroppedChange={statusFilter.setDropped}
-            droppedCount={subCounts.dropped}
-            overdue={statusFilter.overdue}
-            onOverdueChange={statusFilter.setOverdue}
-            overdueCount={subCounts.overdue}
-            includeCanceled={statusFilter.includeCanceled}
-            onIncludeCanceledChange={statusFilter.setIncludeCanceled}
-          />
-        </div>
-        <ServiceFilterBar
-          category={serviceFilters.category}
-          onCategoryChange={serviceFilters.setCategory}
-          counts={serviceFilters.counts}
-          queue={serviceFilters.queue}
-          onQueueChange={serviceFilters.setQueue}
-          queueCounts={serviceFilters.queueCounts}
-          mode={serviceFilters.mode}
-          onModeChange={serviceFilters.setMode}
-          modeCounts={serviceFilters.modeCounts}
-          clashTier={serviceFilters.clashTier}
-          onClashTierChange={serviceFilters.setClashTier}
-          clashTierCounts={serviceFilters.clashTierCounts}
-          clashDay={serviceFilters.clashDay}
-          onClashDayChange={serviceFilters.setClashDay}
-          clashDayCounts={serviceFilters.clashDayCounts}
-        />
-      </div>
+      <OrderListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        statusFilter={statusFilter}
+        tabCounts={tabCounts}
+        subCounts={subCounts}
+        serviceFilters={serviceFilters}
+      />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CardGrid >
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-        </div>
+        </CardGrid>
       ) : !orders.length ? (
         <EmptyState icon={ShoppingBag} title="Nenhum pedido encontrado" description="Pedidos nesse status aparecerão aqui." />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {orders.map((order) => <CompletedOrderCard key={order.id} order={order} isTop3={isTop3} />)}
-          </div>
+          </CardGrid>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
         </>
       )}

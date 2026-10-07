@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { m, AnimatePresence } from 'framer-motion'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useOrderBuilderStore, type OrderBuilderStep } from '@/stores/orderBuilderStore'
@@ -122,6 +124,7 @@ export function OrderBuilderPage() {
   // pagamento". Sair aqui reseta o configurador de propósito -- o pedido em
   // si nunca é cancelado, continua pagável em Meus Pedidos.
   const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false)
   const currency = useCurrency()
   const pendingOrderId = searchParams.get('order')
   const explicitlyStartingNewOrder = searchParams.get('new') === '1'
@@ -221,13 +224,14 @@ export function OrderBuilderPage() {
     setSearchParams({ new: '1' }, { replace: true })
   }
 
-  // "Reiniciar" na aside -- mesmo destino de confirmExitPixModal, só que
-  // pede confirmação primeiro quando já existe pedido persistido.
+  // "Reiniciar" na aside -- mesmo destino de confirmExitPixModal, mas sempre
+  // pede confirmação antes de descartar a configuração.
   function handleReiniciarClick() {
-    if (pendingOrderId) {
-      setShowExitConfirm(true)
-      return
-    }
+    setShowRestartConfirm(true)
+  }
+
+  function confirmRestart() {
+    setShowRestartConfirm(false)
     confirmExitPixModal()
   }
 
@@ -377,7 +381,8 @@ export function OrderBuilderPage() {
   const discountPrice = coupon?.couponApplied ? coupon.discountPrice : 0
   const totalPrice = subtotal - discountPrice
   const canGoBack = currentIdx > 0 && step !== 'payment'
-  const isLastStep = currentIdx === steps.length - 1
+  // 'payment' é só o popup do PIX, aberto por "Pagar" -- a Revisão é o último passo navegável.
+  const isReviewStep = step === 'review'
   // Aside só existe a partir do step 2 -- no step 'service' o cliente pode
   // clicar em qualquer card sem a tela encolher; depende do step (não de
   // serviceType, senão encolheria antes de "Continuar", ainda no step 1).
@@ -392,11 +397,10 @@ export function OrderBuilderPage() {
     <div>
       {/* Stepper */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-ink mb-1">Novo Pedido</h1>
-        <p className="text-sm text-ink-secondary mb-6">Configure seu boost e extras abaixo.</p>
+        <PageHeader title="Novo Pedido" description="Configure seu boost e extras abaixo." className="mb-6" />
 
         {preferredBoosterName && (
-          <div className="flex items-center gap-2.5 mb-6 rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm text-ink">
+          <div className="flex items-center gap-3 mb-6 rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm text-ink">
             <UserCheck className="h-4 w-4 text-brand shrink-0" />
             <span className="flex-1">
               Pedido vinculado a <span className="font-semibold">{preferredBoosterName}</span> — {serviceType === 'coaching'
@@ -423,11 +427,11 @@ export function OrderBuilderPage() {
       </div>
 
       {/* Grid (não flex) trava a proporção 70/30 só depois que a aside
-          existe; motion.div/layout anima o encolhimento em vez de um
+          existe; m.div/layout anima o encolhimento em vez de um
           salto seco de largura. */}
       <div className={cn('grid grid-cols-1 gap-6 lg:items-start', showSummary ? 'lg:grid-cols-10' : 'lg:grid-cols-1')}>
         {/* Main step content */}
-        <motion.div layout transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
+        <m.div layout transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
           <Card padding="lg" className="animate-fade-in">
             {step === 'service' ? <StepService fullWidth={!showSummary} /> : <StepContent />}
 
@@ -436,9 +440,9 @@ export function OrderBuilderPage() {
                 "Continuar" fica bloqueado ali (pagar é o par Reiniciar/
                 Pagar na aside). */}
             {step !== 'payment' && (
-              <div className="flex items-center justify-between mt-8 pt-5 border-t border-border-subtle">
+              <ActionBar className="mt-8 border-t border-border-subtle pt-5">
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   onClick={() => (step === 'review' ? goBackFromReview() : prevStep())}
                   disabled={!canGoBack}
                   leftIcon={<ChevronLeft className="h-4 w-4" />}
@@ -451,40 +455,55 @@ export function OrderBuilderPage() {
                     setStepAttempted(false)
                     nextStep()
                   }}
-                  disabled={riotLookupLoading || !stepComplete || isLastStep}
+                  disabled={riotLookupLoading || !stepComplete || isReviewStep}
                   rightIcon={<ChevronRight className="h-4 w-4" />}
                 >
                   Continuar
                 </Button>
-              </div>
+              </ActionBar>
             )}
           </Card>
 
           {/* Popup do PIX -- só abre por ação explícita na revisão. Dentro
               dele, o QR também só é gerado ao clicar em "Gerar PIX". */}
           {step === 'review' && (
-            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="2xl">
+            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="md">
               <StepPayment insideModal />
             </Modal>
           )}
+
+          <Modal open={showRestartConfirm} onOpenChange={setShowRestartConfirm} title="Reiniciar configuração?" maxWidth="sm">
+            <p className="text-sm text-ink-secondary">
+              Você vai perder toda a configuração deste pedido (serviço, ranks e extras) e voltar ao primeiro passo. Deseja realmente reiniciar?
+            </p>
+            {pendingOrderId && (
+              <p className="text-sm text-ink-secondary">
+                O pedido que você já gerou continua salvo em <strong className="text-ink">Meus Pedidos</strong>.
+              </p>
+            )}
+            <ActionBar>
+              <Button variant="secondary" onClick={() => setShowRestartConfirm(false)}>Cancelar</Button>
+              <Button variant="danger" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={confirmRestart}>Reiniciar</Button>
+            </ActionBar>
+          </Modal>
 
           <Modal open={showExitConfirm} onOpenChange={setShowExitConfirm} title="Sair sem pagar?" maxWidth="sm">
             <p className="text-sm text-ink-secondary">
               Seu configurador será reiniciado, mas seu pedido continua salvo — você pode pagar a qualquer momento na aba <strong className="text-ink">Meus Pedidos</strong>.
             </p>
-            <div className="flex gap-2.5 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setShowExitConfirm(false)}>Continuar pagamento</Button>
+            <ActionBar>
+              <Button variant="secondary" onClick={() => setShowExitConfirm(false)}>Continuar pagamento</Button>
               <Button variant="danger" onClick={confirmExitPixModal}>Sair e reiniciar</Button>
-            </div>
+            </ActionBar>
           </Modal>
-        </motion.div>
+        </m.div>
 
         {/* Summary panel — só existe a partir do step 2 (ver showSummary).
             AnimatePresence anima a entrada em sincronia com o encolhimento
             do conteúdo principal, os dois disparados pela troca de step. */}
         <AnimatePresence>
           {showSummary && (
-            <motion.aside
+            <m.aside
               key="summary"
               layout
               initial={{ opacity: 0, x: 32 }}
@@ -493,14 +512,14 @@ export function OrderBuilderPage() {
               transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
               className="lg:col-span-3"
             >
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* variant flat (sem blur/sombra/transparência) -- o card
                 "vidro" padrão, isolado nessa coluna estreita, lia como um
                 painel flutuando por cima da página; a coluna da esquerda
                 não tem esse problema porque o Card lá ocupa quase toda a
                 largura, então a mesma sombra/blur não chama atenção. */}
             <Card padding="lg" className="shadow-none backdrop-blur-none bg-bg-surface">
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <div className="flex justify-between text-xs">
                   <span className="text-ink-secondary">Preço base</span>
                   <span className="text-ink">{currency(basePrice)}</span>
@@ -557,19 +576,14 @@ export function OrderBuilderPage() {
                     espelhando o ChevronLeft do Voltar); Pagar abre o popup do
                     PIX (mesmo ChevronRight do Continuar, indicando avanço). */}
                 {step === 'review' && (
-                  <div className="flex gap-2.5 pt-4">
-                    <Button
-                      variant="ghost"
-                      onClick={handleReiniciarClick}
-                      className="shrink-0"
-                      leftIcon={<RotateCcw className="h-4 w-4" />}
-                    >
+                  <ActionBar className="pt-4">
+                    <Button variant="secondary" onClick={handleReiniciarClick} leftIcon={<RotateCcw className="h-4 w-4" />}>
                       Reiniciar
                     </Button>
-                    <Button onClick={() => setPixModalOpen(true)} className="flex-1" rightIcon={<ChevronRight className="h-4 w-4" />}>
+                    <Button onClick={() => setPixModalOpen(true)} rightIcon={<ChevronRight className="h-4 w-4" />}>
                       {serviceType === 'coaching' ? 'Confirmar' : 'Pagar'}
                     </Button>
-                  </div>
+                  </ActionBar>
                 )}
               </div>
             </Card>
@@ -590,7 +604,7 @@ export function OrderBuilderPage() {
               </div>
             </Card>
           </div>
-            </motion.aside>
+            </m.aside>
           )}
         </AnimatePresence>
       </div>

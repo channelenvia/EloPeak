@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { callRpc } from '@/api/core/rpc'
 import { ApiError, assertRpcSuccess, normalizeApiError } from '@/api/core/errors'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import type { OnboardBoosterParams, UpdateProfessionalProfileParams } from './types'
@@ -42,9 +43,7 @@ export async function onboardBooster(params: OnboardBoosterParams) {
     p_cpf: params.cpf,
     p_available_days: params.availableDays,
   }
-  const { data, error } = await supabase.rpc('onboard_booster', args as never)
-  if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string }, PROFESSIONAL_PROFILE_MESSAGES)
+  return callRpc('onboard_booster', args as never, PROFESSIONAL_PROFILE_MESSAGES)
 }
 
 export async function updateProfessionalProfile(params: UpdateProfessionalProfileParams) {
@@ -68,9 +67,7 @@ export async function updateProfessionalProfile(params: UpdateProfessionalProfil
 }
 
 export async function adminApproveBooster(params: { boosterId: string; newStatus: 'approved' | 'rejected' | 'suspended' }) {
-  const { data, error } = await supabase.rpc('approve_booster', { p_booster_id: params.boosterId, p_new_status: params.newStatus })
-  if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string })
+  return callRpc('approve_booster', { p_booster_id: params.boosterId, p_new_status: params.newStatus })
 }
 
 export async function expelBooster(params: { boosterId: string; reason: string }) {
@@ -81,7 +78,5 @@ export async function expelBooster(params: { boosterId: string; reason: string }
 }
 
 export async function setBoosterAdminNote(params: { boosterId: string; note: string }) {
-  const { data, error } = await supabase.rpc('set_booster_admin_note', { p_booster_id: params.boosterId, p_note: params.note })
-  if (error) throw normalizeApiError(error)
-  return assertRpcSuccess(data as { success: boolean; error?: string })
+  return callRpc('set_booster_admin_note', { p_booster_id: params.boosterId, p_note: params.note })
 }

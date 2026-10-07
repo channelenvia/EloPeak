@@ -17,9 +17,8 @@ export function serviceCategoryOf(serviceType: ServiceType | null): ServiceCateg
 export const CLASH_TIERS: ClashTier[] = ['tier_4', 'tier_3', 'tier_2', 'tier_1']
 export const CLASH_DAYS: ClashDay[] = ['saturday', 'sunday']
 
-// Estado + lógica de filtro por serviço (e subtipos: fila pra Elo/Vitórias,
-// tier+dia pra Clash) -- extraído de AvailableJobs.tsx (booster) pra
-// reaproveitar o mesmo padrão em "Meus Pedidos" (cliente) e "Pedidos" (admin).
+// Estado e filtro por serviço (e subtipos: fila para Elo/Vitórias, tier+dia
+// para Clash), compartilhado pelas listas de pedido e pelo pool de jobs.
 export function useServiceFilters(orders: Order[] | undefined) {
   // "Elo Boost como principal" é só posição na lista (ver SERVICE_CATEGORIES
   // em ServiceFilterBar.tsx) -- o padrão selecionado continua 'all'. Este

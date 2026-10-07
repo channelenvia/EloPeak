@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { isPaymentConfirmed } from '@/lib/orderPayment'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/react/shallow'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -10,8 +11,10 @@ import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { applyCoupon } from '@/lib/pricing'
 import { getBoostFlow } from '@/lib/boostDomain'
-import { cn, isUuid } from '@/lib/utils'
+import { isUuid } from '@/lib/utils'
+import { ActionBar } from '@/components/ui/ActionBar'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
+import { useRealtimeInvalidate } from '@/api/core/realtime'
 import { getCustomerOrderState, savePendingOrderFromIntent, generatePix as generatePixRequest } from '@/api/orders'
 import type { PixPaymentResponse } from '@/api/orders'
 import { CheckCircle2, Clock, QrCode, ShieldCheck, ChevronLeft } from 'lucide-react'
@@ -39,8 +42,12 @@ function pixErrorMessage(err: unknown) {
   if (err.status === 403) {
     return `A função recusou a operação${err.code ? ` (${err.code})` : ''}. Entre novamente e tente outra vez.`
   }
+  if (err.status === 429) {
+    const seconds = Math.max(1, Math.ceil(err.retryAfter ?? 10))
+    return `Muitas tentativas seguidas. Aguarde ${seconds}s e tente novamente.`
+  }
   if (err.status >= 500) {
-    return `A função de PIX falhou no servidor${err.code ? ` (${err.code})` : ''}: ${err.message}`
+    return 'Não foi possível gerar o PIX agora. Tente novamente em instantes.'
   }
 
   return err.message
@@ -110,9 +117,11 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   const [savedOrderId, setSavedOrderId] = useState<string | null>(pendingOrderId)
   const [savedTotalPrice, setSavedTotalPrice] = useState<number | null>(null)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  // Só gera o PIX automático depois da checagem do pedido já existente (?order=).
+  const [restoreDone, setRestoreDone] = useState(!pendingOrderId)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
-  const pollRef = useRef<number | null>(null)
+  const generatingRef = useRef(false)
   const qrRetryTimeoutRef = useRef<number | null>(null)
   const idempotencyKeyRef = useRef(crypto.randomUUID())
   const restoredOrderRef = useRef<string | null>(null)
@@ -162,7 +171,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       expiryHandledRef.current = true
       const orderId = pix.order_id
       setPix({ phase: 'expired', order_id: orderId })
-      stopPolling()
 
       void invokeEdgeFunction('cancel-pending-order', {
         body: { order_id: orderId },
@@ -172,8 +180,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         // A confirmation can race the final second of the countdown. Never
         // discard a payment that the backend already marked as approved.
         const state = await getCustomerOrderState(orderId).catch(() => null)
-        if (state?.payment_confirmed) {
-          const requiresCredentials = state.requires_credentials === true
+        if (isPaymentConfirmed(state)) {
+          const requiresCredentials = state?.requires_credentials === true
           setPix({ phase: 'confirmed' })
           store.reset()
           navigate(`/orders/${orderId}${requiresCredentials ? '#credentials' : ''}`, { replace: true })
@@ -190,13 +198,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining, pix.phase])
 
-  function stopPolling() {
-    if (pollRef.current !== null) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }
-
   function stopQrRetry() {
     if (qrRetryTimeoutRef.current !== null) {
       clearTimeout(qrRetryTimeoutRef.current)
@@ -204,24 +205,40 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     }
   }
 
-  // Poll order status every 5s until confirmed or expired
-  function startPolling(orderId: string) {
-    stopPolling()
-    pollRef.current = window.setInterval(async () => {
-      const state = await getCustomerOrderState(orderId).catch(() => null)
+  // Confirmação do pagamento: query com refetch a cada 4s (pausa com a aba
+  // escondida, refaz ao voltar o foco) + Realtime em order_status_events, que
+  // dispara a checagem na hora em vez de esperar o próximo ciclo.
+  const watchedOrderId = pix.phase === 'waiting' ? pix.order_id : null
+  const { data: watchedState } = useQuery({
+    queryKey: ['pix-payment-state', watchedOrderId],
+    queryFn: () => getCustomerOrderState(watchedOrderId!),
+    enabled: !!watchedOrderId,
+    refetchInterval: 4000,
+    refetchOnWindowFocus: 'always',
+    retry: false,
+  })
+  useRealtimeInvalidate({
+    channel: `pix-${watchedOrderId ?? 'none'}`,
+    table: 'order_status_events',
+    event: 'INSERT',
+    filter: watchedOrderId ? `order_id=eq.${watchedOrderId}` : undefined,
+    queryKeys: [['pix-payment-state', watchedOrderId]],
+    enabled: !!watchedOrderId,
+  })
+  const confirmedHandledRef = useRef(false)
+  useEffect(() => {
+    if (!watchedOrderId || !isPaymentConfirmed(watchedState) || confirmedHandledRef.current) return
+    confirmedHandledRef.current = true
+    const requiresCredentials = watchedState?.requires_credentials === true
+    setPix({ phase: 'confirmed' })
+    store.reset()
+    // Sem cleanup de propósito: ao confirmar, watchedOrderId vira null e este
+    // efeito roda de novo -- um clearTimeout aqui cancelaria o redirecionamento.
+    window.setTimeout(() => navigate(`/orders/${watchedOrderId}${requiresCredentials ? '#credentials' : ''}`, { replace: true }), 1500)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedOrderId, watchedState?.payment_confirmed, watchedState?.payment_status])
 
-      if (state?.payment_confirmed) {
-        const requiresCredentials = state.requires_credentials === true
-        stopPolling()
-        setPix({ phase: 'confirmed' })
-        store.reset()
-        setTimeout(() => navigate(`/orders/${orderId}${requiresCredentials ? '#credentials' : ''}`), 2500)
-      }
-    }, 5000)
-  }
-
-
-  useEffect(() => () => { stopPolling(); stopQrRetry() }, [])
+  useEffect(() => () => { stopQrRetry() }, [])
 
   // Cancela o pedido pendente no servidor (mesma edge function usada quando
   // o PIX expira sozinho) em vez de só abandonar o wizard localmente --
@@ -230,7 +247,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     if (pix.phase !== 'waiting' || isCancelling) return
     const orderId = pix.order_id
     setIsCancelling(true)
-    stopPolling()
 
     try {
       await invokeEdgeFunction('cancel-pending-order', {
@@ -243,8 +259,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       // pagamento pode ter chegado bem na hora do cancelamento -- nunca
       // descarta um pagamento que o backend já marcou como aprovado.
       const state = await getCustomerOrderState(orderId).catch(() => null)
-      if (state?.payment_confirmed) {
-        const requiresCredentials = state.requires_credentials === true
+      if (isPaymentConfirmed(state)) {
+        const requiresCredentials = state?.requires_credentials === true
         setPix({ phase: 'confirmed' })
         store.reset()
         navigate(`/orders/${orderId}${requiresCredentials ? '#credentials' : ''}`, { replace: true })
@@ -469,7 +485,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       }, 3000)
     }
 
-    startPolling(orderId)
   }
 
   // Ao voltar com um pedido já criado, valida apenas se ele ainda pode ser
@@ -483,8 +498,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     setIsSavingOrder(true)
     void (async () => {
       const state = await getCustomerOrderState(pendingOrderId).catch(() => null)
-      if (state?.payment_confirmed) {
-        const requiresCredentials = state.requires_credentials === true
+      if (isPaymentConfirmed(state)) {
+        const requiresCredentials = state?.requires_credentials === true
         navigate(`/orders/${pendingOrderId}${requiresCredentials ? '#credentials' : ''}`, { replace: true })
         return
       }
@@ -504,6 +519,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       setSaveError(pixErrorMessage(err))
     }).finally(() => {
       setIsSavingOrder(false)
+      setRestoreDone(true)
     })
     // Só na chegada do pendingOrderId -- invokePix/navigate são estáveis o
     // suficiente pro propósito deste efeito (roda uma vez por order id, via
@@ -512,7 +528,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   }, [pendingOrderId, profile])
 
   function startNewOrder() {
-    stopPolling()
     stopQrRetry()
     store.reset()
     store.setStep('service')
@@ -526,14 +541,14 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   }
 
   async function generatePix() {
-    if (!profile) return
-    if (pix.phase === 'generating') return
+    if (!profile || generatingRef.current) return
 
     if (!catalogReady) {
       setPix({ phase: 'error', message: 'Ainda carregando o catálogo — aguarde um instante e tente novamente.' })
       return
     }
 
+    generatingRef.current = true
     try {
       const erroredOrderId = pix.phase === 'error' ? pix.order_id : undefined
       const orderId = erroredOrderId ?? savedOrderId ?? pendingOrderId ?? await persistPendingOrder()
@@ -542,8 +557,22 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       await invokePix(orderId)
     } catch (err) {
       setPix({ phase: 'error', message: err instanceof Error ? err.message : 'Erro desconhecido' })
+    } finally {
+      generatingRef.current = false
     }
   }
+
+  // "Pagar" na Revisão já é o clique explícito: ao abrir o popup, o PIX é
+  // gerado direto (sem um segundo "Gerar PIX"). Só uma vez por abertura --
+  // se falhar, o botão de tentar de novo continua disponível.
+  const autoStartedRef = useRef(false)
+  useEffect(() => {
+    if (!insideModal || autoStartedRef.current) return
+    if (pix.phase !== 'idle' || !restoreDone || !profile || totalPrice <= 0 || !catalogReady || !addonsReady || isSavingOrder) return
+    autoStartedRef.current = true
+    void generatePix()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insideModal, pix.phase, restoreDone, profile, totalPrice, catalogReady, addonsReady, isSavingOrder])
 
   async function copyPix() {
     if (pix.phase !== 'waiting') return
@@ -603,7 +632,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
 
   // ── Idle / Generating (initial state) ────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Título/descrição só quando NÃO está dentro do Modal do popup --
           o Modal já mostra "Pagamento via PIX" no próprio cabeçalho
           (ver OrderBuilder.tsx); repetir aqui duplicava o título. Continua
@@ -625,49 +654,45 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
           <p className="text-2xl font-extrabold text-ink mt-0.5">{currency(totalPrice)}</p>
         </div>
         <div className="h-12 w-12 rounded-2xl bg-brand flex items-center justify-center shadow-brand">
-          <QrCode className="h-6 w-6 text-white" />
+          <QrCode className="h-6 w-6 text-ink-inverse" />
         </div>
       </div>
 
-      <div className="space-y-2">
-        {[
-          '1. Clique em "Gerar PIX" abaixo',
-          '2. Escaneie o QR code ou copie o código no app do seu banco',
-          '3. Confirme o pagamento — seu pedido entra na fila automaticamente',
-        ].map((step) => (
-          <div key={step} className="flex items-center gap-2.5 text-xs text-ink-secondary">
-            <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
-            {step}
-          </div>
-        ))}
-      </div>
+      {insideModal ? (
+        pix.phase !== 'error' && (
+          <p className="text-center text-sm text-ink-secondary">Gerando seu PIX… o QR code aparece aqui em instantes.</p>
+        )
+      ) : (
+        <div className="space-y-2">
+          {[
+            '1. Clique em "Gerar PIX" abaixo',
+            '2. Escaneie o QR code ou copie o código no app do seu banco',
+            '3. Confirme o pagamento — seu pedido entra na fila automaticamente',
+          ].map((step) => (
+            <div key={step} className="flex items-center gap-3 text-xs text-ink-secondary">
+              <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+              {step}
+            </div>
+          ))}
+        </div>
+      )}
 
       {pix.phase === 'error' && <ErrorAlert message={pix.message} />}
       {saveError && pix.phase !== 'error' && <ErrorAlert message={saveError} />}
 
-      <div className={cn('flex items-center', insideModal ? 'justify-center' : 'justify-between')}>
-        {/* "Voltar" (troca de step do wizard) não faz sentido dentro do
-            popup -- fechar o popup (X do Modal) já volta pra revisão, que
-            continua por baixo. */}
+      <ActionBar>
+        {/* Dentro do popup não há "Voltar": fechar o popup (X) já volta pra
+            revisão, que continua por baixo. */}
         {!insideModal && (
-          <Button
-            size="lg"
-            variant="ghost"
-            onClick={store.prevStep}
-            leftIcon={<ChevronLeft className="h-4 w-4" />}
-            className="w-40 shrink-0"
-          >
+          <Button variant="secondary" onClick={store.prevStep} leftIcon={<ChevronLeft className="h-4 w-4" />}>
             Voltar
           </Button>
         )}
-
         <Button
-          size="lg"
           loading={pix.phase === 'generating'}
           onClick={generatePix}
           disabled={totalPrice <= 0 || !catalogReady || !addonsReady || isSavingOrder}
           leftIcon={<QrCode className="h-4 w-4" />}
-          className="w-40 shrink-0"
         >
           {!catalogReady || !addonsReady
             ? 'Carregando…'
@@ -677,13 +702,13 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
                 ? 'Gerando…'
                 : 'Gerar PIX'}
         </Button>
-      </div>
+      </ActionBar>
 
       {totalPrice <= 0 && (
         <p className="text-xs text-danger text-center">Configure seu pedido para ver o preço.</p>
       )}
 
-      <div className="flex items-start gap-2.5 text-xs text-ink-muted">
+      <div className="flex items-start gap-3 text-xs text-ink-muted">
         <ShieldCheck className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
         Processado pelo Mercado Pago. Não armazenamos seus dados bancários.
       </div>

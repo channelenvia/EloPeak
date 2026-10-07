@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
 import { useMutation } from '@tanstack/react-query'
 import { Copy, KeyRound, RefreshCcw } from 'lucide-react'
 import { Button, ErrorAlert, RankBadge } from '@/components/ui'
@@ -111,14 +112,14 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
         <button
           type="button"
           onClick={() => setAccountSource('platform')}
-          className={`rounded-lg py-1.5 text-xs font-semibold transition-colors ${accountSource === 'platform' ? 'bg-bg-surface text-ink shadow-sm' : 'text-ink-muted'}`}
+          className={`rounded-lg py-1.5 text-xs font-semibold transition-colors ${accountSource === 'platform' ? 'bg-bg-surface text-ink shadow-xs' : 'text-ink-muted'}`}
         >
           Conta da plataforma
         </button>
         <button
           type="button"
           onClick={() => setAccountSource('own')}
-          className={`rounded-lg py-1.5 text-xs font-semibold transition-colors ${accountSource === 'own' ? 'bg-bg-surface text-ink shadow-sm' : 'text-ink-muted'}`}
+          className={`rounded-lg py-1.5 text-xs font-semibold transition-colors ${accountSource === 'own' ? 'bg-bg-surface text-ink shadow-xs' : 'text-ink-muted'}`}
         >
           Conta própria
         </button>
@@ -161,7 +162,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
           )}
         </div>
       ) : isLoading ? (
-        <p className="text-xs text-ink-muted">Carregando contas...</p>
+        <p className="text-xs text-ink-muted">Carregando contas…</p>
       ) : reserved && !switching ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between bg-bg-raised rounded-xl px-3 py-2.5">
@@ -185,11 +186,11 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
 
           {accessToken ? (
             <div className="space-y-2">
-              <textarea readOnly value={accessToken} className="input-base w-full min-h-[80px] text-[11px] font-mono resize-none" spellCheck={false} />
+              <textarea readOnly value={accessToken} className="input-base w-full min-h-[80px] text-xs font-mono resize-none" spellCheck={false} />
               <Button size="sm" className="w-full" variant={tokenCopied ? 'success' : 'secondary'} leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copyToken()}>
-                {tokenCopied ? 'Copiado' : 'Copiar token'}
+                {tokenCopied ? 'Copiado!' : 'Copiar token'}
               </Button>
-              <p className="text-[10px] text-ink-muted">Use este token apenas no aplicativo autorizado — login e senha não são exibidos.</p>
+              <p className="text-2xs text-ink-muted">Use este token apenas no aplicativo autorizado — login e senha não são exibidos.</p>
             </div>
           ) : (
             <Button size="sm" className="w-full" leftIcon={<KeyRound className="h-3.5 w-3.5" />} loading={getToken.isPending} onClick={doGetToken}>
@@ -202,8 +203,8 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
         </div>
       ) : (
         <div className="space-y-2">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nick..." aria-label="Buscar conta duo" className="input-base w-full text-xs" />
-          <p className="text-[10px] text-ink-muted">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nick…" aria-label="Buscar conta duo" className="input-base w-full text-xs" />
+          <p className="text-2xs text-ink-muted">
             {clientStep != null
               ? `Contas filtradas automaticamente pelo elo do cliente (${clientStep <= DUO_RANK_WINDOW_EMERALD_I_STEP ? '±1 divisão' : '±2 subdivisões'}).`
               : 'Sem elo atual do cliente pra filtrar — mostrando todas as contas disponíveis.'}
@@ -218,26 +219,28 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
                   key={a.id}
                   type="button"
                   onClick={() => setSelectedAccountId(a.id)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
                     selectedAccountId === a.id ? 'border-brand bg-brand/10' : 'border-border-subtle hover:bg-bg-raised/60'
                   }`}
                 >
                   {a.current_rank && <RankBadge tier={a.current_rank.tier} division={a.current_rank.division} size="xs" showLabel={false} />}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-ink">{a.riot_id ?? a.label}</p>
-                    {a.current_rank && <p className="text-[10px] text-ink-muted">{RANK_TIER_LABEL[a.current_rank.tier]} {a.current_rank.division}</p>}
+                    {a.current_rank && <p className="text-2xs text-ink-muted">{RANK_TIER_LABEL[a.current_rank.tier]} {a.current_rank.division}</p>}
                   </div>
                 </button>
               ))}
             </div>
           )}
 
-          <Button size="sm" className="w-full" disabled={!selectedAccountId} loading={reserve.isPending} onClick={doReserve}>
-            Reservar esta conta
-          </Button>
-          {switching && (
-            <Button size="sm" variant="ghost" className="w-full" onClick={() => setSwitching(false)}>Cancelar</Button>
-          )}
+          <ActionBar>
+            {switching && (
+              <Button variant="secondary" disabled={reserve.isPending} onClick={() => setSwitching(false)}>Cancelar</Button>
+            )}
+            <Button disabled={!selectedAccountId} loading={reserve.isPending} onClick={doReserve}>
+              Reservar esta conta
+            </Button>
+          </ActionBar>
           {reserve.isError && (
             <ErrorAlert message={reserve.error instanceof Error ? reserveErrorMessage(reserve.error.message) : 'Erro ao reservar conta'} />
           )}

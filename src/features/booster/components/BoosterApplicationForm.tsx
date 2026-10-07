@@ -29,7 +29,7 @@ const schema = z.object({
   cpf:               z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, 'CPF inválido (ex: 000.000.000-00)'),
   opgg_link:         z.string().min(1, 'Link do OP.GG obrigatório').url('URL inválida'),
   bio:               z.string().min(1, 'Conte um pouco sobre você').max(256, 'Máximo 256 caracteres'),
-  peak_tier:         z.enum(['grandmaster', 'challenger'], { required_error: 'Selecione seu rank de pico' }),
+  peak_tier:         z.enum(['grandmaster', 'challenger'], { error: 'Selecione seu rank de pico' }),
   available_days:    z.array(z.string()).min(1, 'Selecione ao menos um dia'),
   hours_per_day_min: z.coerce.number().min(1).max(24),
   hours_per_day_max: z.coerce.number().min(1).max(24),
@@ -38,7 +38,8 @@ const schema = z.object({
   message: 'O máximo deve ser maior ou igual ao mínimo',
 })
 
-type FormData = z.infer<typeof schema>
+type FormInput = z.input<typeof schema>
+type FormData = z.output<typeof schema>
 
 interface BoosterApplicationFormProps {
   submitLabel?: string
@@ -63,7 +64,7 @@ export function BoosterApplicationForm({
   const {
     register, handleSubmit, setValue, watch,
     formState: { errors, isSubmitting },
-  } = useForm<FormData>({
+  } = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(schema),
     values: {
       full_name:         initialData?.full_name ?? '',
@@ -141,7 +142,7 @@ export function BoosterApplicationForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <Card padding="md">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-1">Dados Pessoais</p>
+        <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted mb-1">Dados Pessoais</p>
         <p className="text-xs text-ink-muted mb-4">Usados para pagamentos via PIX. Não serão exibidos publicamente.</p>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -170,7 +171,7 @@ export function BoosterApplicationForm({
       </Card>
 
       <Card padding="md">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-4">Conta de Jogo</p>
+        <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted mb-4">Conta de Jogo</p>
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label htmlFor="booster-application-opgg-link" className="text-xs text-ink-muted">Link do OP.GG</label>
@@ -188,18 +189,18 @@ export function BoosterApplicationForm({
               id="booster-application-bio"
               {...register('bio')}
               rows={3}
-              placeholder="Jogador GM há 2 temporadas, especialista em mid-lane..."
+              placeholder="Jogador GM há 2 temporadas, especialista em mid-lane…"
               maxLength={256}
               className="input-base w-full text-sm resize-none"
             />
-            <p className="text-[10px] text-ink-muted text-right">{bioValue.length}/256</p>
+            <p className="text-2xs text-ink-muted text-right">{bioValue.length}/256</p>
             {errors.bio && <p className="text-xs text-danger">{errors.bio.message}</p>}
           </div>
         </div>
       </Card>
 
       <Card padding="md">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-3">Rank de Pico</p>
+        <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted mb-3">Rank de Pico</p>
         <div className="grid grid-cols-2 gap-3">
           {PEAK_OPTIONS.map(({ value, label }) => (
             <button
@@ -221,7 +222,7 @@ export function BoosterApplicationForm({
       </Card>
 
       <Card padding="md">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-4">Disponibilidade</p>
+        <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted mb-4">Disponibilidade</p>
 
         <div className="mb-1">
           <p className="text-xs text-ink-muted mb-2">Dias disponíveis</p>

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { CardGrid } from '@/components/ui/CardGrid'
+import { InlineEmpty } from '@/components/ui/EmptyState'
 import { Briefcase, Clock, Sparkles } from 'lucide-react'
 import { Button, Card, Skeleton, ErrorAlert } from '@/components/ui'
 import { RankPerformanceBreakdown } from '@/components/rank/RankPerformanceBreakdown'
@@ -101,19 +103,19 @@ export function BoosterDashboard() {
       <div>
         <h3 className="text-base font-semibold text-ink mb-3">Fila de pedidos</h3>
         {queueLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-          </div>
+          </CardGrid>
         ) : activeOrdersError || monthOrdersError ? (
           <ErrorAlert message="Não foi possível carregar seus pedidos." />
         ) : !queue.length ? (
           <Card padding="md">
-            <p className="text-sm text-ink-muted text-center py-4">Nenhum pedido em andamento ou concluído neste mês ainda.</p>
+            <InlineEmpty>Nenhum pedido em andamento ou concluído neste mês ainda.</InlineEmpty>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {queue.slice(0, 9).map((order) => <CompletedOrderCard key={order.id} order={order} isTop3={boosterProfile?.is_top3} />)}
-          </div>
+          </CardGrid>
         )}
       </div>
     </div>

@@ -85,7 +85,7 @@ function ChampionCaptcha({ onSuccess }: { onSuccess: () => void }) {
   if (!iconUrl) {
     return (
       <div className="py-10 flex items-center justify-center">
-        <span className="text-sm text-ink-secondary">Carregando desafio...</span>
+        <span className="text-sm text-ink-secondary">Carregando desafio…</span>
       </div>
     )
   }

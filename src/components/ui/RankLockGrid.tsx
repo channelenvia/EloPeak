@@ -26,8 +26,6 @@ interface RankLockGridProps {
   additionalLockedTitle?: string
 }
 
-// Fallback de imagem (live -> local -> ícone) agora vem do RankIcon
-// compartilhado (RankBadge.tsx) — antes reimplementado aqui em paralelo.
 function TierButton({ tier, isSelected, isLocked, lockedTitle, onClick }: {
   tier: RankTier; isSelected: boolean; isLocked: boolean; lockedTitle?: string; onClick: () => void
 }) {
@@ -41,7 +39,7 @@ function TierButton({ tier, isSelected, isLocked, lockedTitle, onClick }: {
       title={isLocked ? (lockedTitle ?? 'Rank já alcançado ou abaixo do atual') : undefined}
     >
       <RankIcon tier={tier} imgClass="w-8 h-8" iconClass="w-7 h-7" />
-      <span className={cn('text-[8px] font-semibold text-center leading-none', isSelected ? 'text-brand' : 'text-ink-secondary')}>
+      <span className={cn('text-2xs font-semibold text-center leading-none', isSelected ? 'text-brand' : 'text-ink-secondary')}>
         {RANK_TIER_LABEL[tier]}
       </span>
     </SelectableTile>

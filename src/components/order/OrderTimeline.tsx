@@ -72,13 +72,13 @@ export function OrderTimeline({ history, bare = false }: { history: OrderStatusH
                   <div className={`h-7 w-7 rounded-full border-2 flex items-center justify-center shrink-0 z-10 ${
                     isCurrent ? ORDER_STATUS_ACCENT[entry.to_status] : 'border-border-subtle bg-bg-surface'
                   }`}>
-                    <StatusIcon className={`h-3.5 w-3.5 ${isCurrent ? 'text-white' : 'text-ink-muted'}`} />
+                    <StatusIcon className={`h-3.5 w-3.5 ${isCurrent ? 'text-ink-inverse' : 'text-ink-muted'}`} />
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-ink">
                       {ORDER_STATUS_LABEL[entry.to_status] ?? entry.to_status.replace(/_/g, ' ')}
                     </p>
-                    <p className="text-[10px] text-ink-muted mt-0.5">{timeAgo(entry.created_at)}</p>
+                    <p className="text-2xs text-ink-muted mt-0.5">{timeAgo(entry.created_at)}</p>
                     {entry.reason && <p className="text-xs text-ink-secondary mt-0.5">{entry.reason}</p>}
                   </div>
                 </div>

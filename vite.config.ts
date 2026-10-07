@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath } from 'node:url'
 
 export default defineConfig(({ mode }) => {
@@ -7,7 +8,7 @@ export default defineConfig(({ mode }) => {
   const supabaseUrl = env.VITE_SUPABASE_URL?.replace(/\/$/, '')
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -41,16 +42,12 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-query': ['@tanstack/react-query'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-charts': ['recharts'],
-            'vendor-motion': ['framer-motion'],
-            'vendor-radix': [
-              '@radix-ui/react-avatar', '@radix-ui/react-dialog',
-              '@radix-ui/react-slot',
-            ],
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined
+            if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'vendor-react'
+            if (id.includes('@tanstack/react-query')) return 'vendor-query'
+            if (id.includes('@supabase/')) return 'vendor-supabase'
+            return undefined
           },
         },
       },

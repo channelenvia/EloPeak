@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { CardGrid } from '@/components/ui/CardGrid'
 import { Plus, ShoppingBag, MessageCircle, Zap, Sparkles } from 'lucide-react'
 import { Button, Skeleton, EmptyState, StatCard } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
@@ -104,9 +105,9 @@ export function CustomerDashboard() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
-          </div>
+          </CardGrid>
         ) : !orders?.length ? (
           <EmptyState
             icon={ShoppingBag}
@@ -115,11 +116,11 @@ export function CustomerDashboard() {
             action={{ label: 'Começar Boost', onClick: () => navigate('/orders/new') }}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CardGrid >
             {recentOrders.slice(0, RECENT_ORDERS_GRID_LIMIT).map((order) => (
               <CustomerOrderCard key={order.id} order={order} currency={currency} />
             ))}
-          </div>
+          </CardGrid>
         )}
       </div>
     </div>

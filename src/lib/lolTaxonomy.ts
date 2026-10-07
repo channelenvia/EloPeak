@@ -15,17 +15,16 @@ export const LANES = [
 
 export const LANE_LABEL: Record<string, string> = Object.fromEntries(LANES.map(l => [l.key, l.label]))
 
-const LOL_POSITION_ASSET_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg'
 
-// Ícones oficiais usados pelo cliente do LoL, servidos pelo espelho de assets
-// do CommunityDragon. As chaves internas do produto são traduzidas para os
+// Ícones oficiais usados pelo cliente do LoL, copiados do espelho de assets
+// do CommunityDragon para public/lanes/ (a CDN leva ~20s por arquivo). As chaves internas do produto são traduzidas para os
 // nomes usados pelo cliente: bot -> bottom e support -> utility.
 export const LANE_ICON_URL: Record<string, string> = {
-  top: `${LOL_POSITION_ASSET_BASE}/position-top.svg`,
-  jungle: `${LOL_POSITION_ASSET_BASE}/position-jungle.svg`,
-  mid: `${LOL_POSITION_ASSET_BASE}/position-middle.svg`,
-  bot: `${LOL_POSITION_ASSET_BASE}/position-bottom.svg`,
-  support: `${LOL_POSITION_ASSET_BASE}/position-utility.svg`,
+  top: `/lanes/top.svg`,
+  jungle: `/lanes/jungle.svg`,
+  mid: `/lanes/middle.svg`,
+  bot: `/lanes/bottom.svg`,
+  support: `/lanes/utility.svg`,
 }
 
 // Complemento das 5 lanes contra as escolhidas pelo cliente em pedidos Duo
@@ -41,6 +40,15 @@ export function getAvailableLanes(customerLanes: string[] | null | undefined): s
 export interface LaneDisplayItem {
   label: string
   lanes: string[]
+  /** Texto da pill única quando as 5 rotas estão na lista (ver ServiceTagPills). */
+  allLabel?: string
+}
+
+export const ALL_LANES_AVAILABLE_LABEL = 'Todas disponíveis'
+export const ALL_LANES_LABEL = 'Todas as rotas'
+
+export function hasAllLanes(lanes: readonly string[] | null | undefined): boolean {
+  return !!lanes && LANES.every((l) => lanes.includes(l.key))
 }
 
 // service_types em que o conceito de rota existe -- mesma lista reforçada em
@@ -69,6 +77,7 @@ export function getLaneDisplayItems(
     return [{
       label: isDuo ? 'Rotas disponíveis' : 'Rotas pedidas pelo cliente',
       lanes: isDuo ? getAvailableLanes(chosen) : chosen,
+      allLabel: isDuo ? ALL_LANES_AVAILABLE_LABEL : undefined,
     }]
   }
   // admin -- vê os dois lados em duo (cliente e o que sobra pro booster);
@@ -76,7 +85,7 @@ export function getLaneDisplayItems(
   if (isDuo) {
     return [
       { label: 'Rotas do cliente', lanes: chosen },
-      { label: 'Rotas disponíveis pro booster', lanes: getAvailableLanes(chosen) },
+      { label: 'Rotas disponíveis pro booster', lanes: getAvailableLanes(chosen), allLabel: ALL_LANES_AVAILABLE_LABEL },
     ]
   }
   return [{ label: 'Rotas pedidas ao booster', lanes: chosen }]

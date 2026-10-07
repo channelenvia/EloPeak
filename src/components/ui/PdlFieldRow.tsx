@@ -59,7 +59,7 @@ function PdlField({ label, value, min, max, onChange, disabled }: PdlFieldProps)
 
   return (
     <div className="flex-1 min-w-0 space-y-1">
-      <p className="text-[10px] font-semibold text-ink-secondary">{label}</p>
+      <p className="text-2xs font-semibold text-ink-secondary">{label}</p>
       <div className="relative">
         <input
           type="text"
@@ -74,7 +74,7 @@ function PdlField({ label, value, min, max, onChange, disabled }: PdlFieldProps)
           PDL
         </span>
       </div>
-      {error && <p className="text-[11px] text-danger">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   )
 }

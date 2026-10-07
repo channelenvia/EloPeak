@@ -21,8 +21,7 @@
     // pra "só isso" -- sem "node" aqui, os testes de shared/*.test.ts que já
     // usavam fs/path/__dirname (node_modules/@types/node, já instalado)
     // parariam de compilar.
-    "types": ["node", "@testing-library/jest-dom"],
-    "baseUrl": ".",
+    "types": ["node", "@testing-library/jest-dom/vitest"],
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { InlineEmpty } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { Clock, DollarSign, CheckCircle2, Star, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -113,16 +116,16 @@ export function CoachPackagePicker() {
       </div>
 
       {/* Caixa de filtros */}
-      <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 p-4 space-y-3.5">
+      <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 p-4 space-y-4">
         {/* Cabeçalho: título + contador + limpar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4 text-brand" />
             <span className="text-sm font-bold text-ink">Filtros</span>
             {activeCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand/15 text-brand">
+              <Badge variant="brand">
                 {activeCount} {activeCount === 1 ? 'ativo' : 'ativos'}
-              </span>
+              </Badge>
             )}
           </div>
           {hasAnyFilter && (
@@ -142,7 +145,7 @@ export function CoachPackagePicker() {
           size="md"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nome do coach, título, descrição ou champion..."
+          placeholder="Buscar por nome do coach, título, descrição ou champion…"
           aria-label="Buscar pacotes de coach"
         />
 
@@ -168,9 +171,9 @@ export function CoachPackagePicker() {
 
       {/* Results */}
       {isLoading ? (
-        <p className="text-sm text-ink-muted py-6 text-center">Carregando pacotes...</p>
+        <p className="text-sm text-ink-muted py-6 text-center">Carregando pacotes…</p>
       ) : !filtered.length ? (
-        <p className="text-sm text-ink-muted py-6 text-center">Nenhum pacote encontrado com esses filtros.</p>
+        <InlineEmpty>Nenhum pacote encontrado com esses filtros.</InlineEmpty>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -205,7 +208,7 @@ export function CoachPackagePicker() {
                           </span>
                         )}
                         {booster.is_top3 && (
-                          <span className="text-[10px] font-bold bg-warning/10 text-warning border border-warning/20 rounded-lg px-2 py-0.5 uppercase tracking-wide">Top 3</span>
+                          <Badge variant="warning" size="tag">Top 3</Badge>
                         )}
                       </div>
                     )}
@@ -217,7 +220,7 @@ export function CoachPackagePicker() {
                       {p.tempo && (
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3 text-ink-muted" />
-                          <span className="text-[11px] text-ink-secondary">{p.tempo}</span>
+                          <span className="text-xs text-ink-secondary">{p.tempo}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-1 ml-auto">
@@ -233,25 +236,25 @@ export function CoachPackagePicker() {
 
           {pageCount > 1 && (
             <div className="flex items-center justify-center gap-4 pt-1">
-              <button
+              <Button
                 type="button"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 aria-label="Página anterior"
-                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                variant="ghost" size="icon-sm" className="disabled:hover:bg-transparent"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </button>
+              </Button>
               <span className="text-xs font-medium text-ink-secondary">Página {page} de {pageCount}</span>
-              <button
+              <Button
                 type="button"
                 onClick={() => setPage(p => Math.min(pageCount, p + 1))}
                 disabled={page === pageCount}
                 aria-label="Próxima página"
-                className="p-1.5 rounded-lg text-ink-secondary hover:text-ink hover:bg-bg-raised transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                variant="ghost" size="icon-sm" className="disabled:hover:bg-transparent"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           )}
         </>

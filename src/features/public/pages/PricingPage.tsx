@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Card } from '@/components/ui/Card'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, ChevronRight, PartyPopper, Tag } from 'lucide-react'
 import { Button, Modal, RankBadge } from '@/components/ui'
@@ -45,7 +46,7 @@ function PriceWithDiscount({
   const final = discountedPrice(price, serviceType)
   return (
     <span className={`inline-flex flex-col ${align === 'center' ? 'items-center' : 'items-end'} gap-0.5 animate-fade-in`}>
-      <span className="text-[10px] leading-none text-ink-muted line-through font-normal">{currency(price)}</span>
+      <span className="text-2xs leading-none text-ink-muted line-through font-normal">{currency(price)}</span>
       <span className={`${sizeClassName} text-ink`}>{currency(final)}</span>
     </span>
   )
@@ -101,15 +102,15 @@ function CoachingPricingSection() {
         Sessões individuais com nossos coaches — o valor de cada pacote é definido pelo coach escolhido.
       </p>
 
-      <div className="card p-5">
-        <div className="flex flex-col gap-2.5">
+      <Card variant="standard" padding="md">
+        <div className="flex flex-col gap-3">
           {COACHING_HIGHLIGHTS.map(item => (
             <span key={item} className="flex items-center gap-2 text-sm text-ink-secondary">
               <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />{item}
             </span>
           ))}
         </div>
-      </div>
+      </Card>
     </section>
   )
 }
@@ -132,7 +133,7 @@ function ClashPricingSection({ currency, discountRevealed }: { currency: (n: num
       <p className="text-sm text-ink-secondary mb-4">
         Preço fixo por tier — Solo Clash o booster joga na sua conta, Duo Clash você joga junto. Agendado sempre para {CLASH_DAYS.map(d => CLASH_DAY_LABEL[d]).join(' ou ')}.
       </p>
-      <div className="card overflow-hidden p-0">
+      <Card variant="standard" padding="none" className="overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b border-border-subtle">
             <tr>
@@ -177,7 +178,7 @@ function ClashPricingSection({ currency, discountRevealed }: { currency: (n: num
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
       <p className="text-xs text-ink-muted mt-2">O booster é responsável por organizar e montar o time necessário para a participação no Clash.</p>
     </section>
   )
@@ -216,7 +217,7 @@ export function PricingPage() {
           <p className="text-sm text-ink-secondary mb-4">
             Até Diamante, o preço é por divisão. Mestre e Grão-mestre pelo tiers completos, sem Duo.
           </p>
-          <div className="card overflow-hidden p-0">
+          <Card variant="standard" padding="none" className="overflow-hidden">
             <table className="w-full text-sm">
               <thead className="border-b border-border-subtle">
                 <tr>
@@ -282,7 +283,7 @@ export function PricingPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
           <p className="text-xs text-ink-muted mt-2">Abaixo de Mestre: média menor que 20 LP/partida aplica +10%; 20 LP/partida ou mais mantém o preço base.</p>
         </section>
 
@@ -295,24 +296,24 @@ export function PricingPage() {
               const price = getWinBoostPrice('solo_duo', tier, 'solo', null)
               const duoPrice = (isMasterPlusCurrentTier(tier) || tier === 'challenger') ? null : getWinBoostPrice('solo_duo', tier, 'duo', null)
               return (
-                <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
+                <Card key={tier} variant="standard" padding="sm" className="text-center flex flex-col items-center gap-1.5">
                   <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
                   <p className={`text-sm font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</p>
                   <PriceWithDiscount
                     price={price} serviceType="win_boost" discountRevealed={discountRevealed}
                     currency={currency} sizeClassName="text-xl font-extrabold" align="center"
                   />
-                  <p className="text-[10px] text-ink-muted mt-0.5">solo / vitória</p>
+                  <p className="text-2xs text-ink-muted mt-0.5">solo / vitória</p>
                   {duoPrice != null && (
                     <>
                       <PriceWithDiscount
                         price={duoPrice} serviceType="win_boost" discountRevealed={discountRevealed}
                         currency={currency} sizeClassName="text-sm font-bold text-ink-secondary" align="center"
                       />
-                      <p className="text-[10px] text-ink-muted">duo / vitória</p>
+                      <p className="text-2xs text-ink-muted">duo / vitória</p>
                     </>
                   )}
-                </div>
+                </Card>
               )
             })}
           </div>
@@ -326,24 +327,24 @@ export function PricingPage() {
                 const price = getMd5WinPrice('solo_duo', tier, 'solo') * 5
                 const duoPrice = isDuoBlockedAtTier(tier) ? null : getMd5WinPrice('solo_duo', tier, 'duo') * 5
                 return (
-                  <div key={tier} className="card p-4 text-center flex flex-col items-center gap-1.5">
+                  <Card key={tier} variant="standard" padding="sm" className="text-center flex flex-col items-center gap-1.5">
                     <RankBadge tier={tier} size="xs" showDivision={false} showLabel={false} />
                     <p className={`text-sm font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</p>
                     <PriceWithDiscount
                       price={price} serviceType="md5" discountRevealed={discountRevealed}
                       currency={currency} sizeClassName="text-xl font-extrabold" align="center"
                     />
-                    <p className="text-[10px] text-ink-muted mt-0.5">solo / pacote MD5</p>
+                    <p className="text-2xs text-ink-muted mt-0.5">solo / pacote MD5</p>
                     {duoPrice != null && (
                       <>
                         <PriceWithDiscount
                           price={duoPrice} serviceType="md5" discountRevealed={discountRevealed}
                           currency={currency} sizeClassName="text-sm font-bold text-ink-secondary" align="center"
                         />
-                        <p className="text-[10px] text-ink-muted">duo / pacote MD5</p>
+                        <p className="text-2xs text-ink-muted">duo / pacote MD5</p>
                       </>
                     )}
-                  </div>
+                  </Card>
                 )
               })}
             </div>

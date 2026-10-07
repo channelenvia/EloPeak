@@ -91,7 +91,7 @@ export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, break
           {expanded && (
             <div className="flex items-center gap-1.5 shrink-0">
               {roleBadge && (
-                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-md border', roleBadge.className)}>
+                <span className={cn('text-2xs font-bold px-2 py-0.5 rounded-md border', roleBadge.className)}>
                   {roleBadge.label}
                 </span>
               )}

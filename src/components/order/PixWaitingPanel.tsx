@@ -1,5 +1,6 @@
-import { Clock, Copy, CheckCircle2, QrCode, ShieldCheck, X } from 'lucide-react'
-import { Button } from '@/components/ui'
+import { Clock, Copy, CheckCircle2, QrCode, X } from 'lucide-react'
+import { ActionBar, Button } from '@/components/ui'
+import { cn } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 
 export interface PixWaitingPanelProps {
@@ -15,103 +16,76 @@ export interface PixWaitingPanelProps {
   cancelling: boolean
 }
 
-// Tela "aguardando pagamento" do PIX -- QR + código copia-e-cola + indicador
-// de status + Cancelar/Copiar. Markup puro (sem gerar/consultar PIX nenhum),
-// extraído de StepPayment (order-builder, pedido acabou de ser criado) pra
-// ser reaproveitado também pelo popup de "Meus Pedidos" (pedido já existia,
-// aguardando pagamento). Os dois PRECISAM ficar visualmente idênticos --
-// mesmo motivo do OrderRankRow: o cliente vê os dois em momentos diferentes
-// do mesmo fluxo de pagamento.
+// Tela "aguardando pagamento" do PIX, compacta e em coluna única: valor/tempo,
+// QR code, código copia-e-cola e ações. Compartilhada pelo order-builder e por
+// "Meus Pedidos".
 export function PixWaitingPanel({
   totalPrice, qrCode, qrCodeBase64, remaining, countdownLabel, copied, copyError, onCopy, onCancel, cancelling,
 }: PixWaitingPanelProps) {
   const currency = useCurrency()
+  const isUrgent = (remaining ?? Number.POSITIVE_INFINITY) < 120
 
   return (
-    <div className="space-y-5">
-      {/* Amount + timer */}
-      <div className="flex items-center justify-between bg-bg-raised rounded-2xl px-5 py-4">
+    <div className="space-y-4">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-xs text-ink-muted">Total a pagar</p>
-          <p className="text-3xl font-extrabold text-brand mt-0.5">{currency(totalPrice)}</p>
+          <p className="text-xs font-medium text-ink-muted">Total a pagar</p>
+          <p className="text-2xl font-extrabold text-brand tabular-figures" data-tabular>{currency(totalPrice)}</p>
         </div>
-        <div className={`flex items-center gap-1.5 text-sm font-bold ${(remaining ?? Number.POSITIVE_INFINITY) < 120 ? 'text-danger' : 'text-ink-secondary'}`}>
-          <Clock className="h-4 w-4" />
+        <div
+          className={cn(
+            'flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold tabular-figures',
+            isUrgent ? 'bg-danger/10 text-danger' : 'bg-bg-raised text-ink-secondary',
+          )}
+          data-tabular
+        >
+          <Clock className="h-3.5 w-3.5" />
           {countdownLabel}
         </div>
       </div>
 
-      {/* QR + copia-e-cola lado a lado em telas largas -- modal 2xl dá espaço
-          de sobra pra isso em vez de empilhar tudo numa coluna estreita. */}
-      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-        <div className="flex flex-col items-center gap-3 shrink-0">
-          {qrCodeBase64 ? (
-            <div className="p-4 bg-white rounded-2xl shadow-sm border border-border-subtle">
-              <img
-                src={`data:image/png;base64,${qrCodeBase64}`}
-                alt="QR Code PIX"
-                className="w-72 h-72 sm:w-80 sm:h-80"
-              />
-            </div>
-          ) : (
-            <div className="w-72 h-72 sm:w-80 sm:h-80 bg-bg-raised rounded-2xl flex flex-col items-center justify-center gap-2 text-center px-6">
-              <QrCode className="h-12 w-12 text-ink-muted animate-pulse" />
-              <p className="text-[11px] text-ink-muted">Gerando imagem do QR code… use o código copia-e-cola ao lado enquanto isso.</p>
-            </div>
-          )}
-          <p className="text-xs text-ink-muted">Válido por 30 minutos</p>
-        </div>
-
-        <div className="flex-1 w-full min-w-0 space-y-5">
-          {/* Copy code */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wide">
-              Ou copie o código PIX Copia e Cola
-            </p>
-            <div className="bg-bg-raised rounded-xl px-3 py-2.5 text-xs font-mono text-ink-secondary truncate">
-              {qrCode.slice(0, 60)}…
-            </div>
-            {copyError && <p className="text-xs text-danger">{copyError}</p>}
-            <Button
-              variant={copied ? 'success' : 'secondary'}
-              leftIcon={copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              onClick={onCopy}
-              className="w-full"
-            >
-              {copied ? 'Copiado!' : 'Copiar código'}
-            </Button>
+      <div className="flex flex-col items-center gap-2">
+        {qrCodeBase64 ? (
+          <div className="rounded-xl bg-white p-2.5">
+            <img src={`data:image/png;base64,${qrCodeBase64}`} alt="QR Code PIX" className="h-44 w-44" />
           </div>
-
-          {/* Status indicator */}
-          <div className="flex items-center gap-2 text-xs text-ink-secondary bg-bg-surface/80 backdrop-blur-sm border border-border-subtle rounded-xl px-4 py-3">
-            <div className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" />
-            Aguardando confirmação do pagamento…
+        ) : (
+          <div className="flex h-[12.5rem] w-[12.5rem] flex-col items-center justify-center gap-2 rounded-xl bg-bg-raised px-5 text-center">
+            <QrCode className="h-10 w-10 animate-pulse text-ink-muted" />
+            <p className="text-xs text-ink-muted">Gerando o QR code… use o código abaixo enquanto isso.</p>
           </div>
-
-          {/* Security */}
-          <div className="flex items-start gap-2.5 text-xs text-ink-muted">
-            <ShieldCheck className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
-            Pagamento processado com segurança pelo Mercado Pago. Seus dados bancários nunca passam por nossos servidores.
-          </div>
-        </div>
+        )}
+        <p className="text-xs text-ink-muted">Escaneie no app do seu banco ou copie o código</p>
       </div>
 
-      <p className="text-[11px] text-center text-ink-muted">
-        Este pedido continuará salvo em Meus pedidos para você pagar depois.
-      </p>
+      <div className="space-y-1.5">
+        <div className="rounded-xl border border-border-subtle bg-bg-raised px-3 py-2.5">
+          <p className="select-all truncate font-mono text-xs text-ink-secondary">{qrCode}</p>
+        </div>
+        {copyError && <p className="text-xs text-danger">{copyError}</p>}
+        <p className="flex items-center justify-center gap-2 pt-1 text-xs text-ink-secondary">
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-brand" />
+          Aguardando pagamento
+        </p>
+      </div>
 
-      <div className="flex items-center justify-center">
-        <Button
-          size="lg"
-          variant="danger-ghost"
-          onClick={onCancel}
-          loading={cancelling}
-          leftIcon={<X className="h-4 w-4" />}
-          className="w-48"
-        >
+      <ActionBar className="border-t border-border-subtle pt-4">
+        <Button variant="secondary" onClick={onCancel} loading={cancelling} leftIcon={<X className="h-4 w-4" />}>
           Cancelar pedido
         </Button>
-      </div>
+        <Button
+          variant={copied ? 'success' : 'primary'}
+          leftIcon={copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          onClick={onCopy}
+          disabled={cancelling}
+        >
+          {copied ? 'Copiado!' : 'Copiar código'}
+        </Button>
+      </ActionBar>
+
+      <p className="text-center text-2xs text-ink-muted">
+        Pedido salvo em Meus Pedidos · Pagamento seguro via Mercado Pago
+      </p>
     </div>
   )
 }

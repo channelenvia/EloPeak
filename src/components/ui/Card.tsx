@@ -16,7 +16,7 @@ const cardVariants = cva('transition-all duration-base', {
       // hover exato do card da aba Jobs (ver AvailableJobs.tsx): só borda +
       // sombra + leve elevação, sem tingir o fundo -- fonte única aqui pra
       // todo card clicável do app.
-      interactive: 'card cursor-pointer hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out',
+      interactive: 'card relative cursor-pointer hover:z-20 focus-within:z-20 hover:border-brand/25 hover:shadow-card-hover hover:-translate-y-1 ease-out',
       // Primary — o objeto mais importante de contexto na tela (pedido
       // ativo, job ativo). Quem decide acender um glow de marca é quem usa o
       // componente (via className com shadow-brand), não o Card em si.
@@ -31,6 +31,8 @@ const cardVariants = cva('transition-all duration-base', {
       attention: 'card backdrop-blur-none border-l-2 border-l-danger/50 bg-danger/[0.03]',
       // Elevated Overlay — conteúdo de modal/popover/panel.
       overlay: 'card-glass',
+      // Inset — caixa interna discreta dentro de um card/painel (notas, resumos).
+      inset: 'rounded-xl border border-border-subtle bg-bg-raised/40',
     },
     tone: {
       danger: '',
@@ -39,6 +41,7 @@ const cardVariants = cva('transition-all duration-base', {
     },
     padding: {
       none: '',
+      xs: 'p-3',
       sm: 'p-4',
       md: 'p-5',
       lg: 'p-6',

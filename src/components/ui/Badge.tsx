@@ -1,17 +1,15 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
+import { Hint } from './Hint'
+import { describeOrderStatus, type OrderViewerRole } from '@/lib/orderStatusInfo'
 import type { Order, BoosterStatus } from '@/types'
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, getOrderStatusGroup, ORDER_STATUS_GROUP_LABEL, ORDER_STATUS_GROUP_COLOR,
   BOOSTER_STATUS_LABEL, BOOSTER_STATUS_COLOR, isOrderOverdue,
 } from '@/lib/utils'
 
-// Antes só existia como wrapper interno (não exportado) — ~6 lugares no app
-// hand-rolavam seu próprio <span> de pill em vez de reusar isso. Agora é um
-// primitivo real com variantes semânticas, pra parar essa duplicação daqui
-// pra frente. OrderStatusBadge/BoosterStatusBadge preservam exatamente o
-// mesmo comportamento (passam a cor via className, que sobrescreve a
-// variante "neutral" default via tailwind-merge).
+// Pill com variantes semânticas. A cor dos *StatusBadge entra via className
+// (tailwind-merge sobrescreve a variante "neutral" padrão).
 const badgeVariants = cva('badge', {
   variants: {
     variant: {
@@ -26,8 +24,13 @@ const badgeVariants = cva('badge', {
       // uso em locais onde o badge precisa se distinguir de um status.
       outline: 'text-ink-secondary bg-transparent border border-border-subtle',
     },
+    size: {
+      md: '',
+      // Chip compacto em caixa-alta (rótulos de status/tag dentro de cards e headers).
+      tag: 'px-2 rounded-lg text-2xs font-bold uppercase tracking-wide',
+    },
   },
-  defaultVariants: { variant: 'neutral' },
+  defaultVariants: { variant: 'neutral', size: 'md' },
 })
 
 interface BadgeProps extends VariantProps<typeof badgeVariants> {
@@ -36,9 +39,9 @@ interface BadgeProps extends VariantProps<typeof badgeVariants> {
   dot?: boolean
 }
 
-export function Badge({ className, variant, children, dot }: BadgeProps) {
+export function Badge({ className, variant, size, children, dot }: BadgeProps) {
   return (
-    <span className={cn(badgeVariants({ variant }), className)}>
+    <span className={cn(badgeVariants({ variant, size }), className)}>
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
       {children}
     </span>
@@ -53,33 +56,37 @@ export function Badge({ className, variant, children, dot }: BadgeProps) {
 type OrderStatusBadgeOrder =
   Pick<Order, 'status' | 'assigned_booster_id'> & Partial<Pick<Order, 'match_sync_started_at' | 'estimated_hours'>>
 
-export function OrderStatusBadge({ order }: { order: OrderStatusBadgeOrder }) {
+interface OrderStatusBadgeProps {
+  order: OrderStatusBadgeOrder
+  /** Com o perfil de quem vê, o badge ganha tooltip descrevendo o status. */
+  viewerRole?: OrderViewerRole
+  /** Sobrescreve a descrição padrão do tooltip. */
+  description?: string
+  /** Ação do status (ex.: pagar, enviar credenciais): transforma o badge em botão. */
+  onAction?: () => void
+  actionLabel?: string
+  align?: 'left' | 'right'
+}
+
+export function OrderStatusBadge({ order, viewerRole, description, onAction, actionLabel, align }: OrderStatusBadgeProps) {
   const group = getOrderStatusGroup(order)
-  if (group === 'hidden') {
-    return (
-      <Badge className={ORDER_STATUS_COLOR[order.status]} dot>
-        {ORDER_STATUS_LABEL[order.status]}
-      </Badge>
-    )
-  }
-  // Atraso sobrepõe o rótulo/cor normal do grupo "em andamento" -- o
-  // usuário precisa ver que o prazo estourou olhando só pro badge, sem
-  // depender de reparar no aviso separado do CountdownTimer.
-  if (group === 'in_progress' && isOrderOverdue({
+  const overdue = group === 'in_progress' && isOrderOverdue({
     match_sync_started_at: order.match_sync_started_at ?? null,
     estimated_hours: order.estimated_hours ?? null,
-  })) {
-    return (
-      <Badge className="text-danger bg-danger/10" dot>
-        Atrasado
-      </Badge>
-    )
-  }
-  return (
-    <Badge className={ORDER_STATUS_GROUP_COLOR[group]} dot>
-      {ORDER_STATUS_GROUP_LABEL[group]}
-    </Badge>
+  })
+  // Atraso sobrepõe o rótulo/cor normal do grupo "em andamento" -- o usuário
+  // precisa ver que o prazo estourou olhando só pro badge.
+  const badge = overdue ? (
+    <Badge className="text-danger bg-danger/10" dot>Atrasado</Badge>
+  ) : group === 'hidden' ? (
+    <Badge className={ORDER_STATUS_COLOR[order.status]} dot>{ORDER_STATUS_LABEL[order.status]}</Badge>
+  ) : (
+    <Badge className={ORDER_STATUS_GROUP_COLOR[group]} dot>{ORDER_STATUS_GROUP_LABEL[group]}</Badge>
   )
+
+  const text = description ?? (viewerRole ? describeOrderStatus(order, viewerRole) : null)
+  if (!text) return badge
+  return <Hint content={text} onClick={onAction} actionLabel={actionLabel} align={align}>{badge}</Hint>
 }
 
 export function BoosterStatusBadge({ status }: { status: BoosterStatus }) {
@@ -88,4 +95,9 @@ export function BoosterStatusBadge({ status }: { status: BoosterStatus }) {
       {BOOSTER_STATUS_LABEL[status]}
     </Badge>
   )
+}
+
+// Ponto pulsante de "ao vivo"/online (antes repetido à mão em 5 telas).
+export function LiveDot({ className }: { className?: string }) {
+  return <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse-slow', className)} />
 }

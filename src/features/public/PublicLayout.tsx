@@ -24,7 +24,7 @@ export function PublicLayout() {
       <header className="sticky top-0 z-50 border-b border-border-subtle/60 bg-bg-base/90 backdrop-blur-xl">
         <div className="max-w-screen-xl mx-auto px-5 sm:px-8 flex h-[68px] items-center gap-6">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2.5 shrink-0">
+          <Link to="/" className="flex items-center gap-3 shrink-0">
             <LogoMark className="h-9 w-9" />
             <span className="text-lg font-extrabold tracking-tight text-ink">
               Elo<span className="text-brand">Peak</span>
@@ -65,15 +65,15 @@ export function PublicLayout() {
           </div>
 
           {/* Mobile toggle */}
-          <button
-            className="lg:hidden ml-auto p-2 rounded-lg text-ink-secondary hover:bg-bg-raised"
+          <Button
+            variant="ghost" size="icon" className="lg:hidden ml-auto"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menu"
             aria-expanded={mobileOpen}
             aria-controls="public-mobile-nav"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          </Button>
         </div>
 
         {/* Mobile menu */}
@@ -168,7 +168,7 @@ export function PublicLayout() {
 
           <div className="mt-6 pt-4 border-t border-border-subtle flex flex-col md:flex-row items-center justify-between gap-3">
             <p className="text-xs text-ink-muted">© {new Date().getFullYear()} EloPeak. Todos os direitos reservados.</p>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-6">
               <Link to="/privacy" className="text-xs text-ink-muted hover:text-ink-secondary">Privacidade</Link>
               <Link to="/terms"   className="text-xs text-ink-muted hover:text-ink-secondary">Termos</Link>
             </div>

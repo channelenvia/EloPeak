@@ -36,7 +36,7 @@ function StatCell({ icon: Icon, label, value, valueClassName }: { icon: LucideIc
     <div className="rounded-xl bg-bg-raised/50 p-2.5 flex flex-col items-center gap-1">
       <Icon className="h-5 w-5 text-ink-muted" />
       <p className={cn('text-xs font-bold text-ink text-center leading-tight', valueClassName)} data-tabular>{value}</p>
-      <p className="text-[10px] text-ink-muted uppercase tracking-wide">{label}</p>
+      <p className="text-2xs text-ink-muted uppercase tracking-wide">{label}</p>
     </div>
   )
 }
@@ -108,7 +108,7 @@ export function RankPerformanceBreakdown({ boosterUserId, className }: RankPerfo
                       <RankBadge key={tier} tier={tier} size="sm" showDivision={false} showLabel={false} className={i > 0 ? '-ml-5' : undefined} />
                     ))}
                   </div>
-                  <p className="text-[10px] text-ink-muted">{g.sublabel}</p>
+                  <p className="text-2xs text-ink-muted">{g.sublabel}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <StatCell icon={TrendingUp} label="Winrate" value={winratePct != null ? `${winratePct}%` : '—'} valueClassName={winrateTone(winratePct)} />

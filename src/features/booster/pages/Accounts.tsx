@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Landmark, ArrowRight } from 'lucide-react'
 import { Card, EmptyState, Skeleton, RankBadge, ErrorAlert } from '@/components/ui'
 import { RANK_TIER_LABEL } from '@/lib/utils'
@@ -16,13 +17,7 @@ export function BoosterAccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink">Contas Duo Boost</h1>
-        <p className="text-sm text-ink-secondary mt-1">
-          Contas da empresa reservadas para você em pedidos de Duo Boost em andamento. A reserva e o
-          token de acesso ficam na página do próprio pedido — login e senha nunca aparecem aqui.
-        </p>
-      </div>
+      <PageHeader title="Contas Duo Boost" description="Contas da empresa reservadas para você em pedidos de Duo Boost em andamento. A reserva e o token de acesso ficam na página do próprio pedido — login e senha nunca aparecem aqui." />
 
       {isLoading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}</div>

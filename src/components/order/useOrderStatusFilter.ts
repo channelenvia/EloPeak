@@ -12,7 +12,7 @@ import type { OrderListTab } from '@/api/orders'
 // o checkbox muda o que é pedido ao servidor (ver includeCanceled), não só
 // refina client-side. Trocar de aba limpa os sub-filtros da aba anterior --
 // mesmo padrão de useServiceFilters ao trocar categoria.
-export function useOrderStatusFilter(defaultTab: OrderListTab = 'in_progress') {
+export function useOrderStatusFilter(defaultTab: OrderListTab = 'all') {
   const [tab, setTabRaw] = useState<OrderListTab>(defaultTab)
   const [dropped, setDropped] = useState(false)
   const [overdue, setOverdue] = useState(false)

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "supabase/functions/*/index.ts"
   ],
@@ -12,13 +12,8 @@
     "src/lib/database.types.ts",
     "supabase/functions/_shared/*.test.ts"
   ],
-  "ignoreBinaries": ["supabase"],
-  "ignoreDependencies": [
-    "shadcn",
-    "@fontsource-variable/inter",
-    "@fontsource-variable/jetbrains-mono",
-    "@fontsource-variable/space-grotesk",
-    "vitest-environment-jsdom`"
+  "ignoreBinaries": [
+    "supabase"
   ],
   "ignoreExportsUsedInFile": true
 }

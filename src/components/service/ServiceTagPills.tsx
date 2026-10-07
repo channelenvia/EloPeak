@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LANE_LABEL, LANE_ICON_URL, SPECIALTY_LABEL } from '@/lib/lolTaxonomy'
+import { ALL_LANES_LABEL, LANES, LANE_LABEL, LANE_ICON_URL, SPECIALTY_LABEL, hasAllLanes } from '@/lib/lolTaxonomy'
 import { useDdragonVersion, useDdragonChampionIds, championIconUrl } from '@/lib/ddragon'
 
 interface ServiceTagPillsProps {
@@ -16,13 +16,15 @@ interface ServiceTagPillsProps {
    * usado nas linhas de rota do pedido (customer_lanes agora é opcional, então
    * ausência de escolha é um estado válido, "---", não "nada aqui"). */
   emptyFallback?: string
+  /** Texto da pill única quando as 5 rotas estão presentes (padrão: "Todas as rotas"). */
+  allLabel?: string
 }
 
 // Reaproveitado nos 5 lugares que exibem lanes/campeões/especialidades de um
 // serviço (card do booster, perfil público, modal de visualizar, picker de
 // coaching do cliente e revisão/detalhe do pedido) -- fonte única de ícone +
 // estilo, pra não divergir entre telas.
-export function ServiceTagPills({ lanes, champions, specialties, compact, labeled, className, emptyFallback }: ServiceTagPillsProps) {
+export function ServiceTagPills({ lanes, champions, specialties, compact, labeled, className, emptyFallback, allLabel = ALL_LANES_LABEL }: ServiceTagPillsProps) {
   const ddragonVersion = useDdragonVersion()
   const championIds = useDdragonChampionIds(ddragonVersion)
   if (!lanes?.length && !champions?.length && !specialties?.length) {
@@ -34,27 +36,38 @@ export function ServiceTagPills({ lanes, champions, specialties, compact, labele
     labeled
       ? 'text-sm px-3 py-1.5 rounded-full'
       : compact
-        ? 'text-[11px] px-2 py-1 rounded-md'
+        ? 'text-xs px-2 py-1 rounded-md'
         : 'text-xs px-2.5 py-1 rounded-full',
   )
 
-  const laneNodes = lanes?.map(l => {
-    const iconUrl = LANE_ICON_URL[l]
-    return (
-      <span key={l} className={cn(pillCls, 'bg-brand/10 text-brand', !compact && 'border border-brand/20')}>
-        {iconUrl && (
-          <img
-            src={iconUrl}
-            alt=""
-            className={cn('shrink-0', labeled ? 'h-4 w-4' : 'h-3.5 w-3.5')}
-            loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-          />
-        )}
+  const laneIconCls = cn('shrink-0', labeled ? 'h-4 w-4' : 'h-3.5 w-3.5')
+  const laneIcon = (key: string) => LANE_ICON_URL[key] && (
+    <img
+      key={key}
+      src={LANE_ICON_URL[key]}
+      alt=""
+      className={laneIconCls}
+      loading="lazy"
+      onError={(e) => { e.currentTarget.style.display = 'none' }}
+    />
+  )
+  const lanePillCls = cn(pillCls, 'bg-brand/10 text-brand', !compact && 'border border-brand/20')
+
+  // As 5 rotas = "sem restrição": uma pill só, com os 5 ícones juntos e o
+  // texto, em vez de 5 pills com o mesmo peso visual.
+  const laneNodes = hasAllLanes(lanes)
+    ? [
+      <span key="all" className={lanePillCls}>
+        <span className="flex items-center gap-1">{LANES.map((l) => laneIcon(l.key))}</span>
+        {allLabel}
+      </span>,
+    ]
+    : lanes?.map(l => (
+      <span key={l} className={lanePillCls}>
+        {laneIcon(l)}
         {LANE_LABEL[l] ?? l}
       </span>
-    )
-  })
+    ))
 
   const championNodes = champions?.map(c => {
     // Aguarda o catálogo para não tentar primeiro uma URL inválida baseada no

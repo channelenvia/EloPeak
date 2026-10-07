@@ -1,6 +1,4 @@
-import type { BoosterProfile, BoosterStatus, Rank } from '@/types'
-
-export type { BoosterProfile }
+import type { BoosterStatus, Rank } from '@/types'
 
 // Retorno de admin_list_boosters_with_slots (migration 20260829020000) --
 // usado só pelo picker de "Reatribuir booster" do admin, que precisa saber

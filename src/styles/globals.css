@@ -3,9 +3,8 @@
 @import '@fontsource-variable/space-grotesk';
 @import '@fontsource-variable/jetbrains-mono';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../../tailwind.config.ts';
 
 @layer base {
   /* "Premium Competitive Operations Interface" — evolução do tema "High-Elo
@@ -64,17 +63,14 @@
     --color-info-muted:    16  30  50;
 
     /* Timing/easing de motion de produto (não confundir com o motion mais
-       cinematográfico do site público). Hierarquia: instant < fast < base <
-       panel < slow. Usados por componentes que animam via CSS (transition-
+       cinematográfico do site público). Hierarquia: fast < base <
+       panel. Usados por componentes que animam via CSS (transition-
        duration) e como referência para as durações equivalentes em Motion/
        framer-motion no código React. */
-    --motion-instant: 110ms;
     --motion-fast:    160ms;
     --motion-base:    240ms;
     --motion-panel:   300ms;
-    --motion-slow:    400ms;
     --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-    --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
     --logo-url: url('/images/logo.png');
     --ambient-url: url('/images/new-ambient.webp');
@@ -109,6 +105,12 @@
 
   html {
     @apply scroll-smooth;
+  }
+
+  /* Tailwind 4 deixou de pôr cursor de mão em botões. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 
   body {
@@ -166,43 +168,25 @@
   .card-brand {
     @apply bg-brand/10 border border-brand/25 rounded-2xl;
   }
-  .card-accent {
-    @apply bg-accent/10 border border-accent/25 rounded-2xl;
-  }
   .card-glass {
     @apply bg-bg-surface/60 backdrop-blur-md border border-border-subtle rounded-2xl;
   }
 
   /* Hierarquia tipográfica única para todos os cards, inclusive os que são
      montados diretamente com as classes acima em vez do componente <Card>. */
-  :is(.card, .card-raised, .card-brand, .card-accent, .card-glass) {
+  :is(.card, .card-raised, .card-brand, .card-glass) {
     @apply text-sm leading-relaxed;
   }
 
-  :is(.card, .card-raised, .card-brand, .card-accent, .card-glass) :is(h2, h3, h4) {
+  :is(.card, .card-raised, .card-brand, .card-glass) :is(h2, h3, h4) {
     @apply text-base leading-6;
-  }
-
-  .card-title {
-    @apply text-base font-bold leading-6 text-ink;
-  }
-
-  .card-body {
-    @apply text-sm leading-relaxed text-ink-secondary;
-  }
-
-  .card-meta {
-    @apply text-xs leading-5 text-ink-muted;
   }
 
   .input-base {
     @apply w-full bg-bg-interactive border border-border-subtle rounded-xl px-4 py-3
            text-ink placeholder:text-ink-muted
-           focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60
+           focus:outline-hidden focus:ring-2 focus:ring-brand/40 focus:border-brand/60
            transition-all duration-150;
-  }
-  .input-error {
-    @apply border-danger/60 focus:ring-danger/30;
   }
 
   .label-base {
@@ -225,26 +209,10 @@
   .text-gradient-brand {
     @apply bg-gradient-brand bg-clip-text text-transparent;
   }
-  .text-gradient-accent {
-    @apply bg-gradient-accent bg-clip-text text-transparent;
-  }
-
-  .divider-brand {
-    @apply h-px bg-gradient-to-r from-transparent via-brand/30 to-transparent;
-  }
 
   /* Foco visível consistente em toda a aplicação (WCAG 2.2 AA) -- primitivos
      interativos usam esta classe em vez de reinventar o anel de foco. */
   .focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base;
+    @apply focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base;
   }
-}
-
-@layer utilities {
-  .text-balance { text-wrap: balance; }
-  .hide-scrollbar {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .hide-scrollbar::-webkit-scrollbar { display: none; }
 }

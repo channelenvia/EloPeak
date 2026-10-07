@@ -8,12 +8,8 @@ interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEleme
   wrapperClassName?: string
 }
 
-// Único campo de busca com ícone do app -- antes reimplementado à mão (div
-// relative + Search posicionado + input-base) em toda lista/picker que
-// precisa filtrar por texto. "sm" cobre as barras de busca de lista
-// (OrderHistory, Orders do booster/admin, AvailableJobs); "md" cobre busca
-// dentro de modal/picker (reatribuir booster, revisão pendente, pacotes de
-// coach).
+// Campo de busca com ícone. "sm" = barras de busca de lista; "md" = busca
+// dentro de modal/picker.
 export function SearchInput({ size = 'sm', wrapperClassName, className, ...props }: SearchInputProps) {
   return (
     <div className={cn('relative', wrapperClassName)}>

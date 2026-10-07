@@ -23,13 +23,13 @@ interface OrderCardFooterProps {
 // seguem exatamente a mesma regra em qualquer card.
 export function OrderCardFooter({ order, value, valueLabel, currency, valueTone = 'ink' }: OrderCardFooterProps) {
   return (
-    <div className="pt-3 border-t border-border-subtle">
+    <div className="border-t border-border-subtle pt-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className={cn('text-sm font-bold tabular-figures', valueTone === 'success' ? 'text-success' : 'text-ink')} data-tabular>
+          <p className={cn('text-base font-bold tabular-figures', valueTone === 'success' ? 'text-success' : 'text-ink')} data-tabular>
             {currency(value)}
           </p>
-          <p className="text-[10px] text-ink-muted mt-0.5">{valueLabel}</p>
+          <p className="text-2xs text-ink-muted mt-0.5">{valueLabel}</p>
         </div>
 
         {/* Prazo estimado -- estático até o booster marcar como iniciado
@@ -51,7 +51,7 @@ export function OrderCardFooter({ order, value, valueLabel, currency, valueTone 
 
       {/* Data dinâmica: concluído mostra quando terminou, o resto mostra
           quando foi pedido. */}
-      <p className="text-xs text-ink-muted mt-2">
+      <p className="mt-3 text-xs text-ink-muted">
         {order.completed_at
           ? `Concluído em ${formatDate(order.completed_at)}`
           : `Criado ${timeAgo(order.created_at)}`}

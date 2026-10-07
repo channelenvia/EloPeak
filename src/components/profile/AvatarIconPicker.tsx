@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { fetchRiotProfileIconIds, parseRiotProfileIconId, riotProfileIconUrl } from '@/lib/riotAssets'
 
 interface AvatarIconPickerProps {
@@ -45,8 +46,8 @@ export function AvatarIconPicker({ currentUrl, onSelect, maxIcons = 240, gridCla
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Ícone de Perfil</p>
-        {saving && <span className="text-[10px] text-ink-muted">Salvando...</span>}
+        <p className="text-2xs font-bold uppercase tracking-widest text-ink-muted">Ícone de Perfil</p>
+        {saving && <span className="text-2xs text-ink-muted">Salvando…</span>}
       </div>
       {iconIds.length > 0 ? (
         <div className={cn('grid grid-cols-6 gap-1.5 max-h-64 overflow-y-auto pr-0.5', gridClassName)}>
@@ -57,7 +58,7 @@ export function AvatarIconPicker({ currentUrl, onSelect, maxIcons = 240, gridCla
               onClick={() => handleSelect(id)}
               className={cn(
                 'aspect-square rounded-lg overflow-hidden border-2 transition-all hover:scale-110 focus-ring',
-                selectedId === id ? 'border-brand shadow-sm' : 'border-transparent',
+                selectedId === id ? 'border-brand shadow-xs' : 'border-transparent',
               )}
             >
               <img
@@ -73,7 +74,7 @@ export function AvatarIconPicker({ currentUrl, onSelect, maxIcons = 240, gridCla
       ) : (
         <div className="grid grid-cols-6 gap-1.5">
           {Array.from({ length: 18 }).map((_, i) => (
-            <div key={i} className="aspect-square rounded-lg bg-bg-raised animate-pulse" />
+            <Skeleton key={i} className="aspect-square h-auto rounded-lg" />
           ))}
         </div>
       )}

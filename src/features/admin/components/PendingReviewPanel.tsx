@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { InlineEmpty } from '@/components/ui/EmptyState'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -34,7 +36,7 @@ export function CancelModal({ order, open, onClose }: { order: Order; open: bool
         <textarea
           id="pending-review-cancel-reason"
           {...register('reason')}
-          placeholder="Justificativa para o cancelamento..."
+          placeholder="Justificativa para o cancelamento…"
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -42,8 +44,8 @@ export function CancelModal({ order, open, onClose }: { order: Order; open: bool
       {cancelOrder.isError && (
         <ErrorAlert message={cancelOrder.error instanceof Error ? cancelOrder.error.message : 'Erro'} className="mt-2" />
       )}
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Voltar</Button>
+      <ActionBar>
+        <Button disabled={cancelOrder.isPending} variant="secondary" onClick={close}>Voltar</Button>
         <Button
           variant="danger"
           loading={cancelOrder.isPending}
@@ -52,7 +54,7 @@ export function CancelModal({ order, open, onClose }: { order: Order; open: bool
         >
           Cancelar pedido
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }
@@ -94,14 +96,14 @@ export function AssignModal({ order, open, onClose }: { order: Order; open: bool
         size="md"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar booster..."
+        placeholder="Buscar booster…"
         aria-label="Buscar booster"
       />
 
       <div className="max-h-64 overflow-y-auto space-y-1 -mx-1 px-1">
-        {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters...</p>}
+        {loadingBoosters && <p className="text-sm text-ink-secondary py-4 text-center">Carregando boosters…</p>}
         {!loadingBoosters && filtered.length === 0 && (
-          <p className="text-sm text-ink-secondary py-4 text-center">Nenhum booster encontrado.</p>
+          <InlineEmpty>Nenhum booster encontrado.</InlineEmpty>
         )}
         {filtered.map((b: BoosterWithSlots) => (
           <button
@@ -126,7 +128,7 @@ export function AssignModal({ order, open, onClose }: { order: Order; open: bool
         <textarea
           id="pending-review-assign-reason"
           {...register('reason')}
-          placeholder="Justificativa para a atribuição..."
+          placeholder="Justificativa para a atribuição…"
           className="input-base w-full min-h-[80px] resize-none text-sm"
           maxLength={500}
         />
@@ -134,8 +136,8 @@ export function AssignModal({ order, open, onClose }: { order: Order; open: bool
       {assignOrder.isError && (
         <ErrorAlert message={assignOrder.error instanceof Error ? assignOrder.error.message : 'Erro'} className="mt-2" />
       )}
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Cancelar</Button>
+      <ActionBar>
+        <Button disabled={assignOrder.isPending} variant="secondary" onClick={close}>Cancelar</Button>
         <Button
           variant="primary"
           loading={assignOrder.isPending}
@@ -144,7 +146,7 @@ export function AssignModal({ order, open, onClose }: { order: Order; open: bool
         >
           {isReassign ? 'Reatribuir' : 'Atribuir'}
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }

@@ -1,4 +1,7 @@
 import { useAssignedBooster } from '@/api/boosters'
+import { isPaymentConfirmed } from '@/lib/orderPayment'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { Badge } from '@/components/ui/Badge'
 import { useMarkOrderChatRead, useOrderChat } from '@/api/chat'
 import { useBoosterServiceDetails } from '@/api/coaching'
 import {
@@ -27,6 +30,8 @@ import { useCurrency } from '@/hooks/useCurrency'
 import { CLASH_DAY_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { EdgeFunctionError } from '@/lib/invokeEdgeFunction'
 import { formatDateTime, formatEstimatedDelivery, getOrderServiceName, getOrderStatusGroup } from '@/lib/utils'
+import { describeOrderStatus, ORDER_CHAT_ANCHOR_ID } from '@/lib/orderStatusInfo'
+import { useOwnReview } from '@/api/reviews'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { useAuthStore } from '@/stores/authStore'
 import type { Order } from '@/types'
@@ -37,7 +42,7 @@ import {
     Clock,
     Gamepad2,
     Hash,
-    History, Lock,
+    History,
     QrCode,
     Route,
     Shuffle,
@@ -66,7 +71,7 @@ function AssignedBoosterValue({ order }: { order: Order }) {
         {booster.display_name}
       </Link>
       {!order.assigned_booster_id && (
-        <span className={`text-[10px] font-bold uppercase ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
+        <span className={`text-2xs font-bold uppercase ${order.reassigned_by_admin ? 'text-rank-master' : 'text-accent'}`}>
           {order.reassigned_by_admin ? 'Reatribuído' : 'Exclusivo'}
         </span>
       )}
@@ -102,16 +107,15 @@ function useCountdown(expiresAt: string | null) {
   return { remaining, label: `${mm}:${ss}` }
 }
 
-function PendingPaymentSection({ order }: { order: Order }) {
+function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: Order; open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [pix, setPix] = useState<{ qr_code?: string; qr_code_base64?: string | null; total_price: number; expires_at: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // O pagamento pendente aparece somente como ação no cabeçalho. O modal e
-  // o QR nunca abrem automaticamente ao visitar ou trocar de pedido.
-  const [open, setOpen] = useState(false)
+  // O modal é aberto pelo badge de status (nunca automaticamente ao visitar
+  // ou trocar de pedido).
   const lastOrderIdRef = useRef(order.id)
   useEffect(() => {
     if (lastOrderIdRef.current === order.id) return
@@ -119,7 +123,7 @@ function PendingPaymentSection({ order }: { order: Order }) {
     setOpen(false)
     setPix(null)
     setError(null)
-  }, [order.id])
+  }, [order.id, setOpen])
   const { remaining, label } = useCountdown(pix?.expires_at ?? null)
 
   const generatePix = useGeneratePix(order.id)
@@ -137,11 +141,11 @@ function PendingPaymentSection({ order }: { order: Order }) {
       console.error('Failed to check customer order state', err instanceof Error ? err.message : err)
       return null
     })
-    if (!state?.payment_confirmed) return false
+    if (!isPaymentConfirmed(state)) return false
 
     queryClient.setQueryData(['orders', 'state', order.id], state)
     await queryClient.invalidateQueries({ queryKey: ['orders', 'detail', order.id] })
-    navigate(`/orders/${order.id}${state.requires_credentials ? '#credentials' : ''}`, { replace: true })
+    navigate(`/orders/${order.id}${state?.requires_credentials ? '#credentials' : ''}`, { replace: true })
     return true
   }, [order.id, queryClient, navigate])
 
@@ -220,38 +224,26 @@ function PendingPaymentSection({ order }: { order: Order }) {
 
   return (
     <>
-      {/* Mesma pill compacta ao lado do código do pedido que OrderReviewSection
-          já usa pra "Avaliar booster" -- não mais um banner de linha inteira
-          separado do header. */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30 hover:bg-warning/25 transition-colors"
-      >
-        <QrCode className="h-3 w-3" />
-        Pagamento pendente
-      </button>
-
       <Modal
         open={open}
         onOpenChange={setOpen}
         title="Pagamento PIX"
         description="Pedido ainda não pago. Gere o PIX quando quiser continuar ou cancele o pedido."
-        maxWidth="2xl"
+        maxWidth="md"
       >
         {!pix ? (
-        <div className="flex items-center justify-between">
-          <Button size="lg" variant="danger-ghost" loading={cancelOrderMutation.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />} className="w-40 shrink-0">
+        <ActionBar>
+          <Button variant="secondary" loading={cancelOrderMutation.isPending} disabled={generatePix.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
             Cancelar
           </Button>
-          <Button size="lg" loading={generatePix.isPending} onClick={loadPix} leftIcon={<QrCode className="h-4 w-4" />} className="w-full md:w-auto min-w-[200px]">
+          <Button loading={generatePix.isPending} onClick={loadPix} leftIcon={<QrCode className="h-4 w-4" />}>
             Gerar PIX
           </Button>
-        </div>
+        </ActionBar>
       ) : expired ? (
         <div className="space-y-3 max-w-md">
-          <ErrorAlert message="PIX expirado. Cancelando o pedido..." />
-          <Button className="w-full" variant="danger" loading={cancelOrderMutation.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
+          <ErrorAlert message="PIX expirado. Cancelando o pedido…" />
+          <Button variant="danger" loading={cancelOrderMutation.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
             Cancelar pedido
           </Button>
         </div>
@@ -281,18 +273,6 @@ function PendingPaymentSection({ order }: { order: Order }) {
 // dois pontos deste arquivo.
 const MAX_CUSTOMER_DROPS = 2
 
-function DropLockedBadge({ order }: { order: Order }) {
-  if (order.status !== 'drop_requested') return null
-  return (
-    <span
-      title="Admin analisando a troca de booster."
-      className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30"
-    >
-      <Lock className="h-3 w-3" />
-      Travado · em análise
-    </span>
-  )
-}
 
 function CustomerDropModal({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const requestDrop = useRequestCustomerOrderDrop(order.id)
@@ -322,22 +302,22 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
         <label htmlFor="customer-drop-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">
           Motivo <span className="text-danger">*</span>
         </label>
-        <textarea id="customer-drop-reason" {...register('reason')} placeholder="Descreva o motivo..." className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
+        <textarea id="customer-drop-reason" {...register('reason')} placeholder="Descreva o motivo…" className="input-base w-full min-h-[100px] resize-none text-sm" maxLength={500} />
       </div>
       {requestDrop.isError && (
         <ErrorAlert message={requestDrop.error instanceof Error ? requestDrop.error.message : 'Erro'} className="mt-2" />
       )}
-      <div className="flex gap-3 justify-end pt-2">
-        <Button variant="ghost" onClick={close}>Cancelar</Button>
+      <ActionBar>
+        <Button disabled={requestDrop.isPending} variant="secondary" onClick={close}>Cancelar</Button>
         <Button
           variant="danger"
           loading={requestDrop.isPending}
           disabled={!isValid}
           onClick={handleSubmit(submit)}
         >
-          Enviar Solicitação
+          Enviar solicitação
         </Button>
-      </div>
+      </ActionBar>
     </Modal>
   )
 }
@@ -387,6 +367,12 @@ export function OrderDetailPage() {
     if (order?.status === 'canceled') navigate('/orders/new?new=1', { replace: true })
   }, [order?.status, navigate])
 
+  // O badge de status é o ponto de entrada das ações do pedido (pagar,
+  // enviar credenciais, avaliar) -- os modais abrem por aqui.
+  const [payOpen, setPayOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const { data: ownReview, isLoading: reviewLoading } = useOwnReview(order?.status === 'completed' ? order.id : undefined)
+
   if (isLoading) return (
     <div className="space-y-4">
       <Skeleton className="h-8 w-48" />
@@ -429,7 +415,7 @@ export function OrderDetailPage() {
       ? [{ icon: CalendarDays, label: 'Sessões', value: `${order.sessions_purchased}` }]
       : []),
     ...((isBoostFlow || isClash) ? [{ icon: Hash, label: 'Riot ID', value: order.riot_id ?? 'Não informado' }] : []),
-    ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} compact emptyFallback="---" /> })),
+    ...getLaneDisplayItems(order, 'customer').map((item) => ({ icon: Route, label: item.label, value: <ServiceTagPills lanes={item.lanes} allLabel={item.allLabel} compact emptyFallback="---" /> })),
     { icon: UserCheck, label: 'Booster associado', value: <AssignedBoosterValue order={order} /> },
     { icon: Clock, label: 'Entrega estimada', value: isClash ? clashClosingLabel : (order.estimated_hours ? formatEstimatedDelivery(order.estimated_hours) : 'Não disponível') },
     { icon: Wallet, label: 'Total Pago', value: currency(order.total_price) },
@@ -443,21 +429,31 @@ export function OrderDetailPage() {
   const dropLimitReached = order.drop_count >= MAX_CUSTOMER_DROPS
   const canConfirm = !!customerState?.can_confirm_completion
 
+  const statusGroup = getOrderStatusGroup(order)
+  const statusAction =
+    order.status === 'awaiting_payment' ? { label: 'Clique para pagar', run: () => setPayOpen(true) }
+    : statusGroup === 'awaiting_credentials' && customerState?.requires_credentials
+      ? { label: 'Clique para enviar as credenciais', run: () => accountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+    : order.status === 'completed' && !reviewLoading && !ownReview ? { label: 'Clique para avaliar', run: () => setReviewOpen(true) }
+    : order.status === 'awaiting_customer' && order.assigned_booster_id
+      ? { label: 'Clique para abrir o chat', run: () => document.getElementById(ORDER_CHAT_ANCHOR_ID)?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+    : null
+
   return (
     <div className="space-y-6">
+      <PendingPaymentSection order={order} open={payOpen} onOpenChange={setPayOpen} />
+      <OrderReviewSection order={order} open={reviewOpen} onOpenChange={setReviewOpen} />
       <OrderPageHeader
         backHref="/orders"
         orderIdShort={order.id.slice(0, 8).toUpperCase()}
-        statusBadge={<OrderStatusBadge order={order} />}
-        statusActions={(
-          // "Concluído" já é o texto do próprio statusBadge -- só o que
-          // adiciona algo novo (ação de avaliar, alerta de atraso, link pra
-          // análise de drop) fica aqui, nunca repetindo o rótulo do status.
-          <>
-            <PendingPaymentSection order={order} />
-            <OrderReviewSection order={order} />
-            <DropLockedBadge order={order} />
-          </>
+        statusBadge={(
+          <OrderStatusBadge
+            order={order}
+            viewerRole="customer"
+            description={describeOrderStatus(order, 'customer', { reviewRating: ownReview?.rating ?? null })}
+            onAction={statusAction?.run}
+            actionLabel={statusAction?.label}
+          />
         )}
         extra={(
           <>
@@ -465,10 +461,10 @@ export function OrderDetailPage() {
               {getOrderServiceName(order)} · Criado {formatDateTime(order.created_at)}
             </span>
             {order.drop_count > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide bg-warning/15 text-warning border border-warning/30">
+              <Badge variant="warning" size="tag">
                 <History className="h-3 w-3" />
                 Pedido reatribuído · valor e prazo atualizados
-              </span>
+              </Badge>
             )}
             {/* Deliberadamente NÃO usa getOrderStatusGroup(order) === 'in_progress'
                 aqui -- esse grupo também inclui 'assigned', mas o contador só

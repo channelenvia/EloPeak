@@ -1,4 +1,5 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Card } from '@/components/ui/Card'
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Button, LogoMark } from '@/components/ui'
@@ -167,7 +168,7 @@ export function LoginPage() {
           </Link>
         </div>
 
-        <div className="card p-6 space-y-5">
+        <Card variant="standard" padding="lg" className="space-y-4">
           <div>
             <h1 className="text-xl font-bold text-ink">
               {!authenticated ? 'Entrar' : alreadyAccepted ? 'Bem-vindo de volta' : 'Antes de continuar'}
@@ -196,7 +197,7 @@ export function LoginPage() {
             ) : (
               <>
                 <DiscordIcon className="h-5 w-5" />
-                {connecting ? 'Conectando...' : 'Vincular Discord'}
+                {connecting ? 'Conectando…' : 'Vincular Discord'}
               </>
             )}
           </button>
@@ -204,7 +205,7 @@ export function LoginPage() {
           {/* 2. Termos — bloqueados até vincular o Discord */}
           <div className="space-y-3">
             <label
-              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
+              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-xs p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
             >
               <input
                 type="checkbox"
@@ -222,7 +223,7 @@ export function LoginPage() {
             </label>
 
             <label
-              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-sm p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
+              className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-bg-surface/70 backdrop-blur-xs p-3 text-sm text-ink-secondary ${!authenticated ? 'opacity-50' : ''}`}
             >
               <input
                 type="checkbox"
@@ -255,7 +256,7 @@ export function LoginPage() {
             {' '}e a{' '}
             <Link to="/privacy" className="text-brand hover:underline">Política de Privacidade</Link>.
           </p>
-        </div>
+        </Card>
       </div>
     </div>
   )

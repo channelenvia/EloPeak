@@ -14,12 +14,12 @@ import type { Order } from '@/types'
 // wins_played de um pedido real).
 export function WinsRemainingBadge({ purchased, remaining }: { purchased: number; remaining: number }) {
   return (
-    <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+    <div className="flex items-center gap-3 min-w-0 shrink-0">
       <div className="flex items-center justify-center bg-bg-raised border border-border-subtle shrink-0 w-20 h-20 rounded-2xl p-2.5">
         <span className="text-2xl font-extrabold text-ink-muted leading-none" data-tabular>{purchased}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-ink-muted uppercase tracking-wide">Vitórias Contratadas</p>
+        <p className="text-2xs text-ink-muted uppercase tracking-wide">Vitórias Contratadas</p>
         <p className="text-base font-bold text-ink truncate">{remaining} {remaining === 1 ? 'vitória restante' : 'vitórias restantes'}</p>
       </div>
     </div>
@@ -81,9 +81,9 @@ export function OrderRankSummary({ order }: { order: Order }) {
       {isEstimate ? '~' : ''}{currentPoints} {pointsLabel}
     </span>
   ) : progressLocked ? (
-    <span className="text-[11px] font-medium text-ink-muted whitespace-nowrap">Aguardando início</span>
+    <span className="text-xs font-medium text-ink-muted whitespace-nowrap">Aguardando início</span>
   ) : (
-    <span className="text-[11px] font-medium text-ink-muted whitespace-nowrap">Sincronizando…</span>
+    <span className="text-xs font-medium text-ink-muted whitespace-nowrap">Sincronizando…</span>
   )
 
   return (

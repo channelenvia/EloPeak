@@ -7,6 +7,7 @@ import { getAuthUser } from '../_shared/authUser.ts'
 import { fetchWithTimeout, HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { validateAndPriceIntent } from '../_shared/orderPricing.ts'
+import { classifyExistingPixPayment } from '../_shared/pixPayment.ts'
 
 const MP_ACCESS_TOKEN = Deno.env.get('MERCADOPAGO_ACCESS_TOKEN') ?? ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -263,37 +264,47 @@ serve(async (req) => {
       })
     }
 
-    // If there is already a pending MP payment for this order, try to reuse it
+    // Um pedido fica vinculado a um único mp_payment_id. Se já existe um,
+    // nunca criamos outra cobrança: record_pix_payment recusaria o novo ID e
+    // deixaria um PIX órfão no Mercado Pago.
     if (order.mp_payment_id) {
       const existing = await fetchWithTimeout(
         `https://api.mercadopago.com/v1/payments/${order.mp_payment_id}`,
         { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } },
       )
-      if (existing.ok) {
-        const mp = await existing.json()
-        // pending or in_process: return the existing QR code
-        if (mp.status === 'pending' || mp.status === 'in_process') {
-          return jsonResponse(req, {
-            order_id: orderId,
-            total_price: order.total_price,
-            payment_id: mp.id,
-            qr_code: mp.point_of_interaction?.transaction_data?.qr_code,
-            qr_code_base64: mp.point_of_interaction?.transaction_data?.qr_code_base64,
-            expires_at: mp.date_of_expiration,
-            reused: true,
-          })
-        }
-        // MP already shows this payment as approved but our webhook hasn't
-        // landed yet (delivery lag) — the order row can still read
-        // 'awaiting_payment' in this exact window. Falling through to
-        // "create new PIX payment" below would re-POST with the same
-        // idempotency key (no double charge, MP replays the approved
-        // payment) but hand the client a stale/misleading "unpaid" response.
-        // Tell the truth instead: this order is already paid.
-        if (mp.status === 'approved') {
-          return errorResponse(req, 'Este pedido já foi pago — atualize a página.', 409, 'ALREADY_PAID', { order_id: orderId })
-        }
+      if (!existing.ok) {
+        console.error('Mercado Pago existing payment lookup failed', existing.status)
+        return errorResponse(req, 'Não foi possível verificar o PIX existente. Tente novamente em instantes.', 502, 'PAYMENT_PROVIDER_LOOKUP_FAILED', { order_id: orderId })
       }
+
+      const mp = await existing.json()
+      const action = classifyExistingPixPayment(mp.status)
+      if (action === 'reuse') {
+        return jsonResponse(req, {
+          order_id: orderId,
+          total_price: order.total_price,
+          payment_id: mp.id,
+          qr_code: mp.point_of_interaction?.transaction_data?.qr_code,
+          qr_code_base64: mp.point_of_interaction?.transaction_data?.qr_code_base64,
+          expires_at: mp.date_of_expiration,
+          reused: true,
+        })
+      }
+      // MP já aprovou, mas o webhook ainda não atualizou o pedido local.
+      if (action === 'already_paid') {
+        return errorResponse(req, 'Este pedido já foi pago — atualize a página.', 409, 'ALREADY_PAID', { order_id: orderId })
+      }
+
+      // rejected/cancelled/refunded/charged_back (e qualquer status futuro
+      // desconhecido) são terminais para este pedido. O cliente deve esperar
+      // o webhook cancelá-lo ou cancelá-lo manualmente e criar outro pedido.
+      return errorResponse(
+        req,
+        'O PIX anterior não pode mais ser reutilizado. Cancele este pedido e crie um novo.',
+        409,
+        'PIX_PAYMENT_TERMINAL',
+        { order_id: orderId },
+      )
     }
 
     // Create new PIX payment via Mercado Pago API
@@ -306,14 +317,9 @@ serve(async (req) => {
       headers: {
         Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        // Idempotency key is scoped to the order itself on the first attempt.
-        // If we reach this point with order.mp_payment_id already set, the
-        // block above already returned early for pending/in_process/approved
-        // -- so a set mp_payment_id here means the previous MP payment ended
-        // up rejected/cancelled. Reusing the same key would make MP replay
-        // that dead payment object forever instead of creating a fresh one,
-        // so the retry key is derived from the failed payment's own id.
-        'X-Idempotency-Key': order.mp_payment_id ? `${orderId}:${order.mp_payment_id}` : orderId,
+        // Chegar aqui implica que o pedido ainda não possui pagamento. Toda
+        // repetição legítima usa a mesma chave e recebe a mesma cobrança do MP.
+        'X-Idempotency-Key': orderId,
       },
       body: JSON.stringify({
         transaction_amount: amountBrl,

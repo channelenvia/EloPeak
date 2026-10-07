@@ -50,7 +50,7 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
           <div>
             <label htmlFor="order-credentials-password" className="text-xs font-semibold text-ink-secondary block mb-1">Senha da conta</label>
             <input id="order-credentials-password" type="password" {...register('password')} placeholder="••••••••" className="input-base w-full text-sm" autoComplete="current-password" maxLength={256} />
-            <p className="text-[10px] text-ink-muted mt-1">O valor enviado é transformado em payload criptografado no banco. Não compartilhe a senha no chat.</p>
+            <p className="text-2xs text-ink-muted mt-1">O valor enviado é transformado em payload criptografado no banco. Não compartilhe a senha no chat.</p>
           </div>
           <Button size="sm" className="w-full" loading={saveCredentials.isPending} disabled={!isValid} onClick={handleSubmit(submit)} variant={saved ? 'success' : 'primary'}>
             {saved ? 'Credenciais salvas!' : state.credentials_set ? 'Atualizar credenciais' : 'Salvar credenciais'}

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Button } from '@/components/ui/Button'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
@@ -26,12 +27,12 @@ class ErrorBoundary extends React.Component<
                 {(this.state.error as Error).message}
               </pre>
             )}
-            <button
+            <Button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-xl bg-brand text-white text-sm font-semibold"
+              variant="primary" size="md"
             >
               Recarregar
-            </button>
+            </Button>
           </div>
         </div>
       )

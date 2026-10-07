@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Card } from '@/components/ui/Card'
 import { Link } from 'react-router-dom'
 import { History } from 'lucide-react'
 import { EmptyState, Pagination, SearchInput, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui'
-import { timeAgo } from '@/lib/utils'
+import { timeAgo, formatDateTime } from '@/lib/utils'
 import { useAdminAuditLogs } from '@/api/admin'
 import { usePagedList } from '@/hooks/usePagedList'
 import type { AuditLogEntry } from '@/api/admin'
@@ -55,10 +57,7 @@ export function AdminAuditLogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink">Log de Auditoria</h1>
-        <p className="text-sm text-ink-secondary mt-1">Toda ação administrativa (drop, reatribuição, refund, override, ajuste de saldo...) com quem fez, quando e por quê.</p>
-      </div>
+      <PageHeader title="Log de Auditoria" description="Toda ação administrativa (drop, reatribuição, refund, override, ajuste de saldo…) com quem fez, quando e por quê." />
 
       {(logs?.length ?? 0) >= 300 && (
         <p className="text-xs text-warning">Mostrando as 300 entradas mais recentes — pode haver mais.</p>
@@ -66,7 +65,7 @@ export function AdminAuditLogPage() {
 
       <SearchInput
         wrapperClassName="w-full sm:w-72 shrink-0"
-        placeholder="Buscar por ação, entidade ou admin..."
+        placeholder="Buscar por ação, entidade ou admin…"
         aria-label="Buscar no log de auditoria"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -80,7 +79,7 @@ export function AdminAuditLogPage() {
         <EmptyState icon={History} title="Nenhuma entrada encontrada" />
       ) : (
         <>
-          <div className="card p-0 backdrop-blur-none shadow-none bg-bg-surface">
+          <Card variant="operational" padding="none">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -94,14 +93,14 @@ export function AdminAuditLogPage() {
               <TableBody>
                 {pageItems.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell className="whitespace-nowrap" title={new Date(entry.created_at).toLocaleString('pt-BR')}>
+                    <TableCell className="whitespace-nowrap" title={formatDateTime(entry.created_at)}>
                       {timeAgo(entry.created_at)}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-ink">{entry.action}</TableCell>
                     <TableCell><EntityCell entry={entry} /></TableCell>
                     <TableCell>
                       {entry.actor?.username ?? entry.actor_id.slice(0, 8)}
-                      <span className="ml-1.5 text-[10px] text-ink-muted uppercase">{ROLE_LABEL[entry.actor_role] ?? entry.actor_role}</span>
+                      <span className="ml-1.5 text-2xs text-ink-muted uppercase">{ROLE_LABEL[entry.actor_role] ?? entry.actor_role}</span>
                     </TableCell>
                     <TableCell className="max-w-[420px] truncate text-xs" title={formatDiff(entry.diff)}>
                       {formatDiff(entry.diff)}
@@ -110,7 +109,7 @@ export function AdminAuditLogPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </Card>
           <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />
         </>
       )}

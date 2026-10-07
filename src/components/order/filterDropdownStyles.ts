@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 // pl-8 py-1.5 text-xs: mesma altura de padding/fonte aqui).
 export function filterTriggerClass(open: boolean): string {
   return cn(
-    'flex items-center gap-1.5 border border-border-subtle bg-bg-surface px-3 py-1.5 shadow-sm hover:border-brand/40 hover:shadow-brand transition-all text-xs font-bold text-brand',
+    'flex items-center gap-1.5 border border-border-subtle bg-bg-surface px-3 py-1.5 shadow-xs hover:border-brand/40 hover:shadow-brand transition-all text-xs font-bold text-brand',
     open ? 'rounded-t-lg border-b-0' : 'rounded-lg',
   )
 }

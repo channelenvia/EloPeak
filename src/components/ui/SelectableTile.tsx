@@ -2,20 +2,15 @@ import { forwardRef } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
-// Estado visual compartilhado por qualquer "chip selecionável em grade":
-// contagem de vitórias, divisão de rank, tier de rank, dia da Clash etc.
-// Antes cada um desses reimplementava a mesma combinação de borda/opacidade
-// com strings Tailwind copiadas (WinCountButtons, a grade de divisões e o
-// TierButton dentro de RankLockGrid) em vez de compartilhar uma fonte única.
-// Esse componente é essa fonte única — conteúdo (número, ícone, texto) fica
-// por conta de quem usa.
+// Estado visual único de todo "chip selecionável em grade" (vitórias, divisão,
+// tier, dia do Clash); o conteúdo fica por conta de quem usa.
 const selectableTileVariants = cva(
   'flex items-center justify-center rounded-xl border-2 font-bold transition-all duration-fast focus-ring disabled:cursor-not-allowed',
   {
     variants: {
       state: {
         default: 'border-border-subtle bg-bg-surface text-ink-secondary hover:border-brand/30 hover:bg-bg-raised',
-        selected: 'border-brand bg-brand text-white',
+        selected: 'border-brand bg-brand text-ink-inverse',
         // Seleção com preenchimento sutil em vez de sólido — usada quando o
         // conteúdo (ícone + label) já carrega cor própria (ex.: emblema de rank).
         'selected-tinted': 'border-brand bg-brand/10',

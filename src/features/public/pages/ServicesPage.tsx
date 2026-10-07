@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Card } from '@/components/ui/Card'
 import { useLocation } from 'react-router-dom'
 import { TrendingUp, Zap, Users, Swords, CheckCircle2 } from 'lucide-react'
 import { RankBadge } from '@/components/ui'
@@ -118,7 +119,7 @@ export function ServicesPage() {
         {/* Services */}
         <div className="space-y-8">
           {SERVICES.map(({ icon: Icon, slug, title, tagline, description, rankRange, highlights, color, bgColor }) => (
-            <div key={title} id={slug.replace(/_/g, '-')} className="card p-8 flex flex-col md:flex-row md:items-center gap-12 xl:gap-16 scroll-mt-24">
+            <Card key={title} id={slug.replace(/_/g, '-')} variant="standard" padding="none" className="p-8 flex flex-col md:flex-row md:items-center gap-12 xl:gap-16 scroll-mt-24">
               <div className="md:w-2/5 space-y-4">
                 <div className={`h-12 w-12 rounded-2xl ${bgColor} flex items-center justify-center`}>
                   <Icon className={`h-6 w-6 ${color}`} />
@@ -132,7 +133,7 @@ export function ServicesPage() {
               <div className="md:w-3/5 md:ml-auto space-y-6">
                 {/* Rank range badges */}
                 <div>
-                  <p className="text-[10px] font-bold text-ink-muted uppercase tracking-widest mb-2">Disponível para</p>
+                  <p className="text-2xs font-bold text-ink-muted uppercase tracking-widest mb-2">Disponível para</p>
                   <div className="flex flex-wrap gap-2">
                     {rankRange.map(tier => (
                       <RankBadge key={tier} tier={tier} size="xs" showDivision={false} showLabel={false} />
@@ -142,9 +143,9 @@ export function ServicesPage() {
 
                 <div>
                   <p className="section-label mb-3">O que está incluso</p>
-                  <ul className="space-y-2.5">
+                  <ul className="space-y-3">
                     {highlights.map((h) => (
-                      <li key={h} className="flex items-start gap-2.5">
+                      <li key={h} className="flex items-start gap-3">
                         <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
                         <span className="text-sm text-ink-secondary">{h}</span>
                       </li>
@@ -152,23 +153,23 @@ export function ServicesPage() {
                   </ul>
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
 
         {/* All ranks visual */}
-        <div className="card p-8 text-center">
+        <Card variant="standard" padding="none" className="p-8 text-center">
           <p className="section-label mb-2">Cobertura completa</p>
           <h2 className="text-xl font-bold text-ink mb-6">Disponível em todos os ranks</h2>
           <div className="flex flex-wrap justify-center gap-3">
             {RANK_TIER_ORDER.map(tier => (
               <div key={tier} className="flex flex-col items-center gap-1">
                 <RankBadge tier={tier} size="md" showDivision={false} showLabel={false} />
-                <span className={`text-[10px] font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</span>
+                <span className={`text-2xs font-bold ${RANK_TIER_COLOR[tier]}`}>{RANK_TIER_LABEL[tier]}</span>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   )

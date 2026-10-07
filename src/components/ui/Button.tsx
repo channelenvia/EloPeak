@@ -15,8 +15,6 @@ const buttonVariants = cva(
           'bg-brand text-ink-inverse shadow-brand hover:bg-brand-hover hover:shadow-brand active:scale-[0.98]',
         accent:
           'bg-accent text-bg-base shadow-accent hover:bg-accent-hover active:scale-[0.98]',
-        // Antes usava bg-bg-overlay (token de scrim) como borda/hover — aqui
-        // já migrado pros tokens de borda dedicados (border-subtle/-strong).
         secondary:
           'bg-bg-raised text-ink border border-border-subtle hover:bg-bg-interactive hover:border-border-strong active:scale-[0.98]',
         ghost:

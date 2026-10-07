@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Eye } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
@@ -16,20 +17,14 @@ export function BoosterServicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Serviços</h1>
-          <p className="text-sm text-ink-secondary mt-1">Configure seu perfil profissional e os serviços de coach que você oferece aos clientes.</p>
-        </div>
-        {boosterDisplayName && (
+      <PageHeader title="Serviços" description="Configure seu perfil profissional e os serviços de coach que você oferece aos clientes." actions={boosterDisplayName && (
           <Button asChild variant="outline" size="sm">
             <Link to={`/boosters/${encodeURIComponent(boosterDisplayName)}`} target="_blank" rel="noopener noreferrer">
               <Eye className="h-4 w-4" />
               Visualizar como cliente
             </Link>
           </Button>
-        )}
-      </div>
+        )} />
 
       <BoosterProfessionalProfileForm userId={profile.id} />
       <BoosterServicesList userId={profile.id} />

@@ -7,9 +7,8 @@
 // Function Deno — nada de `@/...` nem de APIs de browser/Deno aqui.
 
 import type { ClashDay, ClashTier, RankTier } from './pricing.ts'
-import { PRIORITY_ADDON_CODE, sortAddonsBySortOrder, type BoostMode } from './boostDomain.ts'
+import { PRIORITY_ADDON_CODE, type BoostMode } from './boostDomain.ts'
 
-export { sortAddonsBySortOrder }
 
 // Subconjunto do catálogo solo_standard/duo_standard aceito no Clash —
 // decisão de produto: Solo Clash só oferece Transmissão + Acesso
