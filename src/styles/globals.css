@@ -216,3 +216,40 @@
     @apply focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base;
   }
 }
+
+/* Card Payment Brick (Mercado Pago). O formulário é renderizado por eles, então
+   o ajuste é por estrutura (classes têm hash). Cada campo (título + input)
+   reserva 32px embaixo para o "Dado obrigatório", que fica ancorado nesse
+   espaço -- o formulário tem a mesma altura com ou sem erro. O aviso geral
+   "Preencha todos os dados..." repete os erros dos campos e empurrava o botão,
+   então fica oculto. */
+.mp-brick label {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.mp-brick :has(> label) {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 !important;
+  padding: 0 0 32px !important;
+}
+.mp-brick :has(> label) > div:has(> p) {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 16px;
+}
+.mp-brick :has(> label) > div > p {
+  margin: 0 !important;
+  font-size: 12px;
+  line-height: 16px;
+}
+/* aviso geral: div com <p> ao lado do container do botão */
+.mp-brick [class^="row-"] > div:has(> p) {
+  display: none !important;
+}

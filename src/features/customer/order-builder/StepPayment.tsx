@@ -8,6 +8,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { EdgeFunctionError, invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { Button, ErrorAlert } from '@/components/ui'
 import { useCurrency } from '@/hooks/useCurrency'
+import { useCountdown } from '@/hooks/useCountdown'
+import { pixErrorMessage } from '@/lib/pixErrorMessage'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { applyCoupon } from '@/lib/pricing'
 import { getBoostFlow } from '@/lib/boostDomain'
@@ -33,51 +35,6 @@ type PixState =
   | { phase: 'confirmed' }
   | { phase: 'expired'; order_id: string }
   | { phase: 'error'; message: string; order_id?: string }
-
-function pixErrorMessage(err: unknown) {
-  if (!(err instanceof EdgeFunctionError)) {
-    return err instanceof Error ? err.message : 'Erro ao gerar PIX'
-  }
-
-  if (err.code === 'NETWORK_ERROR') {
-    return 'Não foi possível conectar para gerar o PIX. Tente novamente.'
-  }
-  if (err.status === 401) {
-    return 'Sua sessão expirou. Entre novamente para gerar o PIX.'
-  }
-  if (err.status === 403) {
-    return `A função recusou a operação${err.code ? ` (${err.code})` : ''}. Entre novamente e tente outra vez.`
-  }
-  if (err.status === 429) {
-    const seconds = Math.max(1, Math.ceil(err.retryAfter ?? 10))
-    return `Muitas tentativas seguidas. Aguarde ${seconds}s e tente novamente.`
-  }
-  if (err.status >= 500) {
-    return 'Não foi possível gerar o PIX agora. Tente novamente em instantes.'
-  }
-
-  return err.message
-}
-
-function useCountdown(expiresAt: string | null) {
-  const [remaining, setRemaining] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!expiresAt) {
-      setRemaining(null)
-      return
-    }
-    const tick = () => setRemaining(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [expiresAt])
-
-  const safeRemaining = remaining ?? 0
-  const mm = String(Math.floor(safeRemaining / 60)).padStart(2, '0')
-  const ss = String(safeRemaining % 60).padStart(2, '0')
-  return { remaining, label: `${mm}:${ss}` }
-}
 
 export function StepPayment({ insideModal = false }: { insideModal?: boolean } = {}) {
   const { profile } = useAuthStore()
@@ -240,6 +197,13 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   useEffect(() => {
     if (isCardPaymentInAnalysis(paymentInfo)) setCardAcceptance('pending')
   }, [paymentInfo])
+  // Cartão aprovado já foi conciliado pelo servidor: confere na hora em vez de
+  // esperar o próximo ciclo do polling.
+  useEffect(() => {
+    if (cardAcceptance === 'approved' && savedOrderId) {
+      void queryClient.invalidateQueries({ queryKey: ['pix-payment-state', savedOrderId] })
+    }
+  }, [cardAcceptance, savedOrderId, queryClient])
   const confirmedHandledRef = useRef(false)
   useEffect(() => {
     if (!watchedOrderId || !isPaymentConfirmed(watchedState) || confirmedHandledRef.current) return

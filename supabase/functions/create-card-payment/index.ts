@@ -108,9 +108,6 @@ serve(async (req) => {
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
 
-    const rateLimit = await consumeUserRateLimit('create-card-payment', auth.user.id, 10, 60)
-    if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)
-
     const parsedBody = bodySchema.safeParse(await readJsonBody(req))
     if (!parsedBody.success) {
       return jsonResponse(req, {
@@ -123,11 +120,16 @@ serve(async (req) => {
     // O MP exige e-mail do pagador; sem ele devolveria um 400 genérico de "cartão".
     if (!user.email) return errorResponse(req, 'Sua conta não tem e-mail cadastrado. Use o PIX ou atualize seu e-mail.', 400, 'PAYER_EMAIL_MISSING')
 
-    const { data: order, error: orderErr } = await auth.client
-      .from('orders')
-      .select('id, customer_id, total_price, status, mp_payment_id')
-      .eq('id', body.order_id)
-      .single()
+    // Rate limit e leitura do pedido são independentes: uma ida ao banco só.
+    const [rateLimit, { data: order, error: orderErr }] = await Promise.all([
+      consumeUserRateLimit('create-card-payment', user.id, 10, 60),
+      auth.client
+        .from('orders')
+        .select('id, customer_id, total_price, status, mp_payment_id')
+        .eq('id', body.order_id)
+        .single(),
+    ])
+    if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)
     if (orderErr || !order) return errorResponse(req, 'Order not found', 404)
     if (order.customer_id !== user.id) return errorResponse(req, 'Forbidden', 403)
     if (order.status !== 'awaiting_payment') return errorResponse(req, 'Order is not awaiting payment', 400, 'ORDER_NOT_AWAITING_PAYMENT')

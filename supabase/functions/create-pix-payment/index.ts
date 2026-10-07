@@ -110,29 +110,29 @@ serve(async (req) => {
       // pedidos pendentes sem limite. Checado ANTES de validar/precificar o
       // intent (que pode chamar a API da Riot) pra não gastar essa chamada
       // numa tentativa que vai ser rejeitada de qualquer jeito.
-      const { count: pendingCount, error: pendingCountErr } = await serviceClient
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('customer_id', user.id)
-        .eq('status', 'awaiting_payment')
-      if (pendingCountErr) return errorResponse(req, 'Failed to check pending orders', 500)
-      if ((pendingCount ?? 0) >= 2) {
-        return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
-      }
-
-      // Clash é evento único por conta -- bloqueia um segundo pedido Clash
-      // enquanto o cliente já tiver um ativo (trg_cap_active_clash_orders é a
-      // fonte da verdade atômica; isto só evita gastar a validação/preço,
-      // que pode chamar a Riot, numa tentativa que a trigger vai rejeitar).
-      if ((body.intent as { service_type?: unknown }).service_type === 'clash') {
-        const { count: activeClashCount, error: activeClashErr } = await serviceClient
+      const isClashIntent = (body.intent as { service_type?: unknown }).service_type === 'clash'
+      const [pending, activeClash] = await Promise.all([
+        serviceClient
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .eq('customer_id', user.id)
-          .eq('service_type', 'clash')
-          .not('status', 'in', '(completed,canceled,refunded)')
-        if (activeClashErr) return errorResponse(req, 'Failed to check active Clash orders', 500)
-        if ((activeClashCount ?? 0) > 0) {
+          .eq('status', 'awaiting_payment'),
+        isClashIntent
+          ? serviceClient
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('customer_id', user.id)
+            .eq('service_type', 'clash')
+            .not('status', 'in', '(completed,canceled,refunded)')
+          : Promise.resolve(null),
+      ])
+      if (pending.error) return errorResponse(req, 'Failed to check pending orders', 500)
+      if ((pending.count ?? 0) >= 2) {
+        return badRequest(req, 'Você já tem 2 pedidos aguardando pagamento. Pague ou cancele um deles em Meus Pedidos antes de criar outro.')
+      }
+      if (activeClash) {
+        if (activeClash.error) return errorResponse(req, 'Failed to check active Clash orders', 500)
+        if ((activeClash.count ?? 0) > 0) {
           return badRequest(req, 'Você já tem um pedido de Clash ativo. Finalize ou cancele-o antes de criar outro.')
         }
       }
@@ -354,8 +354,10 @@ serve(async (req) => {
     // client — this is the actual root cause of the "QR code sometimes
     // fails" symptom, not something a client-side retry alone can fix.
     let lastPollStatus: number | null = null
+    // Espera curta e crescente (0,5s/1s/1,5s): o QR costuma ficar pronto na
+    // primeira consulta, então o caso comum responde ~0,7s mais cedo.
     for (let attempt = 0; attempt < 3 && !mp.point_of_interaction?.transaction_data?.qr_code_base64; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
       const poll = await fetchWithTimeout(`https://api.mercadopago.com/v1/payments/${mpPaymentId}`, {
         headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` },
       })

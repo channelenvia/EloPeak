@@ -9,7 +9,9 @@ import { OrderRankRow } from '@/components/order/OrderRankRow'
 import { OrderInfoGrid, type OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { WinsRemainingBadge } from '@/components/order/OrderRankSummary'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
-import { Shuffle, Users, Hash, Clock, UserCheck, Route } from 'lucide-react'
+import { CoachPackageTags, PackageSection } from './CoachProfileCard'
+import { showDescription } from './showDescription'
+import { Shuffle, Users, Hash, Clock, Route } from 'lucide-react'
 
 export function StepReview() {
   const {
@@ -18,7 +20,7 @@ export function StepReview() {
     currentLp, currentPdl,
     estimatedHours, customerNotes, winsPurchased,
     setNotes, selectedCoachPackage, sessionsPurchased,
-    clashTier, clashDay, preferredBoosterName,
+    clashTier, clashDay,
     customerLanes,
   } = useOrderBuilderStore()
 
@@ -77,18 +79,23 @@ export function StepReview() {
           <Card variant="standard" padding="lg">
             {serviceType === 'coaching' && selectedCoachPackage && (
               <div className="space-y-3">
-                {preferredBoosterName && (
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-brand">
-                    <UserCheck className="h-3.5 w-3.5" />
-                    Pedido exclusivo para {preferredBoosterName}
+                <p className="text-base font-bold text-ink">{selectedCoachPackage.title}</p>
+                <CoachPackageTags pkg={selectedCoachPackage} />
+                {(showDescription(selectedCoachPackage) || selectedCoachPackage.requirements) && (
+                  <div className="grid sm:grid-cols-2 gap-x-5 gap-y-3">
+                    {showDescription(selectedCoachPackage) && (
+                      <PackageSection title="Sobre o pacote">
+                        <p className="text-sm text-ink-secondary leading-snug whitespace-pre-line">{selectedCoachPackage.description}</p>
+                      </PackageSection>
+                    )}
+                    {selectedCoachPackage.requirements && (
+                      <PackageSection title="Requisitos">
+                        <p className="text-sm text-ink-secondary leading-snug whitespace-pre-line">{selectedCoachPackage.requirements}</p>
+                      </PackageSection>
+                    )}
                   </div>
                 )}
-                <p className="text-base font-bold text-ink">{selectedCoachPackage.title}</p>
-                {selectedCoachPackage.description && (
-                  <p className="text-sm text-ink-secondary leading-relaxed">{selectedCoachPackage.description}</p>
-                )}
-                <ServiceTagPills lanes={selectedCoachPackage.lanes} champions={selectedCoachPackage.champions} specialties={selectedCoachPackage.specialties} />
-                <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs text-ink-muted">
+                <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border-subtle pt-3 text-xs text-ink-muted">
                   {selectedCoachPackage.tempo && <span>Duração: <span className="font-semibold text-ink">{selectedCoachPackage.tempo}</span></span>}
                   {sessionsPurchased && <span>Sessões: <span className="font-semibold text-ink">{sessionsPurchased}</span></span>}
                 </div>

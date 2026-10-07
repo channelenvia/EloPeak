@@ -47,14 +47,21 @@ function readThemeVariables() {
     textPrimaryColor: rgb('--color-ink', '#EDEEEF'),
     textSecondaryColor: rgb('--color-ink-secondary', '#A0A3A8'),
     baseColor: rgb('--color-brand', '#22C55E'),
-    baseColorFirstVariant: rgb('--color-bg-interactive', '#232328'),
-    baseColorSecondVariant: rgb('--color-border-subtle', '#28282D'),
+    baseColorFirstVariant: rgb('--color-bg-raised', '#1B1B1F'),
+    baseColorSecondVariant: rgb('--color-bg-raised', '#1B1B1F'),
     errorColor: rgb('--color-danger', '#EF4444'),
     successColor: rgb('--color-success', '#3DDC84'),
     outlinePrimaryColor: rgb('--color-brand', '#22C55E'),
     outlineSecondaryColor: rgb('--color-border-strong', '#3C3C43'),
     buttonTextColor: rgb('--color-ink-inverse', '#0E0E10'),
+    // Todos os campos com o mesmo raio, borda e respiro interno.
+    borderRadiusSmall: '12px',
     borderRadiusMedium: '12px',
+    borderRadiusLarge: '12px',
+    inputBorderWidth: '1px',
+    inputFocusedBorderWidth: '2px',
+    inputVerticalPadding: '14px',
+    inputHorizontalPadding: '14px',
     formPadding: '0px',
   }
 }
@@ -168,7 +175,7 @@ export function CardPaymentPanel({ orderId, totalPrice, onAccepted }: CardPaymen
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-md space-y-4 rounded-2xl border border-border-subtle bg-bg-surface p-4 sm:p-5">
       <div>
         <p className="text-xs font-medium text-ink-muted">Total a pagar</p>
         <p className="text-2xl font-extrabold text-brand tabular-figures" data-tabular>{currency(totalPrice)}</p>
@@ -176,7 +183,7 @@ export function CardPaymentPanel({ orderId, totalPrice, onAccepted }: CardPaymen
 
       {error && <ErrorAlert message={error} />}
 
-      <div className="relative min-h-40">
+      <div className={`mp-brick relative min-h-40 border-t border-border-subtle pt-4`}>
         {!brickReady && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-ink-secondary">
             <Loader2 className="h-8 w-8 animate-spin text-brand" />
@@ -190,7 +197,10 @@ export function CardPaymentPanel({ orderId, totalPrice, onAccepted }: CardPaymen
             locale="pt-BR"
             onSubmit={handleSubmit}
             onReady={() => setBrickReady(true)}
-            onError={() => setError('Não foi possível carregar o formulário do cartão. Recarregue a página ou use o PIX.')}
+            onError={(err) => {
+              console.error('Mercado Pago Brick error', err)
+              setError('Não foi possível carregar o formulário do cartão. Recarregue a página ou use o PIX.')
+            }}
           />
         )}
       </div>

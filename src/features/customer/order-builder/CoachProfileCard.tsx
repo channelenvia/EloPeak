@@ -11,6 +11,7 @@ import { LANE_ICON_URL, LANE_LABEL, SPECIALTY_LABEL } from '@/lib/lolTaxonomy'
 import { championIconUrl, useDdragonChampionIds, useDdragonVersion } from '@/lib/ddragon'
 import type { BoosterService } from '@/types'
 import type { CoachBoosterInfo } from '@/api/coaching/types'
+import { showDescription } from './showDescription'
 
 const COLLAPSED_PACKAGE_LIMIT = 3
 
@@ -94,18 +95,9 @@ interface CoachProfilePanelProps {
   onHire: (pkg: BoosterService) => void
 }
 
-const normalize = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ')
-
-// Descrição que só repete o título não agrega nada ao card de contratação.
-function showDescription(p: BoosterService): boolean {
-  if (!p.description?.trim()) return false
-  const description = normalize(p.description)
-  return description !== normalize(p.title) && !normalize(p.title).includes(description)
-}
-
 // Mesmo visual do formulário de cadastro de serviço do booster (label em caixa
 // alta + chips "selecionados"), pro cliente ler o pacote como o coach o montou.
-function PackageSection({ title, children }: { title: string; children: React.ReactNode }) {
+export function PackageSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0 space-y-1.5">
       <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{title}</p>
@@ -146,12 +138,30 @@ function ChipList({ items, tone }: { items: Chip[]; tone: ChipTone }) {
   )
 }
 
+// Rotas / Campeões / Especialidades em colunas de largura fixa (cabem os
+// limites 2/3/N de chips), igual no perfil do coach e no resumo do pedido.
+export function CoachPackageTags({ pkg }: { pkg: Pick<BoosterService, 'lanes' | 'champions' | 'specialties'> }) {
+  const ddragonVersion = useDdragonVersion()
+  const championIds = useDdragonChampionIds(ddragonVersion)
+  return (
+    <div className="grid sm:grid-cols-[11rem_18rem_minmax(0,1fr)] gap-x-4 gap-y-3 pt-3 border-t border-border-subtle">
+      <PackageSection title="Rotas">
+        <ChipList items={(pkg.lanes ?? []).map(l => ({ label: LANE_LABEL[l] ?? l, iconUrl: LANE_ICON_URL[l] }))} tone="success" />
+      </PackageSection>
+      <PackageSection title="Campeões">
+        <ChipList items={(pkg.champions ?? []).map(c => ({ label: c, iconUrl: championIds ? championIconUrl(c, ddragonVersion, championIds) : null }))} tone="warning" />
+      </PackageSection>
+      <PackageSection title="Especialidades">
+        <ChipList items={(pkg.specialties ?? []).map(sp => ({ label: SPECIALTY_LABEL[sp] ?? sp, icon: specialtyIcon(sp) }))} tone="neutral" />
+      </PackageSection>
+    </div>
+  )
+}
+
 export function CoachProfilePanel({ booster, packages, selectedPackageId, onClose, onHire }: CoachProfilePanelProps) {
   const currency = useCurrency()
   const name = booster?.display_name ?? 'Booster'
   const ref = useRef<HTMLDivElement>(null)
-  const ddragonVersion = useDdragonVersion()
-  const championIds = useDdragonChampionIds(ddragonVersion)
   const [activeId, setActiveId] = useState(() => packages.find(p => p.id === selectedPackageId)?.id ?? packages[0]?.id)
   const active = packages.find(p => p.id === activeId) ?? packages[0]
   useEffect(() => { ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [])
@@ -199,17 +209,7 @@ export function CoachProfilePanel({ booster, packages, selectedPackageId, onClos
           <h3 className="text-base font-bold text-ink truncate">{active.title}</h3>
           <span className="text-lg font-bold text-brand shrink-0">{currency(active.price)}</span>
         </div>
-        <div className="grid sm:grid-cols-[11rem_18rem_minmax(0,1fr)] gap-x-4 gap-y-3 pt-3 border-t border-border-subtle">
-          <PackageSection title="Rotas">
-            <ChipList items={(active.lanes ?? []).map(l => ({ label: LANE_LABEL[l] ?? l, iconUrl: LANE_ICON_URL[l] }))} tone="success" />
-          </PackageSection>
-          <PackageSection title="Campeões">
-            <ChipList items={(active.champions ?? []).map(c => ({ label: c, iconUrl: championIds ? championIconUrl(c, ddragonVersion, championIds) : null }))} tone="warning" />
-          </PackageSection>
-          <PackageSection title="Especialidades">
-            <ChipList items={(active.specialties ?? []).map(sp => ({ label: SPECIALTY_LABEL[sp] ?? sp, icon: specialtyIcon(sp) }))} tone="neutral" />
-          </PackageSection>
-        </div>
+        <CoachPackageTags pkg={active} />
         {(showDescription(active) || active.requirements) && (
           <div className="grid sm:grid-cols-2 gap-x-5 gap-y-3">
             {showDescription(active) && (

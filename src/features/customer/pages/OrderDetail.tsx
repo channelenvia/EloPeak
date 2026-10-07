@@ -14,6 +14,8 @@ import {
     useRequestCustomerOrderDrop,
     useSyncOrderMatches,
 } from '@/api/orders'
+import { useCountdown } from '@/hooks/useCountdown'
+import { pixErrorMessage } from '@/lib/pixErrorMessage'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
 import { CredentialsSection } from '@/components/order/CredentialsSection'
 import { DuoAccountHistoryList } from '@/components/order/DuoAccountHistoryList'
@@ -86,34 +88,6 @@ function AssignedBoosterValue({ order }: { order: Order }) {
   )
 }
 
-function pixErrorMessage(err: unknown) {
-  if (!(err instanceof EdgeFunctionError)) return err instanceof Error ? err.message : 'Erro ao carregar PIX'
-  if (err.status === 401) return 'Sua sessão expirou. Entre novamente para continuar.'
-  if (err.status === 403) return 'Você não tem permissão para esse pedido.'
-  if (err.status === 409) return err.message
-  return err.message
-}
-
-function useCountdown(expiresAt: string | null) {
-  const [remaining, setRemaining] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!expiresAt) {
-      setRemaining(null)
-      return
-    }
-    const tick = () => setRemaining(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)))
-    tick()
-    const id = window.setInterval(tick, 1000)
-    return () => window.clearInterval(id)
-  }, [expiresAt])
-
-  const safeRemaining = remaining ?? 0
-  const mm = String(Math.floor(safeRemaining / 60)).padStart(2, '0')
-  const ss = String(safeRemaining % 60).padStart(2, '0')
-  return { remaining, label: `${mm}:${ss}` }
-}
-
 function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: Order; open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -161,6 +135,11 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
     navigate(`/orders/${order.id}${state?.requires_credentials ? '#credentials' : ''}`, { replace: true })
     return true
   }, [order.id, queryClient, navigate])
+
+  // Cartão aprovado já foi conciliado pelo servidor: confere na hora.
+  useEffect(() => {
+    if (cardAcceptance === 'approved') void redirectIfPaymentConfirmed()
+  }, [cardAcceptance, redirectIfPaymentConfirmed])
 
   useEffect(() => {
     if ((!pix && !cardAcceptance && method !== 'card') || order.status !== 'awaiting_payment') return

@@ -26,7 +26,7 @@ export function PixWaitingPanel({
   const isUrgent = (remaining ?? Number.POSITIVE_INFINITY) < 120
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-md space-y-4 rounded-2xl border border-border-subtle bg-bg-surface p-4 sm:p-5">
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium text-ink-muted">Total a pagar</p>
