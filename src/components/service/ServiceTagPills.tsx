@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { specialtyIcon } from './specialtyIcon'
 import { cn } from '@/lib/utils'
 import { ALL_LANES_LABEL, LANES, LANE_LABEL, LANE_ICON_URL, SPECIALTY_LABEL, hasAllLanes } from '@/lib/lolTaxonomy'
 import { useDdragonVersion, useDdragonChampionIds, championIconUrl } from '@/lib/ddragon'
@@ -51,7 +51,7 @@ export function ServiceTagPills({ lanes, champions, specialties, compact, labele
       onError={(e) => { e.currentTarget.style.display = 'none' }}
     />
   )
-  const lanePillCls = cn(pillCls, 'bg-brand/10 text-brand', !compact && 'border border-brand/20')
+  const lanePillCls = cn(pillCls, 'bg-success/10 text-success', !compact && 'border border-success/20')
 
   // As 5 rotas = "sem restrição": uma pill só, com os 5 ícones juntos e o
   // texto, em vez de 5 pills com o mesmo peso visual.
@@ -74,7 +74,7 @@ export function ServiceTagPills({ lanes, champions, specialties, compact, labele
     // texto livre e esconder a imagem antes da resolução do id canônico.
     const iconUrl = championIds ? championIconUrl(c, ddragonVersion, championIds) : null
     return (
-      <span key={c} className={cn(pillCls, 'font-medium bg-accent/10 text-accent', !compact && 'border border-accent/20')}>
+      <span key={c} className={cn(pillCls, 'font-medium bg-warning/10 text-warning', !compact && 'border border-warning/20')}>
         {iconUrl && (
           <img
             src={iconUrl}
@@ -89,11 +89,14 @@ export function ServiceTagPills({ lanes, champions, specialties, compact, labele
     )
   })
 
-  const specialtyNodes = specialties?.map(s => (
-    <span key={s} className={cn(pillCls, 'font-medium bg-bg-raised', compact ? 'text-ink-muted' : 'text-ink-secondary')}>
-      <Sparkles className={cn('shrink-0', labeled ? 'h-4 w-4' : 'h-3.5 w-3.5')} />{SPECIALTY_LABEL[s] ?? s}
-    </span>
-  ))
+  const specialtyNodes = specialties?.map(s => {
+    const Icon = specialtyIcon(s)
+    return (
+      <span key={s} className={cn(pillCls, 'font-medium bg-bg-raised', compact ? 'text-ink-muted' : 'text-ink-secondary')}>
+        <Icon className={cn('shrink-0', labeled ? 'h-4 w-4' : 'h-3.5 w-3.5')} />{SPECIALTY_LABEL[s] ?? s}
+      </span>
+    )
+  })
 
   if (!labeled) {
     return (

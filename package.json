@@ -1,5 +1,5 @@
 {
-  "name": "eloboost",
+  "name": "elopeak",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -26,6 +26,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/space-grotesk": "^5.3.0",
     "@hookform/resolvers": "^5.9.1",
+    "@mercadopago/sdk-react": "^1.0.7",
     "@radix-ui/react-avatar": "^1.2.7",
     "@radix-ui/react-dialog": "^1.2.0",
     "@radix-ui/react-slot": "^1.4.0",

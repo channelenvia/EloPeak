@@ -7,7 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, MessageCircle, Plus, RefreshCw, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, MessageCircle, Plus, RefreshCw, Undo2, Wallet } from 'lucide-react'
 import { Button, Card, CurrencyMaskedInput, EmptyState, ErrorAlert, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
@@ -15,20 +15,26 @@ import type { Refund } from '@/types'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminAdjustBoosterBalance, useAdminRefunds, useAdminReviewCases, useProfileUsername, useProfileUsernames } from '@/api/admin'
 import type { AdminReviewCase } from '@/api/admin'
-import { useAdminCreateManualRefund, useOrder } from '@/api/orders'
+import { useAdminCancelManualRefund, useAdminConfirmManualRefund, useAdminCreateManualRefund, useOrder } from '@/api/orders'
 import { useBoosterPayoutTotals } from '@/api/payouts'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 
 const REFUND_STATUS_LABEL: Record<Refund['status'], string> = {
-  pending: 'Pendente',
-  succeeded: 'Concluído',
+  pending: 'A reembolsar',
+  succeeded: 'Reembolsado',
   failed: 'Falhou',
+}
+
+// Marcação manual desfeita pelo admin não é uma falha do provedor.
+function refundStatusLabel(refund: Refund) {
+  return refund.is_manual && refund.status === 'failed' ? 'Desfeito' : REFUND_STATUS_LABEL[refund.status]
 }
 
 const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Reembolso aqui é sempre tratado manualmente entre admin e cliente (PIX de
-// volta por fora, combinado via DM/ticket) -- este formulário só registra o
+// volta por fora, combinado via DM/ticket, ou estorno do cartão no painel do
+// Mercado Pago) -- este formulário só registra o
 // que já aconteceu, não chama o Mercado Pago. Por isso pede o ID completo do
 // pedido (não dá pra buscar por texto parcial) e mostra cliente/valor total
 // do pedido encontrado como confirmação antes de deixar submeter.
@@ -80,8 +86,8 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
     <Modal
       open={open}
       onOpenChange={(next) => { if (!next) close() }}
-      title="Novo reembolso manual"
-      description="Registra um reembolso manual (PIX por fora) sem chamar o Mercado Pago."
+      title="Marcar pra reembolsar"
+      description="Cria o item em A reembolsar, sem chamar o Mercado Pago. Devolva o dinheiro por fora (PIX manual ou estorno do cartão no painel do Mercado Pago) e confirme no check: só então o pedido vira Reembolsado."
     >
       <div>
         <label htmlFor="manual-refund-order-id" className="text-xs font-semibold text-ink-secondary block mb-1.5">Número do pedido (ID completo)</label>
@@ -140,7 +146,7 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
           disabled={!canSubmit}
           onClick={handleSubmit(onSubmit)}
         >
-          Registrar reembolso
+          Marcar pra reembolsar
         </Button>
       </ActionBar>
     </Modal>
@@ -289,7 +295,7 @@ function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReview
             <Button variant="secondary" size="sm" leftIcon={<MessageCircle className="h-3.5 w-3.5" />}>Chat do pedido</Button>
           </Link>
           <Button variant="secondary" size="sm" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onOpenRefund(item.order_id)}>
-            Reembolsar cliente
+            Marcar pra reembolsar
           </Button>
           {item.last_assigned_booster_id && (
             <Button variant="secondary" size="sm" leftIcon={<Wallet className="h-3.5 w-3.5" />} onClick={() => setAdjustOpen(true)}>
@@ -336,8 +342,82 @@ function ReviewCasesSection({ onOpenRefund }: { onOpenRefund: (orderId: string) 
   )
 }
 
-export function AdminRefundsPage() {
+function ConfirmRefundModal({ refund, open, onClose }: { refund: Refund; open: boolean; onClose: () => void }) {
   const currency = useCurrency()
+  const confirm = useAdminConfirmManualRefund()
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(next) => { if (!next) onClose() }}
+      title="Confirmar reembolso feito?"
+      description={`Confirme só depois de devolver ${currency(refund.amount)} ao cliente (PIX manual ou estorno do cartão no painel do Mercado Pago). O pedido passa para Reembolsado e o cliente é avisado.`}
+      maxWidth="sm"
+    >
+      {confirm.isError && <ErrorAlert message={confirm.error instanceof Error ? confirm.error.message : 'Erro'} />}
+      <ActionBar>
+        <Button variant="secondary" disabled={confirm.isPending} onClick={onClose}>Voltar</Button>
+        <Button
+          loading={confirm.isPending}
+          leftIcon={<Check className="h-4 w-4" />}
+          onClick={() => confirm.mutate(refund.id, { onSuccess: onClose })}
+        >
+          Confirmar reembolso
+        </Button>
+      </ActionBar>
+    </Modal>
+  )
+}
+
+function RefundCard({ refund: r }: { refund: Refund }) {
+  const currency = useCurrency()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const undo = useAdminCancelManualRefund()
+  const isAwaitingRefund = r.is_manual && r.status === 'pending'
+  const statusTone = r.status === 'succeeded' ? 'text-success bg-success/10' : r.status === 'failed' ? 'text-danger bg-danger/10' : 'text-warning bg-warning/10'
+
+  return (
+    <Card variant="operational" padding="md" className="h-full flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-2">
+        <Link to={`/admin/orders/${r.order_id}`} className="font-mono text-xs font-bold text-brand hover:underline">
+          #{r.order_id.slice(0, 8).toUpperCase()}
+        </Link>
+        <span className={`badge capitalize ${statusTone}`}>{refundStatusLabel(r)}</span>
+      </div>
+      <p className="text-lg font-black text-ink" data-tabular>{currency(r.amount)}</p>
+      <p className="text-xs text-ink-secondary line-clamp-2">{r.reason}</p>
+      <div className="flex items-center justify-between text-xs text-ink-muted mt-auto pt-1">
+        {r.is_manual ? (
+          <span className="badge text-2xs font-bold bg-bg-raised text-ink-secondary">Manual</span>
+        ) : (
+          <span className="font-mono">{r.mp_refund_id?.slice(-10) ?? '—'}</span>
+        )}
+        <span>{formatDateTime(r.created_at)}</span>
+      </div>
+
+      {isAwaitingRefund && (
+        <div className="flex items-center gap-2 border-t border-border-subtle pt-3">
+          <Button size="sm" leftIcon={<Check className="h-3.5 w-3.5" />} onClick={() => setConfirmOpen(true)}>
+            Já reembolsei
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={undo.isPending}
+            leftIcon={<Undo2 className="h-3.5 w-3.5" />}
+            onClick={() => undo.mutate(r.id)}
+          >
+            Desfazer
+          </Button>
+        </div>
+      )}
+      {undo.isError && <ErrorAlert message={undo.error instanceof Error ? undo.error.message : 'Erro'} />}
+      {isAwaitingRefund && <ConfirmRefundModal refund={r} open={confirmOpen} onClose={() => setConfirmOpen(false)} />}
+    </Card>
+  )
+}
+
+export function AdminRefundsPage() {
   const [searchParams] = useSearchParams()
   // Chegando daqui via "Marcar pra reembolsar" na página do pedido (admin)
   // -- abre o formulário de reembolso manual já com o pedido preenchido, em
@@ -363,8 +443,8 @@ export function AdminRefundsPage() {
     <div className="space-y-6">
       <ReviewCasesSection onOpenRefund={openRefundFor} />
 
-      <PageHeader eyebrow="Financeiro" title="A analisar" description="Reembolsos processados pelo Mercado Pago e reembolsos manuais registrados por um admin." actions={<><Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNewRefundOpen(true)}>
-          Novo reembolso
+      <PageHeader eyebrow="Financeiro" title="A reembolsar" description="Reembolsos marcados por um admin e reembolsos processados pelo Mercado Pago. Depois de devolver o dinheiro, confirme no check: o pedido vira Reembolsado e o item continua aqui." actions={<><Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNewRefundOpen(true)}>
+          Marcar pra reembolsar
         </Button></>} />
       {(refunds?.length ?? 0) >= 100 && (
         <p className="text-xs text-warning">Mostrando os 100 reembolsos mais recentes — pode haver mais.</p>
@@ -396,32 +476,13 @@ export function AdminRefundsPage() {
         </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">
-          <EmptyState icon={RefreshCw} title="Nenhum reembolso emitido" />
+          <EmptyState icon={RefreshCw} title="Nenhum reembolso a fazer" />
         </Card>
       ) : (
         <>
         <CardGrid cols={4}>
           {pageItems.map((r) => (
-            <Link key={r.id} to={`/admin/orders/${r.order_id}`}>
-              <Card variant="interactive" padding="md" className="h-full flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-mono text-xs font-bold text-brand">#{r.order_id.slice(0, 8).toUpperCase()}</span>
-                  <span className={`badge capitalize ${r.status === 'succeeded' ? 'text-success bg-success/10' : r.status === 'failed' ? 'text-danger bg-danger/10' : 'text-warning bg-warning/10'}`}>
-                    {REFUND_STATUS_LABEL[r.status]}
-                  </span>
-                </div>
-                <p className="text-lg font-black text-ink" data-tabular>{currency(r.amount)}</p>
-                <p className="text-xs text-ink-secondary line-clamp-2">{r.reason}</p>
-                <div className="flex items-center justify-between text-xs text-ink-muted mt-auto pt-1">
-                  {r.is_manual ? (
-                    <span className="badge text-2xs font-bold bg-bg-raised text-ink-secondary">Manual</span>
-                  ) : (
-                    <span className="font-mono">{r.mp_refund_id?.slice(-10) ?? '—'}</span>
-                  )}
-                  <span>{formatDateTime(r.created_at)}</span>
-                </div>
-              </Card>
-            </Link>
+            <RefundCard key={r.id} refund={r} />
           ))}
         </CardGrid>
         <Pagination page={page} hasNextPage={hasNextPage} onPrev={onPrev} onNext={onNext} />

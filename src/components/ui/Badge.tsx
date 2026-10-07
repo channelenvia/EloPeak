@@ -5,7 +5,7 @@ import { describeOrderStatus, type OrderViewerRole } from '@/lib/orderStatusInfo
 import type { Order, BoosterStatus } from '@/types'
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, getOrderStatusGroup, ORDER_STATUS_GROUP_LABEL, ORDER_STATUS_GROUP_COLOR,
-  BOOSTER_STATUS_LABEL, BOOSTER_STATUS_COLOR, isOrderOverdue,
+  BOOSTER_STATUS_LABEL, BOOSTER_STATUS_COLOR, isOrderOverdue, PAYMENT_IN_ANALYSIS_LABEL,
 } from '@/lib/utils'
 
 // Pill com variantes semânticas. A cor dos *StatusBadge entra via className
@@ -66,9 +66,11 @@ interface OrderStatusBadgeProps {
   onAction?: () => void
   actionLabel?: string
   align?: 'left' | 'right'
+  /** Cartão já enviado e em análise: troca "Aguardando Pagamento" por "Analisando pagamento". */
+  paymentInAnalysis?: boolean
 }
 
-export function OrderStatusBadge({ order, viewerRole, description, onAction, actionLabel, align }: OrderStatusBadgeProps) {
+export function OrderStatusBadge({ order, viewerRole, description, onAction, actionLabel, align, paymentInAnalysis }: OrderStatusBadgeProps) {
   const group = getOrderStatusGroup(order)
   const overdue = group === 'in_progress' && isOrderOverdue({
     match_sync_started_at: order.match_sync_started_at ?? null,
@@ -78,13 +80,15 @@ export function OrderStatusBadge({ order, viewerRole, description, onAction, act
   // precisa ver que o prazo estourou olhando só pro badge.
   const badge = overdue ? (
     <Badge className="text-danger bg-danger/10" dot>Atrasado</Badge>
+  ) : group === 'awaiting_payment' && paymentInAnalysis ? (
+    <Badge className="text-info bg-info/10" dot>{PAYMENT_IN_ANALYSIS_LABEL}</Badge>
   ) : group === 'hidden' ? (
     <Badge className={ORDER_STATUS_COLOR[order.status]} dot>{ORDER_STATUS_LABEL[order.status]}</Badge>
   ) : (
     <Badge className={ORDER_STATUS_GROUP_COLOR[group]} dot>{ORDER_STATUS_GROUP_LABEL[group]}</Badge>
   )
 
-  const text = description ?? (viewerRole ? describeOrderStatus(order, viewerRole) : null)
+  const text = description ?? (viewerRole ? describeOrderStatus(order, viewerRole, { paymentInAnalysis }) : null)
   if (!text) return badge
   return <Hint content={text} onClick={onAction} actionLabel={actionLabel} align={align}>{badge}</Hint>
 }

@@ -80,7 +80,7 @@ export async function listCoachBoosterInfo(boosterIds: string[]): Promise<CoachB
   if (boosterIds.length === 0) return []
   const { data, error } = await supabase
     .from('public_booster_profiles')
-    .select('user_id, display_name, rating, is_top3')
+    .select('user_id, display_name, rating, is_top3, avatar_url, total_completed, rating_count')
     .in('user_id', boosterIds)
   if (error) throw normalizeApiError(error)
   return (data ?? []) as unknown as CoachBoosterInfo[]

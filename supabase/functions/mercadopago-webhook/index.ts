@@ -152,6 +152,13 @@ serve(async (req) => {
     const result = processed as { success?: boolean; error?: string } | null
     if (error || !result?.success) {
       if (result?.error === 'payment_order_mismatch' || result?.error === 'payment_not_found') {
+        // Aprovado e ainda sem vínculo local: num cartão aprovado na hora, o
+        // webhook pode chegar antes do registro do pagamento. Responder != 2xx
+        // faz o MP reenviar, em vez de perder a única notificação de aprovação.
+        if (mpStatus === 'approved') {
+          console.error('MP webhook: approved payment not linked to order yet, requesting redelivery', result.error)
+          return new Response('payment not linked yet', { status: 409 })
+        }
         console.warn('MP webhook for missing local pending order/payment', result.error)
         return new Response('ok', { status: 200 })
       }

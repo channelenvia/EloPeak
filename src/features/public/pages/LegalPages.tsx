@@ -187,9 +187,9 @@ export function TermsPage() {
 
         <LegalSection title="12. Pagamento">
           <p>
-            Os pagamentos são feitos via PIX, processados pela Mercado Pago, de forma antecipada, e o pedido só é
+            Os pagamentos são feitos via PIX ou cartão de crédito/débito, processados pela Mercado Pago, de forma antecipada, e o pedido só é
             processado após confirmação. Os valores são apresentados no checkout conforme serviço, rank, fila, extras
-            e demais opções selecionadas. A EloPeak não acessa nem armazena dados bancários ou de conta PIX do
+            e demais opções selecionadas. A EloPeak não acessa nem armazena dados bancários, de cartão ou de conta PIX do
             cliente — esse processamento é feito diretamente pela Mercado Pago.
           </p>
         </LegalSection>
@@ -288,7 +288,7 @@ export function PrivacyPage() {
               'Dados de verificação de partidas: Riot ID e resultados de partidas consultados na API pública da Riot Games, quando o serviço exigir verificação de rank.',
               'Dados de drops e resolução de casos: justificativas apresentadas por clientes e boosters em solicitações de drop, decisões de aprovação/rejeição e ajustes registrados pela administração no centro de resolução.',
               'Dados técnicos: IP, navegador, dispositivo, páginas acessadas, sessão, cookies necessários e registros de frequência de ações (usados para limites de uso e prevenção de abuso).',
-              'Dados de pagamento: registros de confirmação da transação PIX processada pela Mercado Pago; a EloPeak não armazena dados bancários completos.',
+              'Dados de pagamento: registros de confirmação da transação (PIX ou cartão) processada pela Mercado Pago; a EloPeak não armazena dados bancários completos.',
             ]}
           />
         </LegalSection>
@@ -298,7 +298,7 @@ export function PrivacyPage() {
             items={[
               'Criar, autenticar e gerenciar contas na plataforma.',
               'Executar serviços contratados, permitir acompanhamento do pedido e comunicação entre cliente e booster.',
-              'Processar e confirmar pagamentos via PIX (Mercado Pago) e pagamentos a boosters.',
+              'Processar e confirmar pagamentos via PIX ou cartão (Mercado Pago) e pagamentos a boosters.',
               'Verificar rank e resultado de partidas junto à API da Riot Games quando aplicável ao serviço.',
               'Registrar o histórico de status e eventos de cada pedido, incluindo solicitações de drop e decisões do centro de resolução, para fins de auditoria, resolução de disputas e suporte.',
               'Aplicar limites de frequência (rate limiting) a ações realizadas diretamente pela plataforma, para prevenção de abuso e fraude.',
@@ -349,7 +349,7 @@ export function PrivacyPage() {
           <LegalList
             items={[
               'Boosters recebem apenas informações necessárias para executar o pedido atribuído; cliente e booster veem reciprocamente Discord ID/nome de usuário no canal do pedido.',
-              'Mercado Pago processa os dados necessários à confirmação do pagamento PIX.',
+              'Mercado Pago processa os dados necessários à confirmação do pagamento (PIX ou cartão).',
               'Discord provê a autenticação e os canais de atendimento do pedido, sob os próprios termos de privacidade da Discord Inc.',
               'A Riot Games recebe consultas de Riot ID/resultado de partida via API pública, quando o serviço exigir verificação.',
               'Prestadores de infraestrutura e tecnologia (hospedagem, banco de dados) tratam dados sob obrigações contratuais de confidencialidade e segurança.',

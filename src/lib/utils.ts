@@ -177,6 +177,10 @@ export const ORDER_STATUS_GROUP_LABEL: Record<OrderStatusGroup, string> = {
   hidden: 'Cancelado',
 }
 
+// Cartão enviado ao Mercado Pago e ainda em análise: o pedido segue em
+// awaiting_payment, mas o rótulo mostra que o cliente já fez a parte dele.
+export const PAYMENT_IN_ANALYSIS_LABEL = 'Analisando pagamento'
+
 export const ORDER_STATUS_GROUP_COLOR: Record<OrderStatusGroup, string> = {
   awaiting_payment: 'text-warning bg-warning/10',
   awaiting_booster: 'text-info bg-info/10',
@@ -185,6 +189,12 @@ export const ORDER_STATUS_GROUP_COLOR: Record<OrderStatusGroup, string> = {
   drop_requested: 'text-danger bg-danger/10',
   completed: 'text-success bg-success/10',
   hidden: 'text-ink-muted bg-bg-raised',
+}
+
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  pix: 'PIX',
+  credit_card: 'Cartão de crédito',
+  debit_card: 'Cartão de débito',
 }
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {

@@ -6,12 +6,12 @@ import type { OrderStatus, ServiceType } from '@/types'
 import { secondsRemaining } from './cooldown'
 import {
   getAdminOrderTabCounts, getBoosterOrder, getBoosterOrderTabCounts, getBoosterSlotInfo, getCustomerOrderState, getCustomerOrderTabCounts, getOrder, getOrderCustomerNickname,
-  getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getPendingDropRequest,
+  getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getOrderPaymentInfo, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderBoosterDuoMatches, listOrderCoachingTopics,
   listOrderMatches, listOrderStatusHistory, listBoosterActiveOrders, listBoosterCompletedOrdersSince,
 } from './queries'
 import {
-  acceptBoostOrder, addOrderCoachingTopic, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
+  acceptBoostOrder, addOrderCoachingTopic, adminCancelManualRefund, adminConfirmManualRefund, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
   confirmOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
   revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
@@ -71,6 +71,16 @@ export function useOrderPaidAmount(orderId: string | undefined) {
     queryKey: queryKeys.orders.paidAmount(orderId ?? ''),
     queryFn: () => getOrderPaidAmount(orderId!),
     enabled: !!orderId,
+  })
+}
+
+export function useOrderPaymentInfo(orderId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.orders.paymentInfo(orderId ?? ''),
+    queryFn: () => getOrderPaymentInfo(orderId!),
+    enabled: !!orderId && enabled,
+    refetchInterval: 15_000,
+    retry: false,
   })
 }
 
@@ -419,6 +429,27 @@ export function useAdminCreateManualRefund() {
     mutationFn: adminCreateManualRefund,
     onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
+}
+
+// Confirmar/desfazer não conhecem o pedido pelas variables (só o id do
+// reembolso), então invalidam as listas amplas: refunds e pedidos.
+function useRefundDecision(mutationFn: (refundId: string) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.refunds() })
+      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+    },
+  })
+}
+
+export function useAdminConfirmManualRefund() {
+  return useRefundDecision(adminConfirmManualRefund)
+}
+
+export function useAdminCancelManualRefund() {
+  return useRefundDecision(adminCancelManualRefund)
 }
 
 export function useRequestOrderDrop(orderId: string) {

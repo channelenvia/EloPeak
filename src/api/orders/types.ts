@@ -49,6 +49,26 @@ export interface PixPaymentResponse {
   saved?: boolean
 }
 
+export interface CardPaymentRequest {
+  orderId: string
+  idempotencyKey: string
+  token: string
+  paymentMethodId: string
+  issuerId?: string | number | null
+  installments: number
+  identification?: { type: string; number: string } | null
+}
+
+export interface CardPaymentResponse {
+  order_id: string
+  payment_id: string | number
+  status: string
+  status_detail: string | null
+  /** Desafio 3DS do banco emissor (status 'pending' + 'pending_challenge'). */
+  three_ds_info?: { external_resource_url: string; creq: string } | null
+  reused?: boolean
+}
+
 export type OrderIntent = Record<string, unknown>
 
 export interface BoosterOrdersPage {

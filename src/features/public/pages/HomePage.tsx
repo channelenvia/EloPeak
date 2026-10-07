@@ -109,7 +109,7 @@ export function HomePage() {
     <div>
       <SEOHead
         title="EloPeak"
-        description="Boosting de elo, win boost, MD5, Clash e coaching para League of Legends. Boosters verificados, entrega segura e garantida via PIX."
+        description="Boosting de elo, win boost, MD5, Clash e coaching para League of Legends. Boosters verificados, entrega segura e pagamento via PIX ou cartão."
       />
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">

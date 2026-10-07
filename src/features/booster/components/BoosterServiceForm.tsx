@@ -21,7 +21,7 @@ const MAX_CHAMPIONS = 3
 // pré-definidas contam pro total mas não viram chip aqui, já que já têm
 // botão de toggle próprio em `children`).
 function TagListInput({
-  label, required, max, chips, existingValues, onAdd, onRemove, placeholder, maxLength, children,
+  label, required, max, chips, existingValues, onAdd, onRemove, placeholder, maxLength, noDigits, children,
 }: {
   label: string
   required?: boolean
@@ -32,6 +32,8 @@ function TagListInput({
   onRemove: (value: string) => void
   placeholder: string
   maxLength: number
+  /** Remove dígitos conforme digita/cola (nome de campeão nunca tem número). */
+  noDigits?: boolean
   children?: ReactNode
 }) {
   const [value, setValue] = useState('')
@@ -74,7 +76,7 @@ function TagListInput({
         <div className="flex gap-2">
           <input
             value={value}
-            onChange={e => setValue(e.target.value)}
+            onChange={e => setValue(noDigits ? e.target.value.replace(/\d/g, '') : e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit() } }}
             maxLength={maxLength}
             placeholder={placeholder}
@@ -252,6 +254,7 @@ export function BoosterServiceForm({
         onRemove={value => setData(d => ({ ...d, champions: d.champions.filter(c => c !== value) }))}
         placeholder="Ex: Lee Sin"
         maxLength={30}
+        noDigits
       />
 
       <TagListInput

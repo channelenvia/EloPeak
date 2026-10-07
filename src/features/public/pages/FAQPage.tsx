@@ -39,7 +39,7 @@ export function FAQPage() {
     { q: 'Preciso compartilhar minha senha?', a: 'Para boost solo, sim — você compartilha as credenciais pela nossa plataforma criptografada e elas são apagadas ao concluir o pedido. Para boost em duo, você joga junto com nosso booster e nenhuma credencial é necessária.' },
     { q: 'Posso solicitar um campeão ou função específica?', a: "Sim. Durante a configuração do pedido você pode especificar função e preferências de campeão. Adicione o extra 'Campeão Único' para garantir apenas um campeão." },
     { q: 'Como os boosters são verificados?', a: 'Todos os boosters se candidatam pela nossa plataforma e passam por verificação em múltiplas etapas: prova de rank, revisão de partidas teste e um período de observação. Apenas boosters Grão-mestre ou Desafiante são aprovados.' },
-    { q: 'Quais métodos de pagamento vocês aceitam?', a: 'Aceitamos pagamento via PIX, processado com segurança pelo Mercado Pago. O PIX é instantâneo, gratuito para você e disponível 24h por dia.' },
+    { q: 'Quais métodos de pagamento vocês aceitam?', a: 'Aceitamos PIX e cartão de crédito ou débito (em até 12x), processados com segurança pelo Mercado Pago. O PIX é instantâneo, gratuito para você e disponível 24h por dia. Pagamentos no cartão podem passar por uma análise antifraude antes da aprovação.' },
     { q: 'Posso conversar com meu booster?', a: 'Com certeza. Cada pedido inclui um chat interno onde você pode enviar mensagens diretamente para o seu booster.' },
   ]
 

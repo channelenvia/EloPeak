@@ -35,7 +35,7 @@ describe('CustomerOrderCard — tooltip de status por perfil', () => {
         <MemoryRouter><CustomerOrderCard order={unpaid} currency={(n) => `R$ ${n}`} /></MemoryRouter>
       </QueryClientProvider>,
     )
-    expect(screen.getByRole('tooltip')).toHaveTextContent(/gere o PIX/i)
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/PIX ou cartão/i)
     unmount()
     render(
       <QueryClientProvider client={new QueryClient()}>

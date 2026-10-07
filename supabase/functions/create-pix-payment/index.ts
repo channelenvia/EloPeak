@@ -280,6 +280,10 @@ serve(async (req) => {
       const mp = await existing.json()
       const action = classifyExistingPixPayment(mp.status)
       if (action === 'reuse') {
+        // O pagamento em andamento é de cartão (em análise): não há QR code a reexibir.
+        if (mp.payment_method_id && mp.payment_method_id !== 'pix') {
+          return errorResponse(req, 'Este pedido já tem um pagamento por cartão em análise.', 409, 'CARD_PAYMENT_PENDING', { order_id: orderId })
+        }
         return jsonResponse(req, {
           order_id: orderId,
           total_price: order.total_price,
@@ -323,7 +327,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         transaction_amount: amountBrl,
-        description: `EloBoost — Pedido #${orderId.slice(0, 8).toUpperCase()}`,
+        description: `EloPeak — Pedido #${orderId.slice(0, 8).toUpperCase()}`,
         payment_method_id: 'pix',
         payer: { email: user.email },
         date_of_expiration: expiresAt,

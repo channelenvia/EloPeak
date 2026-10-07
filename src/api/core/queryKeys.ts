@@ -20,6 +20,7 @@ export const queryKeys = {
     duoAccountHistory: (orderId: string) => ['orders', 'duo-account-history', orderId] as const,
     customerNickname: (orderId: string) => ['orders', 'customer-nickname', orderId] as const,
     paidAmount: (orderId: string) => ['orders', 'paid-amount', orderId] as const,
+    paymentInfo: (orderId: string) => ['orders', 'payment-info', orderId] as const,
     availableJobs: () => ['orders', 'available-jobs'] as const,
     boosterActive: (boosterId: string) => ['orders', 'booster-active', boosterId] as const,
     boosterCompletedSince: (boosterId: string, sinceIso: string) => ['orders', 'booster-completed-since', boosterId, sinceIso] as const,

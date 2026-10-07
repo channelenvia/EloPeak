@@ -2,24 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { InlineEmpty } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Clock, DollarSign, CheckCircle2, Star, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useCurrency } from '@/hooks/useCurrency'
+import { DollarSign, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { LANES, COACH_SPECIALTIES, TEMPO_OPTIONS } from '@/lib/lolTaxonomy'
 import { matchesCoachPackageFilters, activeFilterCount } from '@/lib/coachFilters'
 import type { BoosterService } from '@/types'
 import { useAllCoachingPackages, useCoachBoosterInfo } from '@/api/coaching'
 import { MultiSelectPopover, CurrencyMaskedInput, SearchInput } from '@/components/ui'
-import { ServiceTagPills } from '@/components/service/ServiceTagPills'
+import { CoachProfileCard, CoachProfilePanel } from './CoachProfileCard'
 
 const PAGE_SIZE = 9 // grade 3x3
 
 const TEMPO_FILTER_OPTIONS = TEMPO_OPTIONS.map(t => ({ key: t, label: t }))
 
 export function CoachPackagePicker() {
-  const currency = useCurrency()
-  const { selectedCoachPackage, setSelectedCoachPackage, setPreferredBooster, setBasePrice, preferredBoosterId } = useOrderBuilderStore()
+  const { selectedCoachPackage, setSelectedCoachPackage, setPreferredBooster, setBasePrice, preferredBoosterId, nextStep } = useOrderBuilderStore()
+  const [openBoosterId, setOpenBoosterId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [laneFilters, setLaneFilters] = useState<Set<string>>(new Set())
   const [specialtyFilters, setSpecialtyFilters] = useState<Set<string>>(new Set())
@@ -92,8 +90,16 @@ export function CoachPackagePicker() {
     setPage(1)
   }, [search, laneFilters, specialtyFilters, tempoFilters, priceMin, priceMax, preferredBoosterId])
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // Um card por coach, com só os pacotes que passaram nos filtros.
+  const groups = useMemo(() => {
+    const byBooster = new Map<string, BoosterService[]>()
+    for (const p of filtered) byBooster.set(p.booster_id, [...(byBooster.get(p.booster_id) ?? []), p])
+    return [...byBooster].map(([boosterId, pkgs]) => ({ boosterId, pkgs }))
+  }, [filtered])
+
+  const pageCount = Math.max(1, Math.ceil(groups.length / PAGE_SIZE))
+  const openGroup = groups.find(g => g.boosterId === openBoosterId)
+  const pageItems = groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function selectPackage(p: BoosterService) {
     const boosterName = boosterMap[p.booster_id]?.display_name ?? 'Booster'
@@ -106,12 +112,18 @@ export function CoachPackagePicker() {
     setBasePrice(p.price)
   }
 
+  function hirePackage(p: BoosterService) {
+    selectPackage(p)
+    setOpenBoosterId(null)
+    nextStep()
+  }
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-bold text-ink mb-1">Escolha um Pacote de Coach</h2>
         <p className="text-sm text-ink-secondary">
-          Busque e filtre entre os pacotes de todos os coaches disponíveis.
+          Escolha um coach e veja os pacotes que ele oferece.
         </p>
       </div>
 
@@ -176,62 +188,27 @@ export function CoachPackagePicker() {
         <InlineEmpty>Nenhum pacote encontrado com esses filtros.</InlineEmpty>
       ) : (
         <>
+          {openGroup && (
+            <CoachProfilePanel
+              key={openGroup.boosterId}
+              booster={boosterMap[openGroup.boosterId]}
+              packages={openGroup.pkgs}
+              selectedPackageId={selectedCoachPackage?.id}
+              onClose={() => setOpenBoosterId(null)}
+              onHire={hirePackage}
+            />
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pageItems.map(p => {
-              const booster = boosterMap[p.booster_id]
-              const selected = selectedCoachPackage?.id === p.id
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => selectPackage(p)}
-                  className={cn(
-                    'rounded-2xl border-2 overflow-hidden flex flex-col transition-all',
-                    selected
-                      ? 'border-brand bg-brand/10'
-                      : 'border-border-subtle bg-bg-surface hover:border-brand/30',
-                  )}
-                >
-                  <div className="h-1 bg-success shrink-0" />
-                  <div className="text-left p-4 flex flex-col gap-2 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-bold text-ink">{p.title}</p>
-                      {selected && <CheckCircle2 className="h-4 w-4 text-brand shrink-0" />}
-                    </div>
-                    {booster && (
-                      <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-                        <span>{booster.display_name}</span>
-                        {booster.rating != null && (
-                          <span className="flex items-center gap-0.5 text-ink-muted">
-                            <Star className="h-3 w-3 fill-warning text-warning" />
-                            {booster.rating.toFixed(1)}
-                          </span>
-                        )}
-                        {booster.is_top3 && (
-                          <Badge variant="warning" size="tag">Top 3</Badge>
-                        )}
-                      </div>
-                    )}
-                    {p.description && (
-                      <p className="text-xs text-ink-secondary leading-relaxed line-clamp-2">{p.description}</p>
-                    )}
-                    <ServiceTagPills lanes={p.lanes} champions={p.champions} specialties={p.specialties} compact />
-                    <div className="flex items-center gap-3 mt-auto pt-2 border-t border-border-subtle">
-                      {p.tempo && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-ink-muted" />
-                          <span className="text-xs text-ink-secondary">{p.tempo}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 ml-auto">
-                        <DollarSign className="h-3 w-3 text-brand" />
-                        <span className="text-sm font-bold text-brand">{currency(p.price)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
+            {pageItems.filter(g => g.boosterId !== openBoosterId).map(({ boosterId, pkgs }) => (
+              <CoachProfileCard
+                key={boosterId}
+                booster={boosterMap[boosterId]}
+                packages={pkgs}
+                selectedPackageId={selectedCoachPackage?.id}
+                onOpen={() => setOpenBoosterId(boosterId)}
+              />
+            ))}
           </div>
 
           {pageCount > 1 && (

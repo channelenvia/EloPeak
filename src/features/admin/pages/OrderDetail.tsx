@@ -1,7 +1,8 @@
 import { useBoosterServiceDetails } from '@/api/coaching'
 import { Badge } from '@/components/ui/Badge'
 import { useOrderParties } from '@/api/admin'
-import { useOrder, useOrderPaidAmount, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
+import { useOrder, useOrderPaidAmount, useOrderPaymentInfo, useOrderStatusHistory, useSyncOrderMatches } from '@/api/orders'
+import { isCardPaymentInAnalysis } from '@/lib/orderPayment'
 import { AccessTokenSection } from '@/components/order/AccessTokenSection'
 import { CountdownTimer } from '@/components/order/CountdownTimer'
 import { DuoAccountHistoryList } from '@/components/order/DuoAccountHistoryList'
@@ -44,6 +45,7 @@ export function AdminOrderDetailPage() {
   const [dropModalOpen, setDropModalOpen] = useState(false)
 
   const { data: order, isLoading: loadingOrder, isError: orderError, refetch: refetchOrder } = useOrder(id)
+  const { data: paymentInfo } = useOrderPaymentInfo(order?.id, order?.status === 'awaiting_payment')
   const { data: paidAmount } = useOrderPaidAmount(id)
   const { data: history } = useOrderStatusHistory(id)
   const { data: coachPackage } = useBoosterServiceDetails(order?.booster_service_id ?? undefined)
@@ -139,6 +141,7 @@ export function AdminOrderDetailPage() {
           <OrderStatusBadge
             order={order}
             viewerRole="admin"
+            paymentInAnalysis={isCardPaymentInAnalysis(paymentInfo)}
             onAction={statusAction?.run}
             actionLabel={statusAction?.label}
           />

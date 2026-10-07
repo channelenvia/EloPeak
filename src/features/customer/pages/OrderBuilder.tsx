@@ -464,10 +464,10 @@ export function OrderBuilderPage() {
             )}
           </Card>
 
-          {/* Popup do PIX -- só abre por ação explícita na revisão. Dentro
-              dele, o QR também só é gerado ao clicar em "Gerar PIX". */}
+          {/* Popup de pagamento -- só abre por ação explícita na revisão. O
+              pedido só é salvo (e o PIX/cartão liberado) ao escolher a forma. */}
           {step === 'review' && (
-            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento via PIX" maxWidth="md">
+            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento" maxWidth="md">
               <StepPayment insideModal />
             </Modal>
           )}

@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { useState } from 'react'
 import { CreditCard, DollarSign, ReceiptText } from 'lucide-react'
 import { Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
-import { cn, formatDateTime, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_COLOR } from '@/lib/utils'
+import { cn, formatDateTime, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_COLOR } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminPayments } from '@/api/admin'
 import { usePagedList } from '@/hooks/usePagedList'
@@ -33,7 +33,7 @@ function StatCard({ label, value, icon: Icon, tone }: { label: string; value: st
   )
 }
 
-// Pagamentos de clientes (PIX/Mercado Pago) -- separado dos repasses aos
+// Pagamentos de clientes (PIX e cartão/Mercado Pago) -- separado dos repasses aos
 // boosters (ver /admin/payouts), que agora vivem no ledger financeiro
 // (migration 081), não mais nesta página.
 export function AdminPaymentsPage() {
@@ -56,7 +56,7 @@ export function AdminPaymentsPage() {
         title="Pagamentos de clientes"
         description={
           <>
-            Cobranças PIX recebidas via Mercado Pago. Para repasses aos boosters, veja Solicitações de saque.
+            Cobranças (PIX e cartão) recebidas via Mercado Pago. Para repasses aos boosters, veja Solicitações de saque.
             {(paymentSummary?.paidOrderCount ?? 0) > (payments?.length ?? 0) && (
           <span className="mt-1 block text-xs text-warning">
             Mostrando os 150 pedidos pagos mais recentes. Os indicadores consideram todo o histórico.
@@ -101,7 +101,7 @@ export function AdminPaymentsPage() {
                 </div>
                 <p className="text-lg font-black text-ink" data-tabular>{currency(payment.amount)}</p>
                 <div className="flex items-center justify-between text-xs text-ink-muted">
-                  <span className="capitalize">{payment.payment_method_type ?? '—'}</span>
+                  <span>{PAYMENT_METHOD_LABEL[payment.payment_method_type ?? 'pix'] ?? payment.payment_method_type}</span>
                   <span className="font-mono">{payment.mp_payment_id.slice(-12)}</span>
                 </div>
                 <p className="text-xs text-ink-muted">{formatDateTime(payment.created_at)}</p>

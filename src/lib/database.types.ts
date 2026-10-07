@@ -2561,6 +2561,14 @@ export type Database = {
         Args: { p_order_id: string; p_reason: string }
         Returns: Json
       }
+      admin_confirm_manual_refund: {
+        Args: { p_refund_id: string }
+        Returns: Json
+      }
+      admin_cancel_manual_refund: {
+        Args: { p_refund_id: string }
+        Returns: Json
+      }
       admin_create_manual_refund: {
         Args: { p_amount: number; p_order_id: string; p_reason: string }
         Returns: Json

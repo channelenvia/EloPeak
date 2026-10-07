@@ -98,7 +98,7 @@ export function AdminStatusActionsMenu({ order }: { order: Order }) {
             className={cn(itemClass, STATUS_ACTION_TONE_CLASS.neutral)}
           >
             <Undo2 className="h-4 w-4 shrink-0" />
-            Reembolsar
+            Marcar pra reembolsar
           </Link>
         )}
         {isActiveWithBooster && (

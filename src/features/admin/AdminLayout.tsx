@@ -24,7 +24,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     items: [
       { href: '/admin/payments', icon: DollarSign, label: 'Pagamentos' },
       { href: '/admin/payouts',  icon: Banknote,   label: 'Saques' },
-      { href: '/admin/refunds',  icon: RefreshCw,  label: 'A analisar' },
+      { href: '/admin/refunds',  icon: RefreshCw,  label: 'A reembolsar' },
     ],
   },
 ]

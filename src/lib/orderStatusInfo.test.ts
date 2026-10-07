@@ -18,10 +18,16 @@ describe('describeOrderStatus', () => {
     }
   })
 
-  it('cliente com pagamento pendente é orientado a gerar o PIX; os demais veem o fato', () => {
+  it('cliente com pagamento pendente é orientado a pagar com PIX ou cartão; os demais veem o fato', () => {
     const order = { status: 'awaiting_payment', assigned_booster_id: null } as const
     expect(describeOrderStatus(order, 'customer')).toMatch(/PIX/)
     expect(describeOrderStatus(order, 'admin')).toMatch(/cliente ainda não pagou/i)
+  })
+
+  it('cartão em análise troca a orientação de pagar por aguardar a aprovação', () => {
+    const order = { status: 'awaiting_payment', assigned_booster_id: null } as const
+    expect(describeOrderStatus(order, 'customer', { paymentInAnalysis: true })).toMatch(/em análise/i)
+    expect(describeOrderStatus(order, 'admin', { paymentInAnalysis: true })).toMatch(/em análise/i)
   })
 
   it('awaiting_customer sem booster pede credenciais; com booster pede ação no chat', () => {

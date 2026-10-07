@@ -3,6 +3,8 @@ import { normalizeApiError } from '@/api/core/errors'
 import type { SaveCoachingPackageParams } from './types'
 import type { BoosterService } from '@/types'
 
+const CHAMPION_DIGITS_ERROR = 'Nomes de campeões não podem conter números.'
+
 export async function createCoachingPackage(params: SaveCoachingPackageParams) {
   const { data, error } = await supabase.from('booster_services').insert({
     booster_id: params.boosterId,
@@ -20,6 +22,7 @@ export async function createCoachingPackage(params: SaveCoachingPackageParams) {
     if (error.message.includes('booster_service_limit_reached')) {
       throw new Error('Você já possui o limite de 3 serviços cadastrados.')
     }
+    if (error.message.includes('booster_services_champions_no_digits')) throw new Error(CHAMPION_DIGITS_ERROR)
     throw normalizeApiError(error, 'Não foi possível criar o pacote de coaching.')
   }
   return data as unknown as BoosterService
@@ -40,6 +43,7 @@ export async function updateCoachingPackage(params: SaveCoachingPackageParams & 
     .is('deleted_at', null)
     .select('*')
     .maybeSingle()
+  if (error?.message.includes('booster_services_champions_no_digits')) throw new Error(CHAMPION_DIGITS_ERROR)
   if (error) throw normalizeApiError(error, 'Não foi possível atualizar o pacote de coaching.')
   if (!data) throw new Error('Serviço não encontrado ou você não tem permissão para editá-lo.')
   return data as unknown as BoosterService

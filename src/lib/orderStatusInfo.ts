@@ -11,6 +11,8 @@ type StatusInfoOrder = Pick<Order, 'status' | 'assigned_booster_id'> & Partial<P
 interface StatusInfoContext {
   /** Nota que o cliente já deu (pedido concluído); null = ainda não avaliou. */
   reviewRating?: number | null
+  /** Pagamento no cartão já enviado e ainda em análise pelo Mercado Pago. */
+  paymentInAnalysis?: boolean
 }
 
 // Texto exibido no tooltip do badge de status: o que está acontecendo com o
@@ -21,8 +23,13 @@ export function describeOrderStatus(order: StatusInfoOrder, role: OrderViewerRol
 
   switch (group) {
     case 'awaiting_payment':
+      if (ctx.paymentInAnalysis) {
+        return isCustomer
+          ? 'Pagamento no cartão em análise pelo Mercado Pago. O pedido entra na fila dos boosters assim que for aprovado.'
+          : 'O pagamento no cartão do cliente está em análise pelo Mercado Pago.'
+      }
       return isCustomer
-        ? 'Seu pedido foi criado e aguarda o pagamento. Gere o PIX para ele entrar na fila dos boosters.'
+        ? 'Seu pedido foi criado e aguarda o pagamento. Pague com PIX ou cartão para ele entrar na fila dos boosters.'
         : 'O cliente ainda não pagou este pedido.'
     case 'awaiting_credentials':
       return isCustomer

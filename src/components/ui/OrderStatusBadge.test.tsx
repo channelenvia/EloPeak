@@ -5,6 +5,20 @@ import { OrderStatusBadge } from './Badge'
 
 const PENDING = { status: 'awaiting_payment', assigned_booster_id: null } as const
 
+describe('OrderStatusBadge com cartão em análise', () => {
+  it('troca "Aguardando Pagamento" por "Analisando pagamento" e explica no tooltip', () => {
+    render(<OrderStatusBadge order={PENDING} viewerRole="customer" paymentInAnalysis />)
+    expect(screen.getByText('Analisando pagamento')).toBeInTheDocument()
+    expect(screen.queryByText('Aguardando Pagamento')).not.toBeInTheDocument()
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/em análise pelo Mercado Pago/i)
+  })
+
+  it('só vale para pedido aguardando pagamento (um pedido já pago não muda)', () => {
+    render(<OrderStatusBadge order={{ status: 'in_progress', assigned_booster_id: 'b1' }} paymentInAnalysis />)
+    expect(screen.queryByText('Analisando pagamento')).not.toBeInTheDocument()
+  })
+})
+
 describe('OrderStatusBadge com tooltip', () => {
   it('mostra a descrição do status como tooltip acessível', () => {
     render(<OrderStatusBadge order={PENDING} viewerRole="customer" />)

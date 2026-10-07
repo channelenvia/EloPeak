@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { isPaymentConfirmed } from '@/lib/orderPayment'
+import { lazy, Suspense, useState, useEffect, useRef } from 'react'
+import { isCardPaymentInAnalysis, isPaymentConfirmed } from '@/lib/orderPayment'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/react/shallow'
@@ -14,10 +14,16 @@ import { getBoostFlow } from '@/lib/boostDomain'
 import { isUuid } from '@/lib/utils'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
+import { PaymentMethodPicker, type PaymentMethod } from '@/components/order/PaymentMethodPicker'
+import { CardAnalysisNotice } from '@/components/order/CardAnalysisNotice'
+import type { CardPaymentAcceptance } from '@/components/order/CardPaymentPanel'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
-import { getCustomerOrderState, savePendingOrderFromIntent, generatePix as generatePixRequest } from '@/api/orders'
+import { getCustomerOrderState, savePendingOrderFromIntent, useOrderPaymentInfo, generatePix as generatePixRequest } from '@/api/orders'
 import type { PixPaymentResponse } from '@/api/orders'
-import { CheckCircle2, Clock, QrCode, ShieldCheck, ChevronLeft } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, ShieldCheck, ChevronLeft } from 'lucide-react'
+
+// O SDK do Mercado Pago só carrega se o cliente escolher cartão.
+const CardPaymentPanel = lazy(() => import('@/components/order/CardPaymentPanel').then((m) => ({ default: m.CardPaymentPanel })))
 
 // PIX states
 type PixState =
@@ -117,6 +123,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   const [savedOrderId, setSavedOrderId] = useState<string | null>(pendingOrderId)
   const [savedTotalPrice, setSavedTotalPrice] = useState<number | null>(null)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [method, setMethod] = useState<PaymentMethod | null>(null)
+  const [cardAcceptance, setCardAcceptance] = useState<CardPaymentAcceptance | null>(null)
   // Só gera o PIX automático depois da checagem do pedido já existente (?order=).
   const [restoreDone, setRestoreDone] = useState(!pendingOrderId)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -208,7 +216,9 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   // Confirmação do pagamento: query com refetch a cada 4s (pausa com a aba
   // escondida, refaz ao voltar o foco) + Realtime em order_status_events, que
   // dispara a checagem na hora em vez de esperar o próximo ciclo.
-  const watchedOrderId = pix.phase === 'waiting' ? pix.order_id : null
+  const watchedOrderId = pix.phase === 'waiting'
+    ? pix.order_id
+    : cardAcceptance || method === 'card' ? savedOrderId : null
   const { data: watchedState } = useQuery({
     queryKey: ['pix-payment-state', watchedOrderId],
     queryFn: () => getCustomerOrderState(watchedOrderId!),
@@ -225,6 +235,11 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     queryKeys: [['pix-payment-state', watchedOrderId]],
     enabled: !!watchedOrderId,
   })
+  // Retomada de um pedido cujo cartão já foi enviado e segue em análise.
+  const { data: paymentInfo } = useOrderPaymentInfo(savedOrderId ?? undefined, !!savedOrderId && !cardAcceptance)
+  useEffect(() => {
+    if (isCardPaymentInAnalysis(paymentInfo)) setCardAcceptance('pending')
+  }, [paymentInfo])
   const confirmedHandledRef = useRef(false)
   useEffect(() => {
     if (!watchedOrderId || !isPaymentConfirmed(watchedState) || confirmedHandledRef.current) return
@@ -419,6 +434,14 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         return
       }
 
+      // Já existe um cartão em análise para este pedido: não há QR a gerar,
+      // só esperar o provedor (o polling abaixo segue acompanhando).
+      if (err instanceof EdgeFunctionError && err.code === 'CARD_PAYMENT_PENDING') {
+        setSavedOrderId(orderId)
+        setCardAcceptance('pending')
+        return
+      }
+
       // Pedido morto -- não existe mais (404) ou não pode mais receber
       // pagamento (400 "not awaiting payment", ex.: PIX recusado no MP).
       // Limpa a vinculação (mantém a config no store) pro próximo "Gerar
@@ -495,7 +518,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     restoredOrderRef.current = pendingOrderId
     setSavedOrderId(pendingOrderId)
 
-    setIsSavingOrder(true)
     void (async () => {
       const state = await getCustomerOrderState(pendingOrderId).catch(() => null)
       if (isPaymentConfirmed(state)) {
@@ -518,7 +540,6 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     })().catch((err) => {
       setSaveError(pixErrorMessage(err))
     }).finally(() => {
-      setIsSavingOrder(false)
       setRestoreDone(true)
     })
     // Só na chegada do pendingOrderId -- invokePix/navigate são estáveis o
@@ -535,6 +556,8 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     setSavedTotalPrice(null)
     setSaveError(null)
     setPix({ phase: 'idle' })
+    setMethod(null)
+    setCardAcceptance(null)
     idempotencyKeyRef.current = crypto.randomUUID()
     expiryHandledRef.current = false
     setSearchParams({ new: '1' }, { replace: true })
@@ -552,7 +575,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     try {
       const erroredOrderId = pix.phase === 'error' ? pix.order_id : undefined
       const orderId = erroredOrderId ?? savedOrderId ?? pendingOrderId ?? await persistPendingOrder()
-      if (!orderId) return
+      if (!orderId) { setMethod(null); return }
       setPix({ phase: 'generating' })
       await invokePix(orderId)
     } catch (err) {
@@ -562,17 +585,23 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     }
   }
 
-  // "Pagar" na Revisão já é o clique explícito: ao abrir o popup, o PIX é
-  // gerado direto (sem um segundo "Gerar PIX"). Só uma vez por abertura --
-  // se falhar, o botão de tentar de novo continua disponível.
-  const autoStartedRef = useRef(false)
-  useEffect(() => {
-    if (!insideModal || autoStartedRef.current) return
-    if (pix.phase !== 'idle' || !restoreDone || !profile || totalPrice <= 0 || !catalogReady || !addonsReady || isSavingOrder) return
-    autoStartedRef.current = true
-    void generatePix()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insideModal, pix.phase, restoreDone, profile, totalPrice, catalogReady, addonsReady, isSavingOrder])
+  // Escolher a forma de pagamento é o clique explícito que cria o pedido (ver
+  // persistPendingOrder). PIX segue direto para a cobrança; cartão só libera o
+  // formulário depois do pedido salvo.
+  async function chooseMethod(next: PaymentMethod) {
+    if (!profile || generatingRef.current) return
+    setPix({ phase: 'idle' })
+    setMethod(next)
+    if (next === 'pix') return generatePix()
+
+    generatingRef.current = true
+    try {
+      const orderId = savedOrderId ?? pendingOrderId ?? await persistPendingOrder()
+      if (!orderId) setMethod(null)
+    } finally {
+      generatingRef.current = false
+    }
+  }
 
   async function copyPix() {
     if (pix.phase !== 'waiting') return
@@ -630,86 +659,78 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     )
   }
 
-  // ── Idle / Generating (initial state) ────────────────────────────────────────
+  const centeredStatus = (label: string) => (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center" role="status">
+      <Loader2 className="h-8 w-8 animate-spin text-brand" />
+      <p className="text-sm font-medium text-ink-secondary">{label}</p>
+    </div>
+  )
+
+  // ── Salvando o pedido (ou conferindo o já salvo) ─────────────────────────────
+  if (isSavingOrder) return centeredStatus('Salvando…')
+  if (!restoreDone) return centeredStatus('Verificando seu pedido…')
+
+  // ── Cartão aceito: aprovado confirma sozinho; em análise espera o provedor ──
+  if (cardAcceptance === 'approved') return centeredStatus('Pagamento aprovado! Confirmando seu pedido…')
+  if (cardAcceptance === 'pending') {
+    return <CardAnalysisNotice actionLabel="Ver meus pedidos" onAction={() => navigate('/orders')} />
+  }
+
+  // ── Cartão: formulário liberado depois do pedido salvo ───────────────────────
+  const cardOrderId = savedOrderId ?? pendingOrderId
+  if (method === 'card' && cardOrderId) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => setMethod(null)} leftIcon={<ChevronLeft className="h-4 w-4" />}>
+          Trocar forma de pagamento
+        </Button>
+        <Suspense fallback={centeredStatus('Carregando formulário…')}>
+          <CardPaymentPanel orderId={cardOrderId} totalPrice={totalPrice} onAccepted={setCardAcceptance} />
+        </Suspense>
+      </div>
+    )
+  }
+
+  // ── PIX sendo gerado ─────────────────────────────────────────────────────────
+  if (pix.phase === 'generating') return centeredStatus('Gerando seu PIX…')
+
+  // ── Escolha da forma de pagamento ────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Título/descrição só quando NÃO está dentro do Modal do popup --
-          o Modal já mostra "Pagamento via PIX" no próprio cabeçalho
-          (ver OrderBuilder.tsx); repetir aqui duplicava o título. Continua
-          aparecendo normalmente no fluxo de retomada em tela cheia
-          (step 'payment' após reload, sem Modal nenhum por cima). */}
-      {!insideModal && (
-        <div>
-          <h2 className="text-lg font-bold text-ink mb-1">Pagamento via PIX</h2>
-          <p className="text-sm text-ink-secondary">
-            Instantâneo, gratuito e 100% seguro. Pague em segundos pelo app do seu banco.
-          </p>
-        </div>
-      )}
+      {/* Título só fora do Modal -- o Modal já tem o próprio cabeçalho (ver
+          OrderBuilder.tsx). Aparece no fluxo de retomada em tela cheia. */}
+      {!insideModal && <h2 className="text-lg font-bold text-ink">Pagamento</h2>}
 
-      {/* Amount summary */}
-      <div className="card-brand p-5 flex items-center justify-between rounded-2xl">
+      <div className="card-brand flex items-center justify-between rounded-2xl p-5">
         <div>
           <p className="text-xs text-ink-secondary">Total do Pedido</p>
-          <p className="text-2xl font-extrabold text-ink mt-0.5">{currency(totalPrice)}</p>
-        </div>
-        <div className="h-12 w-12 rounded-2xl bg-brand flex items-center justify-center shadow-brand">
-          <QrCode className="h-6 w-6 text-ink-inverse" />
+          <p className="mt-0.5 text-2xl font-extrabold text-ink">{currency(totalPrice)}</p>
         </div>
       </div>
 
-      {insideModal ? (
-        pix.phase !== 'error' && (
-          <p className="text-center text-sm text-ink-secondary">Gerando seu PIX… o QR code aparece aqui em instantes.</p>
-        )
-      ) : (
-        <div className="space-y-2">
-          {[
-            '1. Clique em "Gerar PIX" abaixo',
-            '2. Escaneie o QR code ou copie o código no app do seu banco',
-            '3. Confirme o pagamento — seu pedido entra na fila automaticamente',
-          ].map((step) => (
-            <div key={step} className="flex items-center gap-3 text-xs text-ink-secondary">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
-              {step}
-            </div>
-          ))}
-        </div>
-      )}
+      <p className="text-sm font-medium text-ink-secondary">Como você prefere pagar?</p>
+      <PaymentMethodPicker
+        onSelect={chooseMethod}
+        disabled={totalPrice <= 0 || !catalogReady || !addonsReady}
+      />
 
       {pix.phase === 'error' && <ErrorAlert message={pix.message} />}
       {saveError && pix.phase !== 'error' && <ErrorAlert message={saveError} />}
 
-      <ActionBar>
-        {/* Dentro do popup não há "Voltar": fechar o popup (X) já volta pra
-            revisão, que continua por baixo. */}
-        {!insideModal && (
+      {totalPrice <= 0 && (
+        <p className="text-center text-xs text-danger">Configure seu pedido para ver o preço.</p>
+      )}
+
+      {!insideModal && (
+        <ActionBar>
           <Button variant="secondary" onClick={store.prevStep} leftIcon={<ChevronLeft className="h-4 w-4" />}>
             Voltar
           </Button>
-        )}
-        <Button
-          loading={pix.phase === 'generating'}
-          onClick={generatePix}
-          disabled={totalPrice <= 0 || !catalogReady || !addonsReady || isSavingOrder}
-          leftIcon={<QrCode className="h-4 w-4" />}
-        >
-          {!catalogReady || !addonsReady
-            ? 'Carregando…'
-            : isSavingOrder
-              ? 'Salvando…'
-              : pix.phase === 'generating'
-                ? 'Gerando…'
-                : 'Gerar PIX'}
-        </Button>
-      </ActionBar>
-
-      {totalPrice <= 0 && (
-        <p className="text-xs text-danger text-center">Configure seu pedido para ver o preço.</p>
+        </ActionBar>
       )}
 
       <div className="flex items-start gap-3 text-xs text-ink-muted">
-        <ShieldCheck className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
         Processado pelo Mercado Pago. Não armazenamos seus dados bancários.
       </div>
     </div>

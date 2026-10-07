@@ -7,6 +7,9 @@ export interface CoachBoosterInfo {
   display_name: string
   rating: number
   is_top3: boolean
+  avatar_url: string | null
+  total_completed: number | null
+  rating_count: number | null
 }
 
 export interface SaveCoachingPackageParams {

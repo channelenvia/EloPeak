@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPaymentConfirmed } from './orderPayment'
+import { isCardPaymentInAnalysis, isPaymentConfirmed } from './orderPayment'
 
 describe('isPaymentConfirmed', () => {
   it('confirmado quando o servidor já marca payment_confirmed', () => {
@@ -20,5 +20,19 @@ describe('isPaymentConfirmed', () => {
     [undefined],
   ])('não confirmado em %j', (state) => {
     expect(isPaymentConfirmed(state)).toBe(false)
+  })
+})
+
+describe('isCardPaymentInAnalysis', () => {
+  it('cartão com pagamento pendente está em análise', () => {
+    expect(isCardPaymentInAnalysis({ method: 'credit_card', status: 'pending' })).toBe(true)
+    expect(isCardPaymentInAnalysis({ method: 'debit_card', status: 'pending' })).toBe(true)
+  })
+
+  it('PIX pendente, cartão já decidido ou sem pagamento não é análise', () => {
+    expect(isCardPaymentInAnalysis({ method: 'pix', status: 'pending' })).toBe(false)
+    expect(isCardPaymentInAnalysis({ method: 'credit_card', status: 'paid' })).toBe(false)
+    expect(isCardPaymentInAnalysis({ method: 'credit_card', status: 'failed' })).toBe(false)
+    expect(isCardPaymentInAnalysis(null)).toBe(false)
   })
 })

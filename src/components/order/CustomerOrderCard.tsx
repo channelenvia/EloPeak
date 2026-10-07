@@ -8,6 +8,8 @@ import { useAdminSetPendingReviewLock } from '@/api/admin'
 import { pendingReviewTimeLeft } from '@/features/admin/components/pendingReviewTime'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
 import { OrderCardFooter } from '@/components/order/OrderCardFooter'
+import { useOrderPaymentInfo } from '@/api/orders'
+import { isCardPaymentInAnalysis } from '@/lib/orderPayment'
 import type { Order } from '@/types'
 
 interface CustomerOrderCardProps {
@@ -114,6 +116,9 @@ export function CustomerOrderCard({
   onCancel,
   nowTick,
 }: CustomerOrderCardProps) {
+  // No máximo 2 pedidos aguardando pagamento por cliente: a consulta é barata.
+  const { data: paymentInfo } = useOrderPaymentInfo(order.id, order.status === 'awaiting_payment')
+  const paymentInAnalysis = isCardPaymentInAnalysis(paymentInfo)
   // Mesmo título do pacote mostrado na aba "Pegar" do booster -- pra um
   // pedido de coaching não virar só "Coaching" genérico na lista.
   const { data: coachPackage } = useBoosterServiceDetails(
@@ -160,7 +165,7 @@ export function CustomerOrderCard({
             )}
             {isReviewAdmin
               ? <Badge className="text-warning bg-warning/10" dot>Aguardando Aprovação</Badge>
-              : <OrderStatusBadge order={order} viewerRole={viewerRole} align="right" />}
+              : <OrderStatusBadge order={order} viewerRole={viewerRole} align="right" paymentInAnalysis={paymentInAnalysis} />}
                       </>
           }
         />

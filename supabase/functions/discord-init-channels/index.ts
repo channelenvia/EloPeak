@@ -109,7 +109,7 @@ async function initComoComprar(channelId: string) {
             '**1.** Crie sua conta com Discord.\n' +
             '**2.** Escolha o serviço (Boost, MD5, Vitórias ou Coach).\n' +
             '**3.** Configure rank atual, alvo e adicionais.\n' +
-            '**4.** Pague com Pix.\n' +
+            '**4.** Pague com Pix ou cartão.\n' +
             '**5.** Acompanhe pelo painel — um booster aprovado assume o pedido.\n' +
             '**6.** Avalie o serviço ao final.',
           inline: false,

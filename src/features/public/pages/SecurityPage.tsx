@@ -29,7 +29,7 @@ export function SecurityPage() {
       icon: CreditCard,
       title: 'Segurança do Pagamento',
       items: [
-        'Pagamentos via PIX processados com segurança pelo Mercado Pago',
+        'Pagamentos via PIX e cartão processados com segurança pelo Mercado Pago',
         'Processamento de pagamento compatível com PCI-DSS',
         'Validação de assinatura de webhook em cada evento',
         'Operações de pagamento idempotentes evitam cobranças duplas',

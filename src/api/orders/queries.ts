@@ -287,6 +287,25 @@ export async function getOrderPaidAmount(orderId: string): Promise<number> {
   return (data ?? []).reduce((sum, p) => sum + Number(p.amount), 0)
 }
 
+export interface OrderPaymentInfo {
+  method: string
+  status: string
+}
+
+// Método e estado do pagamento vinculado ao pedido (null = nenhum pagamento
+// criado ainda, ou sem permissão de leitura). Serve para a UI do cliente
+// distinguir "cartão em análise" de "ainda não pagou".
+export async function getOrderPaymentInfo(orderId: string): Promise<OrderPaymentInfo | null> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('payment_method_type, status')
+    .eq('order_id', orderId)
+    .maybeSingle()
+  if (error) throw normalizeApiError(error)
+  if (!data) return null
+  return { method: data.payment_method_type ?? 'pix', status: data.status }
+}
+
 export async function getBoosterSlotInfo(boosterId: string): Promise<SlotInfo & { allowed: boolean }> {
   const { data, error } = await supabase.rpc('can_booster_accept_order', {
     p_booster_user_id: boosterId,

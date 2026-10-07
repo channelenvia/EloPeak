@@ -1,5 +1,5 @@
 import { useAssignedBooster } from '@/api/boosters'
-import { isPaymentConfirmed } from '@/lib/orderPayment'
+import { isCardPaymentInAnalysis, isPaymentConfirmed } from '@/lib/orderPayment'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { Badge } from '@/components/ui/Badge'
 import { useMarkOrderChatRead, useOrderChat } from '@/api/chat'
@@ -10,7 +10,7 @@ import {
     useConfirmOrderCompletion,
     useCustomerOrderState,
     useGeneratePix,
-    useOrder, useOrderStatusHistory,
+    useOrder, useOrderPaymentInfo, useOrderStatusHistory,
     useRequestCustomerOrderDrop,
     useSyncOrderMatches,
 } from '@/api/orders'
@@ -23,6 +23,9 @@ import { getOrderDetailInfo } from '@/components/order/orderDetailInfo'
 import type { OrderInfoGridItem } from '@/components/order/OrderInfoGrid'
 import { OrderPageHeader } from '@/components/order/OrderPageHeader'
 import { OrderReviewSection } from '@/components/order/OrderReviewSection'
+import { CardAnalysisNotice } from '@/components/order/CardAnalysisNotice'
+import type { CardPaymentAcceptance } from '@/components/order/CardPaymentPanel'
+import { PaymentMethodPicker } from '@/components/order/PaymentMethodPicker'
 import { PixWaitingPanel } from '@/components/order/PixWaitingPanel'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { Button, ErrorAlert, Modal, OrderStatusBadge, Skeleton } from '@/components/ui'
@@ -39,11 +42,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
     CalendarDays,
     CheckCircle2,
+    ChevronLeft,
     Clock,
     Gamepad2,
     Hash,
     History,
-    QrCode,
+    Loader2,
     Route,
     Shuffle,
     UserCheck,
@@ -51,11 +55,14 @@ import {
     Wallet,
     XCircle,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+
+// O SDK do Mercado Pago só carrega se o cliente escolher cartão.
+const CardPaymentPanel = lazy(() => import('@/components/order/CardPaymentPanel').then((m) => ({ default: m.CardPaymentPanel })))
 
 function AssignedBoosterValue({ order }: { order: Order }) {
   // Antes de aceito, mostra o booster preferido/exclusivo (se houver) em vez
@@ -114,6 +121,8 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [method, setMethod] = useState<'card' | null>(null)
+  const [cardAcceptance, setCardAcceptance] = useState<CardPaymentAcceptance | null>(null)
   // O modal é aberto pelo badge de status (nunca automaticamente ao visitar
   // ou trocar de pedido).
   const lastOrderIdRef = useRef(order.id)
@@ -123,10 +132,14 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
     setOpen(false)
     setPix(null)
     setError(null)
+    setMethod(null)
+    setCardAcceptance(null)
   }, [order.id, setOpen])
   const { remaining, label } = useCountdown(pix?.expires_at ?? null)
 
   const generatePix = useGeneratePix(order.id)
+  const { data: paymentInfo } = useOrderPaymentInfo(order.id, order.status === 'awaiting_payment')
+  const cardInAnalysis = cardAcceptance === 'pending' || isCardPaymentInAnalysis(paymentInfo)
   const cancelOrderMutation = useCancelPendingOrder()
 
   // Reconfirma o estado ao vivo do pedido e redireciona se o pagamento já foi
@@ -150,7 +163,7 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
   }, [order.id, queryClient, navigate])
 
   useEffect(() => {
-    if (!pix || order.status !== 'awaiting_payment') return
+    if ((!pix && !cardAcceptance && method !== 'card') || order.status !== 'awaiting_payment') return
     const interval = window.setInterval(async () => {
       const confirmed = await redirectIfPaymentConfirmed()
       if (confirmed) {
@@ -159,7 +172,7 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
       }
     }, 5000)
     return () => window.clearInterval(interval)
-  }, [pix, order.status, queryClient, redirectIfPaymentConfirmed])
+  }, [pix, cardAcceptance, method, order.status, queryClient, redirectIfPaymentConfirmed])
 
   function loadPix() {
     setError(null)
@@ -168,7 +181,13 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
         if (!response.qr_code) { setError('A função não retornou o código PIX.'); return }
         setPix(response)
       },
-      onError: (err) => setError(pixErrorMessage(err)),
+      onError: (err) => {
+        if (err instanceof EdgeFunctionError && err.code === 'CARD_PAYMENT_PENDING') {
+          setCardAcceptance('pending')
+          return
+        }
+        setError(pixErrorMessage(err))
+      },
     })
   }
 
@@ -227,19 +246,43 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Pagamento PIX"
-        description="Pedido ainda não pago. Gere o PIX quando quiser continuar ou cancele o pedido."
+        title="Pagamento"
+        description="Pedido ainda não pago. Escolha a forma de pagamento para continuar ou cancele o pedido."
         maxWidth="md"
       >
-        {!pix ? (
-        <ActionBar>
-          <Button variant="secondary" loading={cancelOrderMutation.isPending} disabled={generatePix.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
-            Cancelar
-          </Button>
-          <Button loading={generatePix.isPending} onClick={loadPix} leftIcon={<QrCode className="h-4 w-4" />}>
-            Gerar PIX
-          </Button>
-        </ActionBar>
+        {cardAcceptance === 'approved' ? (
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center" role="status">
+            <Loader2 className="h-8 w-8 animate-spin text-brand" />
+            <p className="text-sm font-medium text-ink-secondary">Pagamento aprovado! Confirmando seu pedido…</p>
+          </div>
+        ) : cardInAnalysis ? (
+          <CardAnalysisNotice actionLabel="Fechar" onAction={() => setOpen(false)} />
+        ) : method === 'card' ? (
+          <div className="space-y-4">
+            <Button variant="ghost" size="sm" onClick={() => setMethod(null)} leftIcon={<ChevronLeft className="h-4 w-4" />}>
+              Trocar forma de pagamento
+            </Button>
+            <Suspense fallback={<Loader2 className="mx-auto my-10 h-8 w-8 animate-spin text-brand" />}>
+              <CardPaymentPanel orderId={order.id} totalPrice={Number(order.total_price)} onAccepted={setCardAcceptance} />
+            </Suspense>
+          </div>
+        ) : !pix ? (
+        <div className="space-y-4">
+          <PaymentMethodPicker
+            onSelect={(next) => (next === 'card' ? setMethod('card') : loadPix())}
+            disabled={generatePix.isPending}
+          />
+          <ActionBar>
+            <Button variant="secondary" loading={cancelOrderMutation.isPending} disabled={generatePix.isPending} onClick={cancelOrder} leftIcon={<XCircle className="h-4 w-4" />}>
+              Cancelar pedido
+            </Button>
+          </ActionBar>
+          {generatePix.isPending && (
+            <p className="flex items-center justify-center gap-2 text-sm text-ink-secondary" role="status">
+              <Loader2 className="h-4 w-4 animate-spin text-brand" /> Gerando seu PIX…
+            </p>
+          )}
+        </div>
       ) : expired ? (
         <div className="space-y-3 max-w-md">
           <ErrorAlert message="PIX expirado. Cancelando o pedido…" />
@@ -371,6 +414,7 @@ export function OrderDetailPage() {
   // enviar credenciais, avaliar) -- os modais abrem por aqui.
   const [payOpen, setPayOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
+  const { data: paymentInfo } = useOrderPaymentInfo(order?.id, order?.status === 'awaiting_payment')
   const { data: ownReview, isLoading: reviewLoading } = useOwnReview(order?.status === 'completed' ? order.id : undefined)
 
   if (isLoading) return (
@@ -450,7 +494,8 @@ export function OrderDetailPage() {
           <OrderStatusBadge
             order={order}
             viewerRole="customer"
-            description={describeOrderStatus(order, 'customer', { reviewRating: ownReview?.rating ?? null })}
+            paymentInAnalysis={isCardPaymentInAnalysis(paymentInfo)}
+            description={describeOrderStatus(order, 'customer', { reviewRating: ownReview?.rating ?? null, paymentInAnalysis: isCardPaymentInAnalysis(paymentInfo) })}
             onAction={statusAction?.run}
             actionLabel={statusAction?.label}
           />

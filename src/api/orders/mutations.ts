@@ -3,7 +3,7 @@ import { callRpc } from '@/api/core/rpc'
 import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { ApiError, assertRpcSuccess, normalizeApiError } from '@/api/core/errors'
 import type { OrderStatus } from '@/types'
-import type { OrderIntent, PixPaymentResponse } from './types'
+import type { CardPaymentRequest, CardPaymentResponse, OrderIntent, PixPaymentResponse } from './types'
 
 // add_order_coaching_topic/set_order_coaching_topic_done já devolvem uma
 // mensagem amigável em português (result.message) -- sem precisar de um mapa
@@ -210,12 +210,23 @@ const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
   order_not_found: 'Pedido não encontrado. Confira o número.',
   already_refunded: 'Este pedido já foi reembolsado.',
   amount_exceeds_order_total: 'O valor excede o total já disponível pra reembolso neste pedido.',
+  payment_not_found: 'Este pedido não tem pagamento para reembolsar.',
+  refund_not_found: 'Reembolso não encontrado.',
+  refund_not_pending: 'Este reembolso já foi confirmado ou desfeito.',
 }
 
 export async function adminCreateManualRefund(params: { orderId: string; reason: string; amount: number }) {
   return callRpc('admin_create_manual_refund', {
     p_order_id: params.orderId, p_reason: params.reason, p_amount: params.amount,
   }, ADMIN_MANUAL_REFUND_MESSAGES) as Promise<{ success: boolean; error?: string; refund_id?: string }>
+}
+
+export async function adminConfirmManualRefund(refundId: string) {
+  return callRpc('admin_confirm_manual_refund', { p_refund_id: refundId }, ADMIN_MANUAL_REFUND_MESSAGES)
+}
+
+export async function adminCancelManualRefund(refundId: string) {
+  return callRpc('admin_cancel_manual_refund', { p_refund_id: refundId }, ADMIN_MANUAL_REFUND_MESSAGES)
 }
 
 const REQUEST_ORDER_DROP_MESSAGES: Record<string, string> = {
@@ -307,6 +318,22 @@ export async function generatePix(orderId: string): Promise<PixPaymentResponse> 
   return invokeEdgeFunction<PixPaymentResponse>('create-pix-payment', {
     body: { order_id: orderId },
     timeoutMs: 25_000,
+    requireAuth: true,
+  })
+}
+
+export async function payWithCard(params: CardPaymentRequest): Promise<CardPaymentResponse> {
+  return invokeEdgeFunction<CardPaymentResponse>('create-card-payment', {
+    body: {
+      order_id: params.orderId,
+      idempotency_key: params.idempotencyKey,
+      token: params.token,
+      payment_method_id: params.paymentMethodId,
+      issuer_id: params.issuerId ?? undefined,
+      installments: params.installments,
+      identification: params.identification ?? undefined,
+    },
+    timeoutMs: 30_000,
     requireAuth: true,
   })
 }
