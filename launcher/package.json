@@ -1,0 +1,80 @@
+{
+  "name": "elopeak-booster-launcher",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Aplicativo desktop do booster: resolve o token de acesso emitido pelo painel e faz login automático no Riot Client / League of Legends.",
+  "author": "EloPeak",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.renderer.json && node -e \"const fs=require('fs');fs.mkdirSync('dist/renderer',{recursive:true});fs.copyFileSync('src/renderer/index.html','dist/renderer/index.html');fs.copyFileSync('src/renderer/styles.css','dist/renderer/styles.css');fs.copyFileSync('src/renderer/logo.png','dist/renderer/logo.png');fs.copyFileSync('src/renderer/app-icon.png','dist/renderer/app-icon.png')\"",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --dev",
+    "icon": "node scripts/build-ico-from-logo.js",
+    "package": "npm run icon && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@supabase/realtime-js": "^2.117.3",
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.18.1",
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.6.3"
+  },
+  "build": {
+    "appId": "com.elopeak.boosterlauncher",
+    "productName": "Booster Launcher",
+    "compression": "maximum",
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "config.json"
+    ],
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      },
+      {
+        "from": "vendor/deceive/Deceive.exe",
+        "to": "vendor/Deceive.exe"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Booster Launcher"
+    }
+  }
+}
