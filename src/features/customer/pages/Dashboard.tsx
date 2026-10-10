@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { Link, useNavigate } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { Plus, ShoppingBag, MessageCircle, Zap, Sparkles } from 'lucide-react'
@@ -38,7 +39,7 @@ export function CustomerDashboard() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
   const currency = useCurrency()
-  const { data: orders, isLoading } = useCustomerOrders(profile?.id, 'all', 20)
+  const { data: orders, isLoading, isError, error, refetch } = useCustomerOrders(profile?.id, 'all', 20)
   const { data: stats, isLoading: statsLoading } = useCustomerDashboardStats(profile?.id)
 
   const activeCount = stats?.activeOrders ?? 0
@@ -104,6 +105,7 @@ export function CustomerDashboard() {
           </Button>
         </div>
 
+        <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
         {isLoading ? (
           <CardGrid >
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}

@@ -27,8 +27,6 @@ Booster Launcher.exe
 .env.development.local
 .env.test.local
 .env.production.local
-!.env.example
-!.env.*.example
 
 # Editor
 .vscode/
@@ -60,17 +58,15 @@ supabase/.env
 supabase/.env.*
 supabase/functions/.env
 supabase/functions/.env.local
-!supabase/functions/.env.example
+supabase/functions/.env.*
 
-# Migrations ja substituidas por CREATE OR REPLACE mais recente -- ficam so
-# em migrations/ as ainda relevantes; o historico fica local (backup manual
-# ao trocar de maquina). shared/*.test.ts que leem daqui pulam graciosamente
-# quando o arquivo nao existe (ver skipIf nesses arquivos).
+# Copia local antiga do historico (234 arquivos, redundante): o historico agora
+# esta versionado em supabase/migrations_history/ e pode apagar esta pasta.
 supabase/migrations_archive/
 
-# Historical migrations are versioned because the active migrations depend on
-# objects introduced before the current baseline. Keeping the archive in Git
-# makes fresh database reconstruction and schema-regression tests reproducible.
+# Historico antigo de migrations: referencia LOCAL, nao versionado. O baseline em supabase/migrations/
+# ja contem o resultado de todas; os testes de regra de negocio sao pgTAP em supabase/tests/database/.
+supabase/migrations_history/
 
 # Deploy tooling
 .vercel/
@@ -99,3 +95,13 @@ mcp.json
 id_rsa*
 id_ed25519*
 *.mobileprovision
+
+# Ferramentas/rascunhos LOCAIS (nao fazem parte do produto; ficam so na maquina)
+CLAUDE.md
+.gitattributes
+supabase/snippets/
+scripts/
+
+# Documentacao vive no grafo (graphify-out/); pendencias manuais ficam locais
+docs/
+PENDENCIAS-EXTERNAS.md

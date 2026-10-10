@@ -257,6 +257,8 @@ export interface Order {
   // Card na aba Jobs é roxo "Reatribuído" em vez de amarelo "Exclusivo", e
   // accept_boost_order ignora o limite de 1 slot exclusivo pra esse caso.
   reassigned_by_admin: boolean
+  /** 'client_declared' = a Riot nao tinha o elo e o cliente informou manualmente (aviso ao admin). */
+  rank_source?: 'riot' | 'client_declared'
   // Janela de revisão de 2 minutos do admin logo após o pagamento (ou envio
   // de credenciais) -- só preenchido enquanto status === 'pending_review'.
   review_release_at: string | null
@@ -459,4 +461,20 @@ export interface BoosterService {
   created_at: string
   updated_at: string
   deleted_at: string | null
+}
+
+export interface OrderRankAssessment {
+  order_id: string
+  status: 'consistent' | 'suspicious' | 'inconclusive'
+  summary: {
+    declared_low: RankTier
+    declared_high: RankTier
+    estimated_tier: RankTier | null
+    sampled_players: number
+    sampled_matches: number
+    ranked_games_found: number
+    summoner_level: number | null
+    notes: string[]
+  }
+  created_at: string
 }

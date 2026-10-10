@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { fetchRiotProfileIconIds, parseRiotProfileIconId, riotProfileIconUrl } from '@/lib/riotAssets'
 

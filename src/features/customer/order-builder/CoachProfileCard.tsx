@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Clock, CheckCircle2, Star, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'

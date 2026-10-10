@@ -5,6 +5,7 @@ import {
   fetchMatchBody,
   parseMatchDetail,
   isRemakeMatch,
+  onSameTeam,
   fetchRankOrdinal,
   resolveMatchResult,
   rankOrdinal,
@@ -269,6 +270,7 @@ export async function syncOrderMatches(
   async function attributeDuoMatch(body: RiotMatchV5Body, matchId: string, remake: boolean): Promise<boolean> {
     duoCheckedIds.add(matchId)
     if (!duoPuuid) return false
+    if (!onSameTeam(body, clientPuuid, duoPuuid)) return false
     const duoDetail = parseMatchDetail(body, duoPuuid, matchId)
     if (!duoDetail.ok) return false
     const d = duoDetail.detail

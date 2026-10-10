@@ -1,6 +1,6 @@
 import { forwardRef } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Estado visual único de todo "chip selecionável em grade" (vitórias, divisão,
 // tier, dia do Clash); o conteúdo fica por conta de quem usa.

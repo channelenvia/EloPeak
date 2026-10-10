@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useEffect, useMemo, useState } from 'react'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -29,7 +30,7 @@ export function OrderHistoryPage() {
   // aviso quando o limite é batido em vez de implicar que a lista/busca é
   // completa (fix de verdade seria paginação/busca no servidor).
   const ORDERS_FETCH_LIMIT = 100
-  const { data: orders, isLoading } = useCustomerOrders(profile?.id, statusFilter.tab, ORDERS_FETCH_LIMIT, statusFilter.includeCanceled)
+  const { data: orders, isLoading, isError, error, refetch } = useCustomerOrders(profile?.id, statusFilter.tab, ORDERS_FETCH_LIMIT, statusFilter.includeCanceled)
   const hitFetchLimit = (orders?.length ?? 0) >= ORDERS_FETCH_LIMIT
   const { data: tabCounts } = useCustomerOrderTabCounts(profile?.id)
   const serviceFilters = useServiceFilters(orders)
@@ -77,6 +78,7 @@ export function OrderHistoryPage() {
       )}
 
       {/* Order grid */}
+      <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid >
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}

@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 interface ModalProps {
   open: boolean
@@ -35,7 +35,7 @@ export function Modal({ open, onOpenChange, title, description, children, maxWid
         <Dialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2',
-            'card-raised p-6 space-y-4 focus:outline-hidden',
+            'card-raised p-6 space-y-4 focus:outline-hidden max-h-[calc(100dvh-2rem)] overflow-y-auto',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 data-[state=open]:duration-panel data-[state=open]:ease-out',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-fast',
             MAX_WIDTH[maxWidth],

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/Badge'
 import type { Order } from '@/types'
 
 interface OrderCardHeaderProps {
-  order: Pick<Order, 'id' | 'drop_count'>
+  order: Pick<Order, 'id' | 'drop_count'> & Partial<Pick<Order, 'rank_source'>>
   title: string
   /** Lado direito (badge de status, tempo de revisão...). */
   trailing: React.ReactNode
@@ -17,6 +17,7 @@ export function OrderCardHeader({ order, title, trailing }: OrderCardHeaderProps
         <div className="flex items-center gap-2">
           <p className="font-mono text-xs text-ink-muted">#{order.id.slice(0, 8).toUpperCase()}</p>
           {order.drop_count > 0 && <Badge variant="warning" size="tag">Dropado</Badge>}
+          {order.rank_source === 'client_declared' && <Badge variant="warning" size="tag">Elo declarado</Badge>}
         </div>
         <p className="truncate text-base font-semibold text-ink">{title}</p>
       </div>

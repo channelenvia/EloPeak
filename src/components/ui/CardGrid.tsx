@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Colunas responsivas padrão para grades de cards (pedidos, métricas, serviços).
 const COLS = {

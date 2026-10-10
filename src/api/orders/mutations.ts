@@ -24,8 +24,21 @@ export async function setOrderCredentials(params: { orderId: string; login: stri
   }) as Promise<{ success: boolean; error?: string; access_token?: string }>
 }
 
+export async function disputeOrderCompletion(params: { orderId: string; reason: string }) {
+  return callRpc('dispute_order_completion', { p_order_id: params.orderId, p_reason: params.reason }, {
+    invalid_reason: 'Conte o motivo da contestação (10 a 500 caracteres).',
+    invalid_status: 'Este pedido não está mais aguardando a sua confirmação.',
+    unauthorized: 'Você não pode contestar este pedido.',
+    rate_limited: 'Muitas tentativas. Aguarde um minuto.',
+  })
+}
+
 export async function confirmOrderCompletion(orderId: string) {
-  return callRpc('confirm_order_completion', { p_order_id: orderId })
+  return callRpc('confirm_order_completion', { p_order_id: orderId }, {
+    no_booster_assigned: 'Este pedido ainda não tem booster atribuído.',
+    invalid_status: 'O pedido não está aguardando a sua confirmação.',
+    rate_limited: 'Muitas tentativas. Aguarde um minuto.',
+  })
 }
 
 // wins_played/losses_played (gate de "objetivo atingido" aqui, e a base do
@@ -73,6 +86,11 @@ export async function updateOrderStatus(params: { orderId: string; newStatus: Or
   }, {
     objective_not_reached: 'O rank alvo ainda não foi atingido.',
     requires_rank_verification: 'Use "Verificar Resultado" para concluir — este pedido exige verificação de rank.',
+    no_matches_played: 'Sincronize ao menos 1 partida deste pedido antes de marcar como concluído.',
+    clash_completion_window_closed: 'Clash só pode ser marcado como concluído a partir das 23h.',
+    invalid_transition: 'Essa mudança de status não é permitida agora.',
+    invalid_status: 'Status inválido.',
+    unauthorized: 'Você não pode alterar este pedido.',
     rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.',
   })
 }
@@ -99,6 +117,15 @@ const ADMIN_OVERRIDE_STATUS_MESSAGES: Record<string, string> = {
   use_admin_drop_order_instead: 'Para este status, use a ação de drop em vez do override direto.',
   order_not_found: 'Pedido não encontrado.',
   no_status_change: 'O pedido já está neste status.',
+  invalid_status: 'Status inválido.',
+  invalid_transition: 'Essa mudança de status não é permitida a partir do status atual.',
+  order_terminal: 'Pedido já finalizado (concluído, cancelado ou reembolsado) não pode ser reaberto por aqui.',
+  use_resolution_flow: 'Resolva o drop/revisão pelo fluxo próprio antes de mudar o status.',
+  use_refund_flow: 'Reembolso é feito pelo fluxo de reembolso.',
+  use_cancel_in_progress_flow: 'Pedido com booster só pode ser cancelado pelo fluxo de cancelamento em andamento.',
+  no_booster_assigned: 'O pedido não tem booster atribuído.',
+  order_not_paid: 'O pedido não está pago.',
+  rate_limited: 'Muitas tentativas. Aguarde um minuto.',
 }
 
 export async function adminOverrideOrderStatus(params: { orderId: string; newStatus: OrderStatus; reason?: string }) {
@@ -126,7 +153,7 @@ export async function adminDropOrder(params: { orderId: string; reason: string; 
   const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_drop_order', {
     p_order_id: params.orderId, p_reason: params.reason,
-    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? undefined,
   })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_DROP_ORDER_MESSAGES, syncError)
@@ -151,7 +178,7 @@ export async function adminReassignBooster(params: { orderId: string; targetBoos
   const syncError = await bestEffortSyncBeforeAction(params.orderId)
   const { data, error } = await supabase.rpc('admin_reassign_booster', {
     p_order_id: params.orderId, p_target_booster_id: params.targetBoosterId, p_reason: params.reason,
-    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? undefined,
   })
   if (error) throw normalizeApiError(error)
   return assertRpcSuccessAfterSync(data as { success: boolean; error?: string }, ADMIN_REASSIGN_BOOSTER_MESSAGES, syncError)
@@ -206,7 +233,10 @@ export async function adminFlagOrderUnderReview(params: { orderId: string; reaso
 const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
   unauthorized: 'Você não tem permissão para essa ação.',
   invalid_reason: 'O motivo precisa ter pelo menos 10 caracteres.',
-  invalid_amount: 'Informe um valor válido, maior que zero.',
+  order_not_under_review: 'Marque o pedido como "Analisar" antes de reembolsar ou cancelar.',
+  order_not_paid: 'O pedido não está pago.',
+  nothing_to_refund: 'Não há valor a reembolsar: tudo já foi consumido ou reservado para reembolso.',
+  rate_limited: 'Muitas tentativas. Aguarde um minuto.',
   order_not_found: 'Pedido não encontrado. Confira o número.',
   already_refunded: 'Este pedido já foi reembolsado.',
   amount_exceeds_order_total: 'O valor excede o total já disponível pra reembolso neste pedido.',
@@ -215,9 +245,10 @@ const ADMIN_MANUAL_REFUND_MESSAGES: Record<string, string> = {
   refund_not_pending: 'Este reembolso já foi confirmado ou desfeito.',
 }
 
-export async function adminCreateManualRefund(params: { orderId: string; reason: string; amount: number }) {
+// Sem valor digitado (RN-04): o servidor calcula progresso, credito do booster e reembolso.
+export async function adminCreateManualRefund(params: { orderId: string; reason: string; coachingPct?: number }) {
   return callRpc('admin_create_manual_refund', {
-    p_order_id: params.orderId, p_reason: params.reason, p_amount: params.amount,
+    p_order_id: params.orderId, p_reason: params.reason, p_coaching_pct: params.coachingPct,
   }, ADMIN_MANUAL_REFUND_MESSAGES) as Promise<{ success: boolean; error?: string; refund_id?: string }>
 }
 
@@ -291,12 +322,40 @@ const ACCEPT_ORDER_MESSAGES: Record<string, string> = {
   booster_not_approved: 'Sua conta de booster ainda não está aprovada.',
   unauthorized: 'Sua sessão expirou. Entre novamente para continuar.',
   rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.',
+  captcha_required: 'A verificação de segurança expirou. Tente aceitar o job de novo.',
+  legal_not_accepted: 'Aceite os Termos de Uso e a Política de Privacidade vigentes para continuar.',
 }
 
-export async function acceptBoostOrder(params: { orderId: string; boosterId: string }) {
+export async function acceptBoostOrder(params: { orderId: string; boosterId: string; challengeId: string }) {
   return callRpc('accept_boost_order', {
-    p_order_id: params.orderId, p_booster_user_id: params.boosterId,
+    p_order_id: params.orderId, p_booster_user_id: params.boosterId, p_challenge_id: params.challengeId,
   }, ACCEPT_ORDER_MESSAGES)
+}
+
+// Captcha do aceite (RN-12): o desafio e a resposta ficam no servidor; o navegador so recebe o id opaco e
+// a URL da imagem mascarada.
+export interface AcceptChallenge {
+  challenge_id: string
+  image_url: string
+  expires_in: number
+}
+
+export interface AcceptChallengeVerification {
+  success: boolean
+  error?: string
+  attempts_left?: number
+}
+
+export function issueAcceptChallenge(orderId: string) {
+  return invokeEdgeFunction<AcceptChallenge>('accept-challenge', {
+    body: { action: 'issue', order_id: orderId }, requireAuth: true,
+  })
+}
+
+export function verifyAcceptChallenge(challengeId: string, answer: string) {
+  return invokeEdgeFunction<AcceptChallengeVerification>('accept-challenge', {
+    body: { action: 'verify', challenge_id: challengeId, answer }, requireAuth: true,
+  })
 }
 
 export async function savePendingOrderFromIntent(params: {
@@ -374,4 +433,11 @@ export async function verifyOrderRank(orderId: string): Promise<VerifyOrderRankR
     body: { order_id: orderId },
     requireAuth: true,
   })
+}
+
+// Cancela um pedido em analise SEM devolver dinheiro ao cliente (o booster recebe pelo progresso); o servidor calcula tudo.
+export async function adminCancelPaidOrder(params: { orderId: string; reason: string }) {
+  return callRpc('admin_cancel_paid_order', {
+    p_order_id: params.orderId, p_reason: params.reason,
+  }, ADMIN_MANUAL_REFUND_MESSAGES) as Promise<{ success: boolean; error?: string }>
 }

@@ -5,7 +5,8 @@ import type { BoosterWithSlots } from '@/api/boosters'
 import { useAdminAssignPendingReviewOrder } from '@/api/admin'
 import { useAdminDropOrder, useAdminReassignBooster } from '@/api/orders'
 import { BoosterStatusBadge, Button, ErrorAlert, Modal, SearchInput } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
+import { parseCompletionPct } from '@/lib/coachCompletion'
 import type { Order, ServiceType } from '@/types'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -25,25 +26,25 @@ export function AdminDropModal({ orderId, serviceType, dropCount, open, onClose 
   const { register, handleSubmit, reset, formState: { isValid } } = useForm<AdminDropFormData>({
     resolver: zodResolver(z.object({
       reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.'),
-      completionPct: z.string(),
+      completionPct: z.string().refine((v) => !isCoaching || parseCompletionPct(v) !== null, 'Informe o % entregue (0 a 100).'),
     })),
     // Coaching não tem métrica automática de progresso (sem partida/rank pra
     // medir) -- order_drop_completion_pct sempre retorna 0 pra esse serviço.
     // Pede o % de sessões já entregues pro admin em vez de pagar sempre 0%
     // (ver migration 20260908090000). Só aparece pra coaching -- os outros
     // serviços continuam com o cálculo automático de sempre.
-    defaultValues: { reason: '', completionPct: '0' },
+    defaultValues: { reason: '', completionPct: '' },
     mode: 'onChange',
   })
 
   function close() {
     onClose()
-    reset({ reason: '', completionPct: '0' })
+    reset({ reason: '', completionPct: '' })
   }
 
   function onSubmit(data: AdminDropFormData) {
     dropOrder.mutate(
-      { reason: data.reason.trim(), coachingCompletionPct: isCoaching ? Number(data.completionPct) || 0 : undefined },
+      { reason: data.reason.trim(), coachingCompletionPct: isCoaching ? parseCompletionPct(data.completionPct) ?? undefined : undefined },
       { onSuccess: close },
     )
   }
@@ -72,7 +73,7 @@ export function AdminDropModal({ orderId, serviceType, dropCount, open, onClose 
             className="input-base w-full text-sm"
           />
           <p className="text-xs text-ink-muted mt-1">
-            Coaching não tem como medir progresso automaticamente (sem partida/rank) -- informe quanto do pacote já foi dado antes do drop. 0% se nada foi entregue ainda.
+            Coaching não tem como medir progresso automaticamente (sem partida/rank) -- informe quanto do pacote já foi dado antes do drop. Digite 0 se nada foi entregue ainda (o campo não pode ficar vazio).
           </p>
         </div>
       )}
@@ -112,7 +113,7 @@ export function AdminReassignModal({ order, open, onClose }: { order: Order; ope
   const [search, setSearch] = useState('')
   const [selectedBoosterId, setSelectedBoosterId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-  const [completionPct, setCompletionPct] = useState('0')
+  const [completionPct, setCompletionPct] = useState('')
   const { data: boosters, isLoading: loadingBoosters } = useBoostersWithSlots(open)
   const reassign = useAdminReassignBooster(order.id)
   const isNewAssignment = !order.assigned_booster_id
@@ -204,7 +205,7 @@ export function AdminReassignModal({ order, open, onClose }: { order: Order; ope
             className="input-base w-full text-sm"
           />
           <p className="text-xs text-ink-muted mt-1">
-            Coaching não tem como medir progresso automaticamente -- informe quanto do pacote o coach atual já deu antes de trocar. 0% se nada foi entregue ainda.
+            Coaching não tem como medir progresso automaticamente -- informe quanto do pacote o coach atual já deu antes de trocar. Digite 0 se nada foi entregue ainda (o campo não pode ficar vazio).
           </p>
         </div>
       )}
@@ -224,12 +225,12 @@ export function AdminReassignModal({ order, open, onClose }: { order: Order; ope
         <Button
           variant="primary"
           loading={reassign.isPending}
-          disabled={!selectedBoosterId}
+          disabled={!selectedBoosterId || (showCoachingCompletionInput && parseCompletionPct(completionPct) === null)}
           onClick={() => {
             if (!selectedBoosterId) return
             reassign.mutate({
               targetBoosterId: selectedBoosterId, reason: reason.trim(),
-              coachingCompletionPct: showCoachingCompletionInput ? Number(completionPct) || 0 : undefined,
+              coachingCompletionPct: showCoachingCompletionInput ? parseCompletionPct(completionPct) ?? undefined : undefined,
             }, { onSuccess: close })
           }}
         >

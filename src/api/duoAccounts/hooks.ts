@@ -52,7 +52,10 @@ export function useReserveDuoAccount() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: reserveDuoAccount,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() })
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'duo-account-history'] })
+    },
   })
 }
 
@@ -60,7 +63,10 @@ export function useReleaseDuoAccountReservation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: releaseDuoAccountReservation,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() })
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'duo-account-history'] })
+    },
   })
 }
 

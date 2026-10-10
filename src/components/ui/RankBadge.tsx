@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Shield, Star, Gem, Diamond, Crown, Flame, Trophy } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import type { Division, RankTier } from '@/types'
 import { RANK_TIER_LABEL, RANK_TIER_COLOR } from '@/lib/utils'
 

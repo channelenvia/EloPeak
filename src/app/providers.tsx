@@ -57,13 +57,18 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (event === 'INITIAL_SESSION') return // Handled by getSession() above
         setSession(session)
+        // Renovacao de token nao muda quem esta logado: nada de PageLoader nem refetch do perfil
+        // (antes isso desmontava checkout, chat e modais a cada refresh de token).
+        if (event === 'TOKEN_REFRESHED') return
         if (session?.user) {
           if (event === 'SIGNED_IN') {
             const provider = (session.user.app_metadata as Record<string, string>).provider
             if (provider === 'discord') joinDiscordServer(session.user.id, session.provider_token)
           }
           const displayName = (session.user.user_metadata?.name ?? session.user.user_metadata?.full_name) as string | undefined
-          await fetchProfile(session.user.id, displayName)
+          // Sem await dentro do callback: chamar o supabase aqui dentro pode travar o proprio cliente de auth.
+          const userId = session.user.id
+          setTimeout(() => { void fetchProfile(userId, displayName) }, 0)
         } else {
           // Signed out (or session otherwise cleared) — wipe auth state and
           // every other piece of per-user client state so nothing from this
@@ -91,7 +96,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchProfile(userId: string, displayName?: string) {
-    setLoading(true)
+    // So mostra o loader quando ainda nao ha perfil deste usuario (SIGNED_IN repetido nao desmonta a arvore).
+    if (useAuthStore.getState().profile?.id !== userId) setLoading(true)
     const { data: initialData, error } = await supabase
       .from('profiles')
       .select('*')

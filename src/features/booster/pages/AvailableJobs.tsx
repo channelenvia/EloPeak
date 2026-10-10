@@ -64,8 +64,8 @@ export function AvailableJobsPage() {
     isPending: acceptJobMutation.isPending,
     isError: acceptJobMutation.isError,
     error: acceptJobMutation.error,
-    mutate: (orderId: string) => acceptJobMutation.mutate(
-      { orderId, boosterId: profile!.id },
+    mutate: (orderId: string, challengeId: string) => acceptJobMutation.mutate(
+      { orderId, boosterId: profile!.id, challengeId },
       { onSuccess: () => navigate(`/booster/orders/${orderId}`) },
     ),
   }
@@ -285,9 +285,10 @@ export function AvailableJobsPage() {
 
       <CaptchaChallenge
         open={captchaJobId !== null}
+        orderId={captchaJobId}
         onOpenChange={(next) => { if (!next) setCaptchaJobId(null) }}
-        onSuccess={() => {
-          if (captchaJobId) acceptJob.mutate(captchaJobId)
+        onSuccess={(challengeId) => {
+          if (captchaJobId) acceptJob.mutate(captchaJobId, challengeId)
           setCaptchaJobId(null)
         }}
       />

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 
 // Contagem regressiva até `expiresAt` (ISO). `remaining` é null enquanto não há prazo.
-export function useCountdown(expiresAt: string | null) {
+// `serverOffsetMs` = (agora do servidor - agora do navegador) medido quando o prazo chegou: um relógio local
+// adiantado/atrasado nao encurta nem estende o prazo do PIX.
+export function useCountdown(expiresAt: string | null, serverOffsetMs = 0) {
   const [remaining, setRemaining] = useState<number | null>(null)
 
   useEffect(() => {
@@ -9,11 +11,11 @@ export function useCountdown(expiresAt: string | null) {
       setRemaining(null)
       return
     }
-    const tick = () => setRemaining(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)))
+    const tick = () => setRemaining(Math.max(0, Math.floor((new Date(expiresAt).getTime() - (Date.now() + serverOffsetMs)) / 1000)))
     tick()
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
-  }, [expiresAt])
+  }, [expiresAt, serverOffsetMs])
 
   const safeRemaining = remaining ?? 0
   const mm = String(Math.floor(safeRemaining / 60)).padStart(2, '0')

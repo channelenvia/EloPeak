@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Seletor binário embutido no fim de um campo de texto (Riot ID) -- fica
 // colapsado mostrando só a opção atual; a seta pra baixo expande um

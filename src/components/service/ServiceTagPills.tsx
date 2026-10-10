@@ -1,5 +1,5 @@
 import { specialtyIcon } from './specialtyIcon'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { ALL_LANES_LABEL, LANES, LANE_LABEL, LANE_ICON_URL, SPECIALTY_LABEL, hasAllLanes } from '@/lib/lolTaxonomy'
 import { useDdragonVersion, useDdragonChampionIds, championIconUrl } from '@/lib/ddragon'
 

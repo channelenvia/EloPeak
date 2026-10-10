@@ -44,14 +44,24 @@ export async function updateBoosterDisplayName(params: { userId: string; display
   })
 }
 
-export async function updateBoosterFullName(params: { userId: string; fullName: string | null }) {
-  const { error } = await supabase.from('booster_profiles').update({ full_name: params.fullName }).eq('user_id', params.userId)
+export async function updateBoosterFullName(params: { fullName: string | null }) {
+  const { data, error } = await supabase.rpc('update_my_full_name', { p_full_name: params.fullName ?? '' })
   if (error) throw normalizeApiError(error, 'Não foi possível atualizar o nome completo.')
+  assertRpcSuccess(data as { success: boolean; error?: string }, {
+    full_name_required: 'Informe o nome completo.',
+    not_a_booster: 'Não foi possível identificar sua conta de booster.',
+    rate_limited: 'Muitas tentativas. Aguarde um minuto.',
+  })
 }
 
-export async function updateBoosterCpf(params: { userId: string; cpf: string }) {
-  const { error } = await supabase.from('booster_profiles').update({ cpf: params.cpf }).eq('user_id', params.userId)
+export async function updateBoosterCpf(params: { cpf: string }) {
+  const { data, error } = await supabase.rpc('update_my_cpf', { p_cpf: params.cpf })
   if (error) throw normalizeApiError(error, 'Não foi possível atualizar o CPF.')
+  assertRpcSuccess(data as { success: boolean; error?: string }, {
+    invalid_cpf: 'CPF inválido.',
+    not_a_booster: 'Não foi possível identificar sua conta de booster.',
+    rate_limited: 'Muitas tentativas. Aguarde um minuto.',
+  })
 }
 
 export function useBoosterPanelFields(userId: string | undefined, enabled: boolean) {

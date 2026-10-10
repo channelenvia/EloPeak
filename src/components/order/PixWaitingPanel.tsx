@@ -1,6 +1,6 @@
 import { Clock, Copy, CheckCircle2, QrCode, X } from 'lucide-react'
 import { ActionBar, Button } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 
 export interface PixWaitingPanelProps {

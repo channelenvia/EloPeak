@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLoader } from '@/components/ui/Spinner'
@@ -49,5 +50,11 @@ export function RequireAuth({ role }: { role?: 'customer' | 'booster' | 'admin' 
     return <Navigate to="/login" replace />
   }
 
-  return <Outlet />
+  return (
+    <>
+      {/* Area autenticada nunca deve ser indexada (alem do Disallow do robots.txt). */}
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Outlet />
+    </>
+  )
 }

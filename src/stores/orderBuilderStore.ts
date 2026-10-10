@@ -79,6 +79,10 @@ interface OrderBuilderState {
   // impede a tentativa no cliente. Reseta junto com riotVerified.
   md5Blocked: boolean
 
+  // Verdadeiro quando o cliente informou o elo manualmente porque a Riot nao tem rank (ou nao ha como consultar). O pedido
+  // vai marcado para o admin conferir; o backend so aceita quando a Riot realmente nao tem o dado.
+  rankDeclared: boolean
+
   // MD5: garantia de win rate nas partidas de posicionamento — toggle dentro
   // do fluxo "Vitórias" (win_boost), não um serviço separado na tela, mas
   // muda serviceType para 'md5' internamente (ver StepConfigure.tsx).
@@ -160,6 +164,7 @@ interface OrderBuilderState {
   // flags de verificação) — chamado no início de cada nova busca pra que os
   // dados da conta anterior nunca vazem pra conta nova.
   clearRiotLookup: () => void
+  setRankDeclared: (value: boolean) => void
   setRiotLookupLoading: (v: boolean) => void
   setStepAttempted: (v: boolean) => void
   setSelectedCoachPackage: (pkg: OrderBuilderState['selectedCoachPackage']) => void
@@ -214,6 +219,7 @@ const initialState = {
   riotAutoFilled: false,
   riotVerified: false,
   md5Blocked: false,
+  rankDeclared: false,
   riotLookupLoading: false,
   stepAttempted: false,
   selectedCoachPackage: null,
@@ -247,6 +253,7 @@ const CLEARED_LOOKUP_STATE = {
   riotAutoFilled: false,
   riotVerified: false,
   md5Blocked: false,
+  rankDeclared: false,
   md5MatchesRemaining: null as number | null,
   md5MatchesRemainingCeiling: null as number | null,
 }
@@ -458,11 +465,12 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
   // limpa o rank já preenchido a cada tecla; a limpeza completa acontece no
   // início da próxima busca (clearRiotLookup), pra não apagar dados enquanto
   // o usuário ainda está digitando.
-  setRiotId: (riotId) => set({ riotId, riotAutoFilled: false, riotVerified: false, md5Blocked: false }),
+  setRiotId: (riotId) => set({ riotId, riotAutoFilled: false, riotVerified: false, md5Blocked: false, rankDeclared: false }),
   setCustomerLanes: (customerLanes) => set({ customerLanes: customerLanes.slice(0, 2) }),
   setRiotAutoFilled: (riotAutoFilled) => set({ riotAutoFilled }),
   setRiotVerified: (riotVerified) => set({ riotVerified }),
   setMd5Blocked: (md5Blocked) => set({ md5Blocked }),
+  setRankDeclared: (rankDeclared) => set({ rankDeclared }),
   clearRiotLookup: () => set({ ...CLEARED_LOOKUP_STATE }),
   setRiotLookupLoading: (riotLookupLoading) => set({ riotLookupLoading }),
   setStepAttempted: (stepAttempted) => set({ stepAttempted }),

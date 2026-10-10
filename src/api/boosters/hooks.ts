@@ -226,6 +226,9 @@ export function useUpdateProfessionalProfile(userId: string | undefined) {
       // sobrando de um rename, removida; a chamada abaixo já cobre a lista.
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.publicList() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.top() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.ownDisplayName(userId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.ownFullProfile(userId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: ['boosters', 'public-profile'] })
     },
   })
 }

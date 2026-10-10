@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Menu, MessageCircle, X } from 'lucide-react'
 import { Button, LogoMark } from '@/components/ui'
 import { AmbientBackground } from '@/components/AmbientBackground'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useAuthStore } from '@/stores/authStore'
 import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'
 

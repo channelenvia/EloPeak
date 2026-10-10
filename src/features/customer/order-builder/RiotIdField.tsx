@@ -1,5 +1,5 @@
 import { Check, Search } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { FormField } from '@/components/ui/FormField'
 import { InlineFieldSelect } from '@/components/ui'
 import type { QueueType } from '@/types'

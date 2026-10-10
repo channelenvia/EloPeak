@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { InlineEmpty } from '@/components/ui/EmptyState'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { CheckCircle2, Zap, Tv, Crosshair, User, Trophy, Shield, Lightbulb, Mic } from 'lucide-react'

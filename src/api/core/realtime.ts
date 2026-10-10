@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useId } from 'react'
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { RealtimePostgresChangesFilter } from '@supabase/supabase-js'
@@ -6,7 +6,7 @@ import type { RealtimePostgresChangesFilter } from '@supabase/supabase-js'
 type ChangeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*'
 
 interface RealtimeInvalidateOptions {
-  /** Nome do canal -- precisa ser único por assinatura ativa na página. */
+  /** Nome-base do canal. Cada instancia do hook acrescenta um sufixo proprio (useId), entao o mesmo nome pode ser usado por varios componentes sem um roubar o canal do outro. */
   channel: string
   table: string
   event?: ChangeEvent
@@ -27,10 +27,13 @@ export function useRealtimeInvalidate({
   channel, table, event = '*', filter, queryKeys, enabled = true,
 }: RealtimeInvalidateOptions) {
   const queryClient = useQueryClient()
+  const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const channelName = `${channel}-${instanceId}`
 
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
+    let subscribedBefore = false
     let subscription: ReturnType<typeof supabase.channel> | null = null
 
     async function setup() {
@@ -41,7 +44,7 @@ export function useRealtimeInvalidate({
       // (supabase.channel() reaproveita por nome de tópico) já com
       // subscribe() chamado, e o .on() seguinte lança "cannot add
       // postgres_changes callbacks ... after subscribe()".
-      const stale = supabase.getChannels().find((c) => c.topic === `realtime:${channel}`)
+      const stale = supabase.getChannels().find((c) => c.topic === `realtime:${channelName}`)
       if (stale) await supabase.removeChannel(stale)
       if (cancelled) return
 
@@ -50,11 +53,16 @@ export function useRealtimeInvalidate({
         : { event, schema: 'public', table }
 
       subscription = supabase
-        .channel(channel)
+        .channel(channelName)
         .on('postgres_changes', config, () => {
           for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
         })
-        .subscribe()
+        .subscribe((status) => {
+          if (status !== 'SUBSCRIBED') return
+          // Reconectou depois de uma queda: eventos perdidos nao voltam, entao refaz as consultas.
+          if (subscribedBefore) for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
+          subscribedBefore = true
+        })
     }
 
     void setup()
@@ -66,5 +74,5 @@ export function useRealtimeInvalidate({
     // queryKeys é recriado a cada render por design (chaves derivadas de
     // ids/filtros) -- serializar pra string evita reassinar o canal à toa.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel, table, event, filter, enabled, queryClient, JSON.stringify(queryKeys)])
+  }, [channelName, table, event, filter, enabled, queryClient, JSON.stringify(queryKeys)])
 }

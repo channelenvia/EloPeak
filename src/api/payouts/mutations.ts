@@ -13,7 +13,8 @@ const REQUEST_PAYOUT_MESSAGES: Record<string, string> = {
   booster_not_approved: 'Sua conta de booster ainda não está aprovada.',
   insufficient_balance: 'O valor solicitado é maior que o seu saldo disponível.',
   unauthorized: 'Sua sessão expirou. Entre novamente para continuar.',
-  withdrawal_window_closed: 'Saques só podem ser solicitados nos dias 15 e 30 de cada mês.',
+  negative_balance: 'Seu saldo está negativo (penalidade ou estorno). Saques ficam bloqueados até regularizar.',
+  withdrawal_window_closed: 'Saques só podem ser solicitados no dia 15 e no último dia de cada mês.',
 }
 
 export async function requestPayout(amount: number): Promise<{ requestId: string }> {
@@ -42,6 +43,7 @@ const REVIEW_MESSAGES: Record<string, string> = {
   invalid_target_status: 'Status de destino inválido.',
   not_found: 'Solicitação não encontrada.',
   invalid_status: 'Esta solicitação não está mais no estado esperado.',
+  cannot_review_own_request: 'Você não pode aprovar nem pagar o seu próprio saque. Peça a outro admin.',
 }
 
 export async function adminReviewPayoutRequest(params: {
@@ -63,6 +65,7 @@ const MARK_PAID_MESSAGES: Record<string, string> = {
   proof_required: 'Anexe o comprovante de pagamento antes de marcar como pago.',
   not_found: 'Solicitação não encontrada.',
   invalid_status: 'A solicitação precisa estar aprovada antes de ser paga.',
+  cannot_review_own_request: 'Você não pode aprovar nem pagar o seu próprio saque. Peça a outro admin.',
 }
 
 export async function adminMarkPayoutPaid(params: { requestId: string; proofUrl: string }): Promise<void> {

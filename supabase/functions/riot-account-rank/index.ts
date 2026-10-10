@@ -3,6 +3,7 @@ import { z } from 'https://esm.sh/zod@3.23.8'
 import { handleCors } from '../_shared/cors.ts'
 import { errorResponse, jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { getAuthUser } from '../_shared/authUser.ts'
+import { enterRiotContext } from '../_shared/riotLookup.ts'
 import { HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import {
@@ -41,6 +42,7 @@ serve(async (req) => {
 
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
+    enterRiotContext({ userId: auth.user.id, tier: 'interactive' })
 
     const rateLimit = await consumeUserRateLimit('riot-account-rank', auth.user.id, 20, 60)
     if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)
@@ -53,7 +55,7 @@ serve(async (req) => {
     const queue = parsedBody.data.queue
     const { leagueQueue } = RIOT_QUEUE_TYPE[queue]
 
-    const accountResult = await fetchRiotAccount(riotId, RIOT_API_KEY, REGIONAL_ROUTE)
+    const accountResult = await fetchRiotAccount(riotId, RIOT_API_KEY, REGIONAL_ROUTE, { cacheTtlSeconds: 120 })
     if (!accountResult.ok) {
       if (accountResult.reason === 'not_found') {
         return jsonResponse(req, { found: false, ranked: false })
@@ -66,8 +68,9 @@ serve(async (req) => {
     }
     const account = accountResult.account
 
-    const leagueResult = await fetchLeagueEntries(account.puuid, RIOT_API_KEY, PLATFORM_ROUTE)
+    const leagueResult = await fetchLeagueEntries(account.puuid, RIOT_API_KEY, PLATFORM_ROUTE, { cacheTtlSeconds: 60 })
     if (!leagueResult.ok) {
+      if (leagueResult.reason === 'wrong_region') return errorResponse(req, 'Conta não é do servidor BR', 400)
       if (leagueResult.reason === 'rate_limited') {
         return errorResponse(req, 'Consulta temporariamente limitada pela Riot. Tente novamente em instantes.', 503)
       }

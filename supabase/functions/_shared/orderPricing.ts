@@ -1,5 +1,5 @@
 import { z } from 'https://esm.sh/zod@3.23.8'
-import { computeOrderPrice, rankStep, type MasterPlusCutoffs, type OrderPriceInput, type RankValue, type ServiceType, type ClashTier, type ClashDay } from '../../../shared/pricing.ts'
+import { computeOrderPrice, rankStep, RANK_TIER_ORDER, type MasterPlusCutoffs, type OrderPriceInput, type RankValue, type ServiceType, type ClashTier, type ClashDay, type RankTier, type Division } from '../../../shared/pricing.ts'
 import {
   type BoostFlow,
   isAddonCodeValidForFlow,
@@ -11,7 +11,7 @@ import {
   resolveAddonLabel,
   NO_DIVISION_TIERS,
 } from '../../../shared/boostDomain.ts'
-import { isAddonCodeValidForClash } from '../../../shared/clashDomain.ts'
+import { isAddonCodeValidForClash, rankTierToClashTier } from '../../../shared/clashDomain.ts'
 import { errorResponse, jsonResponse } from './responses.ts'
 import type { supabaseAdmin } from './supabaseAdmin.ts'
 import {
@@ -93,7 +93,11 @@ const routingSchema = z.object({
 
 // Riot ID: gameName#tagLine. gameName é 3-16 chars (regras da Riot),
 // tagLine é 2-5 alfanuméricos.
-const riotIdSchema = z.string().regex(/^.{3,16}#[^#]{2,5}$/, 'Riot ID inválido (formato: nome#tag)')
+// Cache curto de consultas Riot no checkout/preview (poupa a cota compartilhada da chave).
+const RIOT_CACHE_ACCOUNT_SECONDS = 120
+const RIOT_CACHE_LEAGUE_SECONDS = 60
+
+const riotIdSchema = z.string().trim().regex(/^.{3,16}#[^#]{2,5}$/, 'Riot ID inválido (formato: nome#tag)')
 
 // Rotas escolhidas pelo cliente no configurador -- mesma regra de
 // booster_services.lanes (migration 160): no máximo 2, subconjunto fixo das
@@ -135,6 +139,8 @@ const standardEloIntentSchema = z.object({
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
   customer_lanes: customerLanesSchema,
+  // O cliente informou o elo manualmente (a Riot nao achou rank / elo da temporada passada); so vale quando a Riot nao tem o dado.
+  rank_declared: z.boolean().default(false),
 }).strict()
 
 // Boost Master+ — rank atual Master ou Grão-Mestre. Sem PDL alvo: o preço
@@ -159,6 +165,8 @@ const masterPlusIntentSchema = z.object({
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
   customer_lanes: customerLanesSchema,
+  // O cliente informou o elo manualmente (a Riot nao achou rank / elo da temporada passada); so vale quando a Riot nao tem o dado.
+  rank_declared: z.boolean().default(false),
 }).strict()
 
 // Win Boost / Placement Matches / Coaching — fora do escopo desta reforma
@@ -193,6 +201,8 @@ const otherServiceIntentSchema = z.object({
   riot_id: riotIdSchema.nullable().default(null),
   coupon_code: couponCodeSchema,
   customer_lanes: customerLanesSchema,
+  // O cliente informou o elo manualmente (a Riot nao achou rank / elo da temporada passada); so vale quando a Riot nao tem o dado.
+  rank_declared: z.boolean().default(false),
 }).strict()
 
 // MD5 — "Rank da última temporada": Iron–Challenger valid, no LP/PDL/target
@@ -213,6 +223,8 @@ const md5IntentSchema = z.object({
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
   customer_lanes: customerLanesSchema,
+  // O cliente informou o elo manualmente (a Riot nao achou rank / elo da temporada passada); so vale quando a Riot nao tem o dado.
+  rank_declared: z.boolean().default(false),
 }).strict()
 
 // Solo Clash / Duo Clash — preço e elegibilidade dependem só do tier (faixa),
@@ -240,6 +252,8 @@ const clashIntentSchema = z.object({
   riot_id: riotIdSchema,
   coupon_code: couponCodeSchema,
   customer_lanes: customerLanesSchema,
+  // O cliente informou o elo manualmente (a Riot nao achou rank / elo da temporada passada); so vale quando a Riot nao tem o dado.
+  rank_declared: z.boolean().default(false),
 }).strict()
 
 // Forma normalizada usada pelo resto do handler, independente de qual dos 3
@@ -272,6 +286,9 @@ export interface NormalizedIntent {
   clashTier: ClashTier | null
   clashDay: ClashDay | null
   customerLanes: string[]
+  // Entrada: o cliente declarou o elo. Saida: de onde veio o elo gravado no pedido ('client_declared' liga o aviso ao admin).
+  rankDeclared: boolean
+  rankSource: 'riot' | 'client_declared'
 }
 
 export interface QuoteResult {
@@ -405,6 +422,8 @@ async function normalizeMasterPlusIntent(
     clashTier: null,
     clashDay: null,
     customerLanes: mp.customer_lanes,
+    rankDeclared: mp.rank_declared,
+    rankSource: 'riot',
   }
 
   return { ok: true, result: { normalized, masterPlusPrice, masterPlusCutoffs, pdlBracket } }
@@ -458,6 +477,8 @@ async function normalizeStandardEloIntent(
     clashTier: null,
     clashDay: null,
     customerLanes: std.customer_lanes,
+    rankDeclared: std.rank_declared,
+    rankSource: 'riot',
   }
 
   let masterPlusPrice: number | null = null
@@ -530,6 +551,8 @@ function normalizeMd5Intent(md5: z.infer<typeof md5IntentSchema>): NormalizeFlow
     clashTier: null,
     clashDay: null,
     customerLanes: md5.customer_lanes,
+    rankDeclared: md5.rank_declared,
+    rankSource: 'riot',
   }
   return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
 }
@@ -567,6 +590,8 @@ function normalizeClashIntent(clash: z.infer<typeof clashIntentSchema>): Normali
     clashTier: clash.clash_tier,
     clashDay: clash.clash_day,
     customerLanes: clash.customer_lanes,
+    rankDeclared: clash.rank_declared,
+    rankSource: 'riot',
   }
   return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
 }
@@ -622,6 +647,8 @@ function normalizeOtherIntent(req: Request, other: z.infer<typeof otherServiceIn
     clashTier: null,
     clashDay: null,
     customerLanes: other.customer_lanes,
+    rankDeclared: other.rank_declared,
+    rankSource: 'riot',
   }
   return { ok: true, result: { normalized, masterPlusPrice: null, masterPlusCutoffs: undefined, pdlBracket: null } }
 }
@@ -736,7 +763,7 @@ export async function validateAndPriceIntent(
       return { ok: false, response: errorResponse(req, 'Server misconfigured', 500) }
     }
 
-    const accountResult = await fetchRiotAccount(normalized.riotId, riotApiKey, 'americas')
+    const accountResult = await fetchRiotAccount(normalized.riotId, riotApiKey, 'americas', { cacheTtlSeconds: RIOT_CACHE_ACCOUNT_SECONDS })
     if (!accountResult.ok) {
       if (accountResult.reason === 'not_found') return { ok: false, response: badRequest(req, 'Conta Riot não encontrada') }
       if (accountResult.reason === 'rate_limited') {
@@ -746,8 +773,9 @@ export async function validateAndPriceIntent(
       return { ok: false, response: errorResponse(req, 'Falha ao consultar conta Riot', 502) }
     }
 
-    const leagueResult = await fetchLeagueEntries(accountResult.account.puuid, riotApiKey, 'br1')
+    const leagueResult = await fetchLeagueEntries(accountResult.account.puuid, riotApiKey, 'br1', { cacheTtlSeconds: RIOT_CACHE_LEAGUE_SECONDS })
     if (!leagueResult.ok) {
+      if (leagueResult.reason === 'wrong_region') return { ok: false, response: badRequest(req, 'Conta não é do servidor BR') }
       if (leagueResult.reason === 'rate_limited') {
         return { ok: false, response: errorResponse(req, 'Consulta temporariamente limitada pela Riot. Tente novamente em instantes.', 503) }
       }
@@ -757,17 +785,34 @@ export async function validateAndPriceIntent(
 
     const { leagueQueue } = RIOT_QUEUE_TYPE[normalized.queueType]
     const entry = leagueResult.entries.find((candidate) => candidate.queueType === leagueQueue)
-    const verifiedTier = entry?.tier ? RIOT_TIER_MAP[entry.tier] ?? null : null
-    if (!entry || !verifiedTier) {
-      return { ok: false, response: badRequest(req, 'A conta não possui rank na fila selecionada') }
+    const apiTier = entry?.tier ? RIOT_TIER_MAP[entry.tier] ?? null : null
+    let resolved: { tier: RankTier; division: Division | null; lp: number }
+    if (entry && apiTier) {
+      const apiDivision = NO_DIVISION_TIERS.includes(apiTier)
+        ? null
+        : entry.rank ? RIOT_DIVISION_MAP[entry.rank] ?? null : null
+      if (!NO_DIVISION_TIERS.includes(apiTier) && !apiDivision) {
+        return { ok: false, response: errorResponse(req, 'A Riot retornou uma divisão inválida', 502) }
+      }
+      resolved = { tier: apiTier, division: apiDivision, lp: Math.max(0, Number(entry.leaguePoints ?? 0)) }
+    } else {
+      // A Riot achou a conta mas nao tem rank nesta fila: o cliente informa o elo manualmente e o pedido vai marcado
+      // para o admin conferir. Sem rank_declared continua recusando (comportamento anterior).
+      if (!normalized.rankDeclared || !normalized.currentRank) {
+        return { ok: false, response: badRequest(req, 'A conta não possui rank na fila selecionada') }
+      }
+      const declaredTier = normalized.currentRank.tier
+      const declaredDivision = NO_DIVISION_TIERS.includes(declaredTier) ? null : normalized.currentRank.division
+      if (!NO_DIVISION_TIERS.includes(declaredTier) && !declaredDivision) {
+        return { ok: false, response: badRequest(req, 'Informe a divisão do seu elo') }
+      }
+      const declaredLp = NO_DIVISION_TIERS.includes(declaredTier) ? normalized.currentPdl ?? 0 : normalized.currentLp ?? 0
+      resolved = { tier: declaredTier, division: declaredDivision, lp: Math.max(0, Math.floor(Number(declaredLp))) }
+      normalized.rankSource = 'client_declared'
     }
-
-    const verifiedDivision = NO_DIVISION_TIERS.includes(verifiedTier)
-      ? null
-      : entry.rank ? RIOT_DIVISION_MAP[entry.rank] ?? null : null
-    if (!NO_DIVISION_TIERS.includes(verifiedTier) && !verifiedDivision) {
-      return { ok: false, response: errorResponse(req, 'A Riot retornou uma divisão inválida', 502) }
-    }
+    const verifiedTier = resolved.tier
+    const verifiedDivision = resolved.division
+    const leaguePoints = resolved.lp
 
     const verifiedMasterPlus = isMasterPlusCurrentTier(verifiedTier)
     if (normalized.serviceType === 'elo_boost' && verifiedMasterPlus !== (flow === 'master_plus')) {
@@ -793,7 +838,6 @@ export async function validateAndPriceIntent(
     }
 
     normalized.currentRank = { tier: verifiedTier, division: verifiedDivision }
-    const leaguePoints = Math.max(0, Number(entry.leaguePoints ?? 0))
     const recentRecord = await fetchRecentRankedRecord(
       accountResult.account.puuid, riotApiKey, 'americas', normalized.queueType,
     )
@@ -847,6 +891,53 @@ export async function validateAndPriceIntent(
     }
   }
 
+  // ── Clash (C-06): o tier define o preco, entao nunca vem do cliente. O rank e verificado na Riot
+  // (maior elo entre solo/duo e flex; conta sem rank = tier mais baixo) e o tier enviado tem que bater.
+  if (normalized.serviceType === 'clash') {
+    if (!riotApiKey || !normalized.riotId) {
+      return { ok: false, response: errorResponse(req, 'Server misconfigured', 500) }
+    }
+    const accountResult = await fetchRiotAccount(normalized.riotId, riotApiKey, 'americas', { cacheTtlSeconds: RIOT_CACHE_ACCOUNT_SECONDS })
+    if (!accountResult.ok) {
+      if (accountResult.reason === 'not_found') return { ok: false, response: badRequest(req, 'Conta Riot não encontrada') }
+      if (accountResult.reason === 'rate_limited') {
+        return { ok: false, response: errorResponse(req, 'Consulta temporariamente limitada pela Riot. Tente novamente em instantes.', 503) }
+      }
+      console.error('Riot account lookup failed', accountResult.status)
+      return { ok: false, response: errorResponse(req, 'Falha ao consultar conta Riot', 502) }
+    }
+    const leagueResult = await fetchLeagueEntries(accountResult.account.puuid, riotApiKey, 'br1', { cacheTtlSeconds: RIOT_CACHE_LEAGUE_SECONDS })
+    if (!leagueResult.ok) {
+      if (leagueResult.reason === 'wrong_region') return { ok: false, response: badRequest(req, 'Conta não é do servidor BR') }
+      if (leagueResult.reason === 'rate_limited') {
+        return { ok: false, response: errorResponse(req, 'Consulta temporariamente limitada pela Riot. Tente novamente em instantes.', 503) }
+      }
+      console.error('Riot league lookup failed', leagueResult.status)
+      return { ok: false, response: errorResponse(req, 'Falha ao consultar elo na Riot', 502) }
+    }
+
+    const ranked = leagueResult.entries
+      .filter((e) => e.queueType === RIOT_QUEUE_TYPE.solo_duo.leagueQueue || e.queueType === RIOT_QUEUE_TYPE.flex.leagueQueue)
+      .map((e) => ({ tier: e.tier ? RIOT_TIER_MAP[e.tier] : undefined, rank: e.rank, lp: Math.max(0, Number(e.leaguePoints ?? 0)) }))
+      .filter((e): e is { tier: NonNullable<typeof e.tier>; rank: string | undefined; lp: number } => !!e.tier)
+      .sort((a, b) => RANK_TIER_ORDER.indexOf(b.tier) - RANK_TIER_ORDER.indexOf(a.tier))
+    const best = ranked[0]
+    // Sem rank na Riot: com rank_declared o cliente escolhe o tier (pedido marcado para o admin conferir); senao so o mais baixo.
+    const declaredClash = !best && normalized.rankDeclared && normalized.clashTier != null
+    const verifiedClashTier = best ? rankTierToClashTier(best.tier) : 'tier_4'
+    if (!declaredClash && normalized.clashTier !== verifiedClashTier) {
+      return { ok: false, response: badRequest(req, 'O tier do Clash não corresponde ao rank da conta. Atualize a consulta e escolha o tier correto.') }
+    }
+    if (declaredClash) normalized.rankSource = 'client_declared'
+    if (best) {
+      normalized.currentRank = { tier: best.tier, division: NO_DIVISION_TIERS.includes(best.tier) ? null : (best.rank ? RIOT_DIVISION_MAP[best.rank] ?? null : null) }
+      normalized.currentLp = Math.min(100, best.lp)
+    } else if (!declaredClash) {
+      normalized.currentRank = null
+      normalized.currentLp = 0
+    }
+  }
+
   const [{ data: service, error: serviceError }, { data: game, error: gameError }] = await Promise.all([
     serviceClient.from('services').select('id, game_id, type, is_active').eq('id', normalized.serviceId).maybeSingle(),
     serviceClient.from('games').select('id, is_active').eq('id', normalized.gameId).maybeSingle(),
@@ -878,7 +969,9 @@ export async function validateAndPriceIntent(
     if (!normalized.winsPurchased || normalized.winsPurchased < 1 || normalized.winsPurchased > 5) {
       return { ok: false, response: badRequest(req, 'MD5 aceita apenas 1 a 5 vitórias') }
     }
-    const accountResult = await fetchRiotAccount(normalized.riotId!, riotApiKey, 'americas')
+    // O rank da temporada passada nao existe na API da Riot: e sempre informado pelo cliente e conferido pelo admin.
+    normalized.rankSource = 'client_declared'
+    const accountResult = await fetchRiotAccount(normalized.riotId!, riotApiKey, 'americas', { cacheTtlSeconds: RIOT_CACHE_ACCOUNT_SECONDS })
     if (!accountResult.ok) {
       if (accountResult.reason === 'not_found') {
         return { ok: false, response: badRequest(req, 'Conta Riot não encontrada') }
@@ -889,8 +982,9 @@ export async function validateAndPriceIntent(
       console.error('Riot account lookup failed', accountResult.status)
       return { ok: false, response: errorResponse(req, 'Falha ao consultar conta Riot', 502) }
     }
-    const leagueResult = await fetchLeagueEntries(accountResult.account.puuid, riotApiKey, 'br1')
+    const leagueResult = await fetchLeagueEntries(accountResult.account.puuid, riotApiKey, 'br1', { cacheTtlSeconds: RIOT_CACHE_LEAGUE_SECONDS })
     if (!leagueResult.ok) {
+      if (leagueResult.reason === 'wrong_region') return { ok: false, response: badRequest(req, 'Conta não é do servidor BR') }
       if (leagueResult.reason === 'rate_limited') {
         return { ok: false, response: errorResponse(req, 'Consulta temporariamente limitada pela Riot. Tente novamente em instantes.', 503) }
       }
@@ -904,14 +998,20 @@ export async function validateAndPriceIntent(
       return { ok: false, response: badRequest(req, 'Esta conta já possui rank na fila selecionada nesta temporada — MD5 não está disponível.') }
     }
 
-    md5MatchesRemaining = 5
+    // Falha fechado: sem a marca de inicio da temporada ou sem resposta da Riot nao da para saber quantas
+    // partidas de MD5 restam, e assumir 5 permitiria varios pedidos MD5 para a mesma conta.
     const splitStart = Number(Deno.env.get('LOL_SPLIT_START_TIMESTAMP') ?? '0')
-    if (splitStart > 0) {
-      const matchResult = await fetchRankedMatchIdsThisSplit(
-        accountResult.account.puuid, riotApiKey, 'americas', normalized.queueType, splitStart,
-      )
-      if (matchResult.ok) md5MatchesRemaining = Math.max(0, 5 - matchResult.matchIds.length)
+    if (!(splitStart > 0)) {
+      console.error('LOL_SPLIT_START_TIMESTAMP ausente: MD5 indisponivel')
+      return { ok: false, response: errorResponse(req, 'MD5 temporariamente indisponível. Tente novamente em instantes.', 503) }
     }
+    const matchResult = await fetchRankedMatchIdsThisSplit(
+      accountResult.account.puuid, riotApiKey, 'americas', normalized.queueType, splitStart,
+    )
+    if (!matchResult.ok) {
+      return { ok: false, response: errorResponse(req, 'Não foi possível verificar suas partidas na Riot agora. Tente novamente em instantes.', 503) }
+    }
+    md5MatchesRemaining = Math.max(0, 5 - matchResult.matchIds.length)
     if (md5MatchesRemaining < 1) return { ok: false, response: badRequest(req, 'MD5 já foi concluída nesta fila') }
     if (normalized.winsPurchased > md5MatchesRemaining) {
       return { ok: false, response: badRequest(req, `MD5 possui no máximo ${md5MatchesRemaining} partida(s) restante(s) nesta fila`) }
@@ -946,6 +1046,9 @@ export async function validateAndPriceIntent(
       .maybeSingle()
     if (coachBoosterErr) return { ok: false, response: errorResponse(req, 'Failed to validate booster', 500) }
     if (!coachBoosterRow) return { ok: false, response: badRequest(req, 'Booster do pacote não está aprovado') }
+    if (coachBoosterRow.user_id === userId) {
+      return { ok: false, response: badRequest(req, 'Você não pode contratar o seu próprio pacote') }
+    }
 
     coachPackagePrice = Number(coachPackage.price)
     preferredBoosterId = coachBoosterRow.user_id

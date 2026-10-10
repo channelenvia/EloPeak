@@ -3,7 +3,7 @@ import { ActionBar } from '@/components/ui/ActionBar'
 import { ASSIGN_BOOSTER_STATUSES, REVIEWABLE_WITH_BOOSTER_STATUSES, STATUS_ACTION_TONE_CLASS, CONFIRM_STATUS_ACTION_COPY } from './adminOrderActions'
 import { useAdminFlagOrderUnderReview, useAdminOverrideOrderStatus } from '@/api/orders'
 import { Button, ErrorAlert, Modal, Popover } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import type { Order } from '@/types'
 import { ArrowLeftRight, CheckCircle2, ChevronDown, Eye, Undo2, Unlock, UserPlus, XCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -32,6 +32,11 @@ export function AdminStatusActionsMenu({ order }: { order: Order }) {
   const isPendingReview = order.status === 'pending_review'
   const isUnderReview = order.status === 'under_review'
   const isActiveWithBooster = REVIEWABLE_WITH_BOOSTER_STATUSES.includes(order.status)
+  // Espelha a matriz de admin_override_order_status: concluir só de awaiting_customer/disputed;
+  // cancelar só sem booster atribuído (com booster, o fluxo de cancelamento em andamento chega na W3).
+  const canMarkCompleted = order.status === 'awaiting_customer' || order.status === 'disputed'
+  const canCancel = !order.assigned_booster_id
+    && !['canceled', 'completed', 'refunded', 'pending_review', 'under_review', 'drop_requested'].includes(order.status)
   const reassignVisible = !isPendingReview && !isUnderReview && ASSIGN_BOOSTER_STATUSES.includes(order.status)
   const isNewAssignment = !order.assigned_booster_id
 
@@ -131,7 +136,7 @@ export function AdminStatusActionsMenu({ order }: { order: Order }) {
             Atribuir booster
           </button>
         )}
-        {!isPendingReview && !isUnderReview && order.status !== 'completed' && (
+        {canMarkCompleted && (
           <button
             type="button"
             disabled={updateStatus.isPending}
@@ -142,7 +147,7 @@ export function AdminStatusActionsMenu({ order }: { order: Order }) {
             Marcar como concluído
           </button>
         )}
-        {!isPendingReview && !isUnderReview && order.status !== 'canceled' && (
+        {canCancel && (
           <button
             type="button"
             disabled={updateStatus.isPending}

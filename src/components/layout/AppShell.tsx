@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { Avatar } from '@/components/ui'
 import { NotificationBell } from '@/components/NotificationBell'
 import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'

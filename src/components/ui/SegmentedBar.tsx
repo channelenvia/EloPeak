@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 export interface SegmentedBarProps {
   /** Quantos blocos a barra é dividida -- cada um fecha 100% antes do

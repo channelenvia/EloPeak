@@ -15,7 +15,7 @@ export const ASSIGN_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'a
 // Mesmo allowlist de admin_flag_order_under_review (migration 20260911020000)
 // -- inclui 'drop_requested' (drop pendente também pode ser travado em
 // análise), diferente de DROPPABLE_STATUSES que o exclui de propósito.
-export const REVIEWABLE_WITH_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'drop_requested']
+export const REVIEWABLE_WITH_BOOSTER_STATUSES: OrderStatus[] = [...DROPPABLE_STATUSES, 'drop_requested', 'awaiting_assignment']
 
 // Só 3 ações manuais: concluir/cancelar (admin_override_order_status, sem
 // efeito colateral) e reembolsar -- que é um link pro formulário de

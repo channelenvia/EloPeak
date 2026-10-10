@@ -7,7 +7,7 @@ import { CurrencyMaskedInput } from '@/components/ui'
 import { EMPTY_SERVICE_FORM, type ServiceFormData } from '@/features/booster/utils/boosterServiceForm'
 import { LANES, COACH_SPECIALTIES, TEMPO_OPTIONS } from '@/lib/lolTaxonomy'
 import { normalizeChampionName, resolveChampionName, useDdragonChampionIds, useDdragonVersion } from '@/lib/ddragon'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 const MAX_PRICE_CENTS = 10000 * 100
 

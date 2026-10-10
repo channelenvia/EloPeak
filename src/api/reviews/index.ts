@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { normalizeApiError } from '@/api/core/errors'
+import { assertRpcSuccess, normalizeApiError } from '@/api/core/errors'
 import { queryKeys } from '@/api/core/queryKeys'
 import { listBoosterNames } from '@/api/boosters'
 
@@ -132,6 +132,62 @@ export function useCreateReview(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: Omit<CreateReviewInput, 'orderId'>) => createReview({ orderId, ...input }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.reviews.own(orderId) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reviews.own(orderId) })
+      void queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.top() })
+    },
+  })
+}
+
+// ── Moderacao (admin) ─────────────────────────────────────────────────────────
+export interface AdminReview {
+  id: string
+  order_id: string
+  booster_id: string | null
+  rating: number
+  content: string | null
+  is_public: boolean
+  is_moderated: boolean
+  admin_note: string | null
+  created_at: string
+}
+
+const ADMIN_REVIEWS_KEY = ['admin', 'reviews'] as const
+
+export async function listAdminReviews(limit = 100): Promise<AdminReview[]> {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('id, order_id, booster_id, rating, content, is_public, is_moderated, admin_note, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw normalizeApiError(error)
+  return data ?? []
+}
+
+export function useAdminReviews() {
+  return useQuery({ queryKey: ADMIN_REVIEWS_KEY, queryFn: () => listAdminReviews() })
+}
+
+const MODERATE_REVIEW_MESSAGES: Record<string, string> = {
+  unauthorized: 'Você não tem permissão para moderar avaliações.',
+  review_not_found: 'Avaliação não encontrada.',
+  rate_limited: 'Muitas ações em pouco tempo. Aguarde um minuto.',
+}
+
+export function useModerateReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: { reviewId: string; isPublic: boolean; note?: string }) => {
+      const { data, error } = await supabase.rpc('admin_moderate_review', {
+        p_review_id: params.reviewId, p_is_public: params.isPublic, p_note: params.note,
+      })
+      if (error) throw normalizeApiError(error)
+      assertRpcSuccess(data as { success: boolean; error?: string }, MODERATE_REVIEW_MESSAGES)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ADMIN_REVIEWS_KEY })
+      void queryClient.invalidateQueries({ queryKey: ['reviews'] })
+    },
   })
 }

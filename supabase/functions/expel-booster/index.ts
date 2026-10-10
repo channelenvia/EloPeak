@@ -44,7 +44,7 @@ serve(async (req) => {
       p_reason: reason,
       p_actor_id: user.id,
     })
-    const result = rpcData as { success?: boolean; error?: string; user_id?: string } | null
+    const result = rpcData as { success?: boolean; error?: string; user_id?: string; balance?: number; pending_payout_requests?: number } | null
     if (rpcError || !result?.success) {
       return errorResponse(req, result?.error ?? 'Falha ao expulsar booster', 400)
     }
@@ -66,7 +66,7 @@ serve(async (req) => {
       )
     }
 
-    return jsonResponse(req, { success: true })
+    return jsonResponse(req, { success: true, balance: result.balance ?? 0, pending_payout_requests: result.pending_payout_requests ?? 0 })
   } catch (err) {
     console.error('expel-booster error', err instanceof Error ? err.name : 'unknown')
     if (err instanceof HttpError) return errorResponse(req, err.message, err.status)

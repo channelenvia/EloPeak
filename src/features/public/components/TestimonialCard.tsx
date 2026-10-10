@@ -1,6 +1,6 @@
 import { ShieldCheck, Quote } from 'lucide-react'
 import { StarRating, Avatar } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { riotProfileIconUrl } from '@/lib/riotAssets'
 import type { PublicReview } from '@/api/reviews'
 

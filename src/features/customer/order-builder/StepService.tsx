@@ -1,5 +1,5 @@
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import type { ServiceType } from '@/types'
 import { TrendingUp, Zap, Users, Swords, CheckCircle2, Check } from 'lucide-react'
 

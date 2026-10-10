@@ -10,7 +10,8 @@ interface SEOHeadProps {
 // Mesmo domínio placeholder usado em public/sitemap.xml e no fallback de
 // APP_URL das edge functions de Discord -- trocar pelo domínio real de
 // produção antes do deploy final.
-const SITE_URL = 'https://elo-peak.vercel.app'
+// Dominio real de producao via VITE_SITE_URL (ver .env.example); o fallback e so o dominio de preview.
+const SITE_URL = ((import.meta.env.VITE_SITE_URL as string | undefined) ?? 'https://elo-peak.vercel.app').replace(/\/$/, '')
 
 // Meta por rota para as páginas públicas (marketing + perfil de booster) --
 // o restante da app (autenticada) não precisa disso, nunca é indexado/

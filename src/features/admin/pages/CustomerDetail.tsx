@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useParams, Link } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
@@ -12,13 +13,14 @@ export function AdminCustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const currency = useCurrency()
 
-  const { data: customer, isLoading } = useAdminCustomerDetail(id)
+  const { data: customer, isLoading, isError, error, refetch } = useAdminCustomerDetail(id)
   const { data: orders, isLoading: loadingOrders } = useAdminCustomerOrders(customer?.user_id)
   const { data: reviews, isLoading: loadingReviews } = useAdminCustomerReviews(customer?.user_id)
   const ordersPage = usePagedList(orders ?? [], 20)
   const reviewsPage = usePagedList(reviews ?? [], 20)
 
   if (isLoading) return <Skeleton className="h-48 w-full" />
+  if (isError) return <QueryErrorNotice isError error={error} onRetry={refetch} />
   if (!customer) return <p className="text-ink-muted">Cliente não encontrado.</p>
 
   return (

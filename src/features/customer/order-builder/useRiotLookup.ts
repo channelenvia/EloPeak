@@ -32,7 +32,7 @@ export function useRiotLookup() {
     setService, setCurrentRank, setCurrentLp, setAvgLpGain, setAvgLpLoss,
     setCurrentPdl, setAvgPdlGain, setAvgPdlLoss,
     setIsMd5, setMd5MatchesRemainingFromApi, setMd5Blocked,
-    setRiotAutoFilled, setRiotVerified, clearRiotLookup, setRiotLookupLoading,
+    setRiotAutoFilled, setRiotVerified, clearRiotLookup, setRiotLookupLoading, setRankDeclared,
   } = useOrderBuilderStore()
 
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
@@ -41,12 +41,15 @@ export function useRiotLookup() {
   // Oferta de migração pra MD5 quando o eloboost dá unranked na fila — guarda
   // as partidas restantes detectadas pela Riot; null quando não há oferta.
   const [unrankedOffer, setUnrankedOffer] = useState<{ matchesRemaining: number } | null>(null)
+  // A Riot nao tem rank nesta conta/fila: o cliente pode informar o elo manualmente (pedido vai marcado para o admin conferir).
+  const [manualRankOffer, setManualRankOffer] = useState(false)
 
   function resetLookupMessages() {
     setRiotLookupMessage(null)
     setRiotLookupError(null)
     setMd5Message(null)
     setUnrankedOffer(null)
+    setManualRankOffer(false)
   }
 
   // Preâmbulo comum às duas consultas (valida o Riot ID, zera o resultado
@@ -89,14 +92,10 @@ export function useRiotLookup() {
       // da MESMA fila (mesmo endpoint já devolve md5_eligible/matches_remaining).
       // O form segue travado (riotVerified false) até o usuário decidir.
       const remaining = result.matches_remaining ?? 5
-      if (remaining < 1) {
-        // Unranked mas sem partidas de posicionamento restantes — o backend
-        // rejeitaria a MD5, então não oferecemos (evita um beco sem saída).
-        setRiotLookupError('Conta sem rank e sem partidas de posicionamento restantes nesta fila. Confira a fila selecionada.')
-        return
-      }
-      setUnrankedOffer({ matchesRemaining: remaining })
-      setRiotLookupMessage('Conta sem rank nesta fila.')
+      setManualRankOffer(true)
+      if (remaining >= 1) setUnrankedOffer({ matchesRemaining: remaining })
+      // Sem partidas de posicionamento restantes a MD5 nao existe, mas o cliente ainda pode informar o elo manualmente.
+      setRiotLookupMessage('A Riot não encontrou rank nesta fila.')
       return
     }
 
@@ -134,17 +133,35 @@ export function useRiotLookup() {
     )
   }
 
+  // O cliente escolheu informar o elo manualmente: libera o formulario com o seletor de rank destravado e
+  // marca o pedido como "elo declarado" (aviso especial para o admin).
+  function declareRankManually() {
+    setRankDeclared(true)
+    setRiotVerified(true)
+    setRiotAutoFilled(false)
+    setUnrankedOffer(null)
+    setManualRankOffer(false)
+    setRiotLookupMessage('Informe o seu elo abaixo. Nossa equipe vai conferir no seu Riot ID antes de iniciar o pedido.')
+  }
+
   async function lookupForWinBoost() {
     const result = await runLookup()
     if (!result) return
 
-    if (result.md5_eligible) {
+    if (result.md5_eligible && (result.matches_remaining ?? 5) < 1) {
+      // Sem rank na fila e sem partida de posicionamento restante: MD5 nao existe, entao o cliente informa o elo manualmente.
+      setIsMd5(false)
+      setMd5Blocked(false)
+      setManualRankOffer(true)
+      setRiotLookupMessage('A Riot não encontrou rank nesta fila.')
+    } else if (result.md5_eligible) {
       // Conta ainda não rankeada nesta fila — não há "rank atual" para
       // preencher (o usuário ainda precisa escolher manualmente o rank da
       // última temporada), então a grade de rank NÃO é travada aqui.
       const remaining = result.matches_remaining ?? 5
       setIsMd5(true)
       setMd5Blocked(false)
+      setRankDeclared(true) // rank da temporada passada nao existe na API: informado pelo cliente e conferido pelo admin
       // setMd5MatchesRemainingFromApi já clampa winsPurchased internamente
       // (Math.max(1, remaining)) -- um setWinsPurchased extra aqui lia
       // `winsPurchased` de uma closure obsoleta (valor de antes desta busca),
@@ -152,6 +169,10 @@ export function useRiotLookup() {
       setMd5MatchesRemainingFromApi(remaining)
       setRiotVerified(true)
       setMd5Message(`MD5 ativado — faltam ${remaining} partida(s) de posicionamento.`)
+    } else if (!result.tier) {
+      // Sem rank na Riot e sem posicionamento restante para MD5: o cliente informa o elo manualmente.
+      setManualRankOffer(true)
+      setRiotLookupMessage('A Riot não encontrou rank nesta fila.')
     } else {
       // Conta já rankeada nesta fila — preenchemos o rank atual e BLOQUEAMOS o
       // MD5 (anti-fraude): não dá pra comprar garantia de placement de uma
@@ -169,7 +190,7 @@ export function useRiotLookup() {
   }
 
   return {
-    riotLookupMessage, riotLookupError, md5Message, unrankedOffer,
-    resetLookupMessages, lookupRiotRank, lookupForWinBoost, migrateToMd5,
+    riotLookupMessage, riotLookupError, md5Message, unrankedOffer, manualRankOffer,
+    resetLookupMessages, lookupRiotRank, lookupForWinBoost, migrateToMd5, declareRankManually,
   }
 }

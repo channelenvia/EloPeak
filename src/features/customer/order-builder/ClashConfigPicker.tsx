@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Search } from 'lucide-react'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 import { RankBadge, ErrorAlert, InlineFieldSelect } from '@/components/ui'
 import { FormField } from '@/components/ui/FormField'
@@ -16,7 +16,9 @@ import {
 // nasceu ali primeiro. Reaproveitado aqui em vez de duplicar o fetch.
 import { lookupDuoAccountRiotRank } from '@/api/duoAccounts'
 import { RIOT_ID_FORMAT } from '@/lib/boostDomain'
-import type { ClashDay, BoostMode } from '@/types'
+import type { ClashDay, ClashTier, BoostMode } from '@/types'
+import { RANK_TIER_ORDER } from '@/lib/pricing'
+import { DeclaredRankNotice } from './ManualRankOfferCard'
 
 const CLASH_DAY_OPTIONS: readonly [ClashDay, ClashDay] = ['saturday', 'sunday']
 const CLASH_MODES: { mode: BoostMode; title: string; desc: string }[] = [
@@ -30,11 +32,13 @@ export function ClashConfigPicker() {
     setBasePrice, setEstimatedHours, setPdlModifierPct, stepAttempted,
     riotId, setRiotId, riotVerified, setRiotVerified, riotAutoFilled, setRiotAutoFilled,
     riotLookupLoading, setRiotLookupLoading, clearRiotLookup, setClashCurrentRank,
-    customerLanes, setCustomerLanes,
+    customerLanes, setCustomerLanes, rankDeclared, setRankDeclared,
   } = useOrderBuilderStore()
   const currency = useCurrency()
   const [riotLookupMessage, setRiotLookupMessage] = useState<string | null>(null)
   const [riotLookupError, setRiotLookupError] = useState<string | null>(null)
+  // A Riot nao achou rank em nenhuma fila: o cliente escolhe o tier manualmente (pedido marcado para o admin conferir).
+  const [manualTierOffer, setManualTierOffer] = useState(false)
   const detectedTierRanks = clashTier ? CLASH_TIER_BOUNDARY_RANKS[clashTier] : null
 
   useEffect(() => {
@@ -73,16 +77,24 @@ export function ClashConfigPicker() {
     }
     clearRiotLookup()
     setClashTier(null)
+    setManualTierOffer(false)
 
     setRiotLookupLoading(true)
     try {
-      const result = await lookupDuoAccountRiotRank(trimmed)
-      if (!result?.found) {
+      // O backend usa o MAIOR elo entre solo/duo e flex: consulta as duas filas para escolher o mesmo tier.
+      const [soloResult, flexResult] = await Promise.all([
+        lookupDuoAccountRiotRank(trimmed),
+        lookupDuoAccountRiotRank(trimmed, 'flex'),
+      ])
+      if (!soloResult?.found) {
         setRiotLookupError('Conta Riot não encontrada.')
         return
       }
-      if (!result.ranked || !result.tier) {
-        setRiotLookupError('Não foi possível detectar o tier: esta conta não tem rank na fila solo/duo.')
+      const rankedResults = [soloResult, flexResult].filter((r) => r?.ranked && r.tier)
+      const result = rankedResults.sort((a, b) => RANK_TIER_ORDER.indexOf(b.tier!) - RANK_TIER_ORDER.indexOf(a.tier!))[0]
+      if (!result?.tier) {
+        setManualTierOffer(true)
+        setRiotLookupMessage('A Riot não encontrou rank nesta conta.')
         return
       }
       setClashTier(rankTierToClashTier(result.tier))
@@ -149,6 +161,7 @@ export function ClashConfigPicker() {
               onChange={e => {
                 setRiotId(e.target.value)
                 setClashTier(null)
+                setManualTierOffer(false)
                 setRiotLookupMessage(null)
                 setRiotLookupError(null)
               }}
@@ -189,6 +202,38 @@ export function ClashConfigPicker() {
         {riotLookupError && <ErrorAlert message={riotLookupError} className="mt-2" />}
       </FormField>
 
+      {manualTierOffer && !riotVerified && (
+        <div className="rounded-2xl border-2 border-info/30 bg-info/5 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-bold text-ink">Não encontramos o seu elo automaticamente</p>
+            <p className="text-xs text-ink-secondary mt-0.5">
+              Escolha o tier correspondente ao seu elo. Nossa equipe confere no seu Riot ID antes de iniciar o pedido,
+              e informar um tier diferente do real pode levar ao cancelamento do pedido.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {(Object.keys(CLASH_TIER_LABEL) as ClashTier[]).map((tier) => (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => {
+                  setClashTier(tier)
+                  setRankDeclared(true)
+                  setRiotAutoFilled(true)
+                  setRiotVerified(true)
+                  setManualTierOffer(false)
+                  setRiotLookupMessage('Tier informado por você.')
+                }}
+                className="text-left p-3 rounded-xl border-2 border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised transition-all"
+              >
+                <p className="text-sm font-bold text-ink">{CLASH_TIER_LABEL[tier]}</p>
+                <p className="text-xs text-ink-secondary">{CLASH_TIER_RANGE_LABEL[tier]}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {riotVerified && riotAutoFilled && clashTier && detectedTierRanks && (
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Tier</p>
@@ -208,6 +253,7 @@ export function ClashConfigPicker() {
             </div>
             <Check className="absolute top-3 right-3 h-4 w-4 text-brand" />
           </div>
+          {rankDeclared && <div className="mt-2"><DeclaredRankNotice /></div>}
         </div>
       )}
 

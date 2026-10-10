@@ -6,7 +6,7 @@ import { getAuthUser } from '../_shared/authUser.ts'
 import { HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { fetchLeagueCutoff } from '../_shared/riotLookup.ts'
+import { enterRiotContext, fetchLeagueCutoff } from '../_shared/riotLookup.ts'
 
 const RIOT_API_KEY = Deno.env.get('RIOT_API_KEY') ?? ''
 const PLATFORM_ROUTE = 'br1'
@@ -32,6 +32,7 @@ serve(async (req) => {
 
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
+    enterRiotContext({ userId: auth.user.id, tier: 'interactive' })
 
     const rateLimit = await consumeUserRateLimit('riot-league-cutoffs', auth.user.id, 20, 60)
     if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { Popover } from './Popover'
 
 interface MultiSelectPopoverProps {

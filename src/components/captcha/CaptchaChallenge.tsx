@@ -1,88 +1,100 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
-import {
-  useDdragonVersion,
-  useDdragonChampionIds,
-  pickRandomChampion,
-  championIconUrl,
-  type DdragonChampion,
-} from '@/lib/ddragon'
+import { cn } from '@/lib/cn'
+import { issueAcceptChallenge, verifyAcceptChallenge, type AcceptChallenge } from '@/api/orders'
 
-// Barreira de atenção/UX antes do aceite (booster já é autenticado e
-// aprovado) -- sem chave de API própria, só o CDN público do Data Dragon
-// (mesmo usado em toda a parte de campeões do produto). O ícone vem
-// hachurado (SVG crosshatch + leve rotação/zoom) pra dificultar OCR/visão
-// computacional; a validação é case-insensitive (Locke/LoCke/LOCKE aceitos
-// igual) mas ainda exige apóstrofos/acentos corretos do catálogo pt_BR --
-// um booster que reconhece o campeão de vista sabe digitar certo, um bot que
-// só tenta ler a imagem raramente acerta a grafia exata de primeira.
+// Verificacao de seguranca do aceite (RN-12): o campeao e sorteado e validado NO SERVIDOR. O navegador so ve a
+// imagem mascarada (endpoint com id opaco) e envia o texto digitado; a resposta correta nunca chega aqui.
+// A comparacao ignora maiusculas, acentos e apostrofos (Kai'Sa == kaisa).
 interface CaptchaChallengeProps {
   open: boolean
+  orderId: string | null
   onOpenChange: (open: boolean) => void
-  onSuccess: () => void
+  onSuccess: (challengeId: string) => void
 }
 
-export function CaptchaChallenge({ open, onOpenChange, onSuccess }: CaptchaChallengeProps) {
+export function CaptchaChallenge({ open, orderId, onOpenChange, onSuccess }: CaptchaChallengeProps) {
   const [nonce, setNonce] = useState(0)
 
   useEffect(() => {
     if (open) setNonce((n) => n + 1)
   }, [open])
 
-  function handleSuccess() {
-    onOpenChange(false)
-    onSuccess()
-  }
-
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
       title="Verificação de segurança"
-      description="Digite o nome do campeão como aparece no jogo (apóstrofos, acentos etc. -- maiúsculas/minúsculas não importam) para confirmar o aceite."
+      description="Digite o nome do campeão da imagem (maiúsculas, acentos e apóstrofos não importam) para confirmar o aceite."
       maxWidth="sm"
     >
-      <ChampionCaptcha key={nonce} onSuccess={handleSuccess} />
+      {orderId && (
+        <ChampionCaptcha
+          key={`${orderId}-${nonce}`}
+          orderId={orderId}
+          onSuccess={(challengeId) => { onOpenChange(false); onSuccess(challengeId) }}
+        />
+      )}
     </Modal>
   )
 }
 
-function ChampionCaptcha({ onSuccess }: { onSuccess: () => void }) {
-  const version = useDdragonVersion()
-  const championIndex = useDdragonChampionIds(version)
-  const [target, setTarget] = useState<DdragonChampion | undefined>(undefined)
+function ChampionCaptcha({ orderId, onSuccess }: { orderId: string; onSuccess: (challengeId: string) => void }) {
+  const [challenge, setChallenge] = useState<AcceptChallenge | null>(null)
   const [value, setValue] = useState('')
-  const [error, setError] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  // Sorteia assim que o catálogo carrega; não depende de `target` no array
-  // de deps de propósito -- só queremos rodar isso uma vez por abertura do
-  // desafio (a troca de campeão em caso de erro é feita por reroll(), não
-  // por este efeito reagindo à mudança de target).
-  useEffect(() => {
-    if (championIndex && !target) setTarget(pickRandomChampion(championIndex))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [championIndex])
-
-  function reroll() {
-    setTarget(pickRandomChampion(championIndex))
+  const load = useCallback(async () => {
+    setChallenge(null)
     setValue('')
-  }
+    setLoadError(null)
+    try {
+      setChallenge(await issueAcceptChallenge(orderId))
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Não foi possível carregar o desafio.')
+    }
+  }, [orderId])
 
-  function submit() {
-    if (!target || !value.trim()) return
-    if (value.trim().toLowerCase() === target.name.toLowerCase()) {
-      onSuccess()
-    } else {
-      setError(true)
-      reroll()
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function submit() {
+    if (!challenge || !value.trim() || busy) return
+    setBusy(true)
+    try {
+      const result = await verifyAcceptChallenge(challenge.challenge_id, value)
+      if (result.success) {
+        onSuccess(challenge.challenge_id)
+        return
+      }
+      if (result.error === 'wrong_answer' && (result.attempts_left ?? 0) > 0) {
+        setMessage(`Nome incorreto. Você ainda tem ${result.attempts_left} tentativa(s) nesta imagem.`)
+        setValue('')
+      } else {
+        setMessage('Nome incorreto. Aqui vai uma nova imagem.')
+        await load()
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Não foi possível verificar agora.')
+    } finally {
+      setBusy(false)
     }
   }
 
-  const iconUrl = target ? championIconUrl(target.id, version, championIndex) : null
+  if (loadError) {
+    return (
+      <div className="py-6 text-center space-y-3">
+        <p className="text-sm text-danger">{loadError}</p>
+        <Button variant="secondary" onClick={() => void load()}>Tentar de novo</Button>
+      </div>
+    )
+  }
 
-  if (!iconUrl) {
+  if (!challenge) {
     return (
       <div className="py-10 flex items-center justify-center">
         <span className="text-sm text-ink-secondary">Carregando desafio…</span>
@@ -92,13 +104,15 @@ function ChampionCaptcha({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="space-y-3">
-      <HatchedChampionIcon key={iconUrl} src={iconUrl} />
+      <div className="w-40 h-40 mx-auto rounded-xl overflow-hidden border border-border-subtle bg-bg-raised select-none">
+        <img src={challenge.image_url} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+      </div>
       <input
         value={value}
-        onChange={(e) => { setValue(e.target.value); setError(false) }}
-        onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+        onChange={(e) => { setValue(e.target.value); setMessage(null) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
         placeholder="Nome do campeão"
-        className={cn('input-base w-full text-center font-semibold', error && 'border-danger')}
+        className={cn('input-base w-full text-center font-semibold', message && 'border-danger')}
         maxLength={40}
         autoComplete="off"
         autoCapitalize="off"
@@ -106,45 +120,8 @@ function ChampionCaptcha({ onSuccess }: { onSuccess: () => void }) {
         spellCheck={false}
         autoFocus
       />
-      {error && <p className="text-xs text-danger text-center">Nome incorreto, tente novamente com outro campeão.</p>}
-      <Button className="w-full" onClick={submit} disabled={!value.trim()}>Confirmar</Button>
-    </div>
-  )
-}
-
-function HatchedChampionIcon({ src }: { src: string }) {
-  const patternId = useId()
-  // O pai remonta este componente a cada troca de campeão (key={iconUrl}),
-  // então deps vazias bastam -- rotação/zoom levemente diferentes a cada
-  // tentativa, pra não virar um recorte sempre idêntico.
-  const rotate = useMemo(() => Math.random() * 10 - 5, [])
-  const scale = useMemo(() => 1.15 + Math.random() * 0.15, [])
-
-  return (
-    <div className="relative w-28 h-28 mx-auto rounded-xl overflow-hidden border border-border-subtle bg-bg-raised select-none">
-      <img
-        src={src}
-        alt=""
-        draggable={false}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-        style={{ transform: `rotate(${rotate}deg) scale(${scale})`, filter: 'contrast(1.15) saturate(1.3)' }}
-      />
-      <svg className="absolute inset-0 w-full h-full pointer-events-none text-ink" aria-hidden="true">
-        <defs>
-          <pattern id={`${patternId}-a`} width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="3.5" />
-          </pattern>
-          <pattern id={`${patternId}-b`} width="6" height="6" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="3.5" />
-          </pattern>
-          <pattern id={`${patternId}-c`} width="5" height="5" patternTransform="rotate(90)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="5" stroke="currentColor" strokeWidth="1.5" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill={`url(#${patternId}-a)`} opacity={0.5} />
-        <rect width="100%" height="100%" fill={`url(#${patternId}-b)`} opacity={0.5} />
-        <rect width="100%" height="100%" fill={`url(#${patternId}-c)`} opacity={0.25} />
-      </svg>
+      {message && <p className="text-xs text-danger text-center">{message}</p>}
+      <Button className="w-full" onClick={() => void submit()} disabled={!value.trim() || busy} loading={busy}>Confirmar</Button>
     </div>
   )
 }

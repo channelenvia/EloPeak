@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { Link } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -40,7 +41,7 @@ export function AdminPaymentsPage() {
   const currency = useCurrency()
 
   const [search, setSearch] = useState('')
-  const { data: paymentSummary, isLoading } = useAdminPayments()
+  const { data: paymentSummary, isLoading, isError, error, refetch } = useAdminPayments()
   const payments = paymentSummary?.payments
   const filtered = (payments ?? []).filter((p) => {
     if (!search.trim()) return true
@@ -79,6 +80,7 @@ export function AdminPaymentsPage() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
+      <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid cols={4}>
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}

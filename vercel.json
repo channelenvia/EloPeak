@@ -3,14 +3,55 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https:; script-src 'self' https://sdk.mercadopago.com https://http2.mlstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://http2.mlstatic.com; font-src 'self' https://fonts.gstatic.com https://http2.mlstatic.com; img-src 'self' data: https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://http2.mlstatic.com https://*.mercadopago.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://*.mercadopago.com https://api.mercadolibre.com https://http2.mlstatic.com; frame-src https:; upgrade-insecure-requests" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://*.mercadopago.com https://*.mercadolibre.com; script-src 'self' https://sdk.mercadopago.com https://http2.mlstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://http2.mlstatic.com; font-src 'self' https://fonts.gstatic.com https://http2.mlstatic.com; img-src 'self' data: https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://http2.mlstatic.com https://*.mercadopago.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://*.mercadopago.com https://api.mercadolibre.com https://http2.mlstatic.com; frame-src https://*.mercadopago.com https://*.mercadolibre.com https://*.mlstatic.com; upgrade-insecure-requests"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/images/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
       ]
     }
   ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

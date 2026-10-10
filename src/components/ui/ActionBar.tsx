@@ -1,5 +1,5 @@
 import { Children } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Rodapé de ações padrão (modais, formulários, passos): cancelar/voltar/
 // reiniciar à ESQUERDA (variant secondary), confirmar/avançar/concluir à DIREITA

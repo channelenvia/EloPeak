@@ -121,21 +121,15 @@ export function LoginPage() {
     setAccepting(true)
     setError(null)
 
-    const acceptedAt = new Date().toISOString()
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        terms_accepted_at: acceptedAt,
-        privacy_accepted_at: acceptedAt,
-        legal_version: LEGAL_VERSION,
-      })
-      .eq('id', profile.id)
+    const { data, error: rpcError } = await supabase.rpc('accept_legal', { p_version: LEGAL_VERSION })
+    const result = data as { success?: boolean; accepted_at?: string } | null
 
-    if (updateError) {
+    if (rpcError || !result?.success || !result.accepted_at) {
       setError('Não foi possível registrar o aceite. Tente novamente.')
       setAccepting(false)
       return
     }
+    const acceptedAt = result.accepted_at
 
     useAuthStore.getState().setProfile({
       ...profile,

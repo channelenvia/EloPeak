@@ -1,5 +1,5 @@
 import { rankStep } from '@/lib/pricing'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import type { Division, RankTier } from '@/types'
 import { RankBadge } from '@/components/ui/RankBadge'
 import { SegmentedBar } from '@/components/ui/SegmentedBar'

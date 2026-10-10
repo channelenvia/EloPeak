@@ -1,3 +1,6 @@
+import { boosterProfilePath } from '@/lib/boosterPath'
+import { OrderCompletionNotice } from '../components/OrderCompletionNotice'
+import { CancellationInfo } from '../components/CancellationInfo'
 import { useAssignedBooster } from '@/api/boosters'
 import { isCardPaymentInAnalysis, isPaymentConfirmed } from '@/lib/orderPayment'
 import { ActionBar } from '@/components/ui/ActionBar'
@@ -76,7 +79,7 @@ function AssignedBoosterValue({ order }: { order: Order }) {
   if (!booster) return <span>Não associado</span>
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Link to={`/boosters/${encodeURIComponent(booster.display_name)}`} className="text-brand hover:underline">
+      <Link to={boosterProfilePath(booster)} className="text-brand hover:underline">
         {booster.display_name}
       </Link>
       {!order.assigned_booster_id && (
@@ -386,8 +389,9 @@ export function OrderDetailPage() {
   }, [order, customerState?.requires_credentials])
 
   useEffect(() => {
-    if (order?.status === 'canceled') navigate('/orders/new?new=1', { replace: true })
-  }, [order?.status, navigate])
+    // Pedido cancelado e NAO pago volta ao configurador; cancelado depois de pago continua visivel (reembolso).
+    if (order?.status === 'canceled' && order.payment_status !== 'paid') navigate('/orders/new?new=1', { replace: true })
+  }, [order?.status, order?.payment_status, navigate])
 
   // O badge de status é o ponto de entrada das ações do pedido (pagar,
   // enviar credenciais, avaliar) -- os modais abrem por aqui.
@@ -449,6 +453,7 @@ export function OrderDetailPage() {
   // preciso que a lista antiga (que incluía awaiting_customer mesmo antes de
   // ter booster, quando "trocar de booster" não faz sentido nenhum ainda).
   const dropVisible = getOrderStatusGroup(order) === 'in_progress'
+  // 3o drop e so do admin: com o limite atingido o cliente fala com a equipe pelo chat do pedido.
   const dropLimitReached = order.drop_count >= MAX_CUSTOMER_DROPS
   const canConfirm = !!customerState?.can_confirm_completion
 
@@ -502,7 +507,7 @@ export function OrderDetailPage() {
         )}
         onDrop={dropVisible ? () => setDropModalOpen(true) : undefined}
         dropDisabled={dropLimitReached}
-        dropTooltip="Limite de drops atingido."
+        dropTooltip="Limite de trocas atingido. Fale com a equipe pelo chat do pedido."
         primary={canConfirm ? (
           <>
             <Button variant="success" size="sm" leftIcon={<CheckCircle2 className="h-4 w-4" />} loading={confirmCompletion.isPending} onClick={() => confirmCompletion.mutate()}>
@@ -511,6 +516,9 @@ export function OrderDetailPage() {
           </>
         ) : undefined}
       />
+
+      {canConfirm && <OrderCompletionNotice orderId={order.id} history={history} isCoaching={order.service_type === 'coaching'} />}
+      <CancellationInfo order={order} />
 
       {confirmCompletion.isError && <ErrorAlert message={confirmCompletion.error instanceof Error ? confirmCompletion.error.message : 'Erro ao confirmar'} />}
 

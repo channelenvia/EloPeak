@@ -2,87 +2,68 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CaptchaChallenge } from './CaptchaChallenge'
 
-// Catálogo com um único campeão (com apóstrofo, o caso mais sensível pra
-// validação exata) -- deixa o sorteio determinístico sem precisar mockar
-// pickRandomChampion, exercitando a integração real com ddragon.ts.
-const FAKE_VERSION = '16.1.1'
-const FAKE_CATALOG = { data: { Kaisa: { id: 'Kaisa', name: "Kai'Sa" } } }
+const issueAcceptChallenge = vi.fn()
+const verifyAcceptChallenge = vi.fn()
+vi.mock('@/api/orders', () => ({
+  issueAcceptChallenge: (...args: unknown[]) => issueAcceptChallenge(...args),
+  verifyAcceptChallenge: (...args: unknown[]) => verifyAcceptChallenge(...args),
+}))
 
-function mockDdragonFetch() {
-  global.fetch = vi.fn((url: string | URL | Request) => {
-    const href = String(url)
-    if (href.includes('versions.json')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve([FAKE_VERSION]) } as Response)
-    }
-    if (href.includes('champion.json')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(FAKE_CATALOG) } as Response)
-    }
-    return Promise.reject(new Error(`unexpected fetch: ${href}`))
-  }) as unknown as typeof fetch
-}
+const CHALLENGE = { challenge_id: 'c-1', image_url: 'https://x.supabase.co/functions/v1/accept-challenge-image?id=c-1', expires_in: 180 }
 
 function renderCaptcha(onSuccess = vi.fn()) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const utils = render(
-    <QueryClientProvider client={queryClient}>
-      <CaptchaChallenge open onOpenChange={() => {}} onSuccess={onSuccess} />
-    </QueryClientProvider>,
-  )
-  return { ...utils, onSuccess }
+  render(<CaptchaChallenge open orderId="order-1" onOpenChange={() => {}} onSuccess={onSuccess} />)
+  return { onSuccess }
 }
 
-describe('CaptchaChallenge — desafio de campeão hachurado', () => {
+describe('CaptchaChallenge — desafio validado no servidor', () => {
   beforeEach(() => {
-    mockDdragonFetch()
+    issueAcceptChallenge.mockReset().mockResolvedValue(CHALLENGE)
+    verifyAcceptChallenge.mockReset()
   })
 
-  it('carrega o ícone do campeão sorteado do Data Dragon', async () => {
+  it('pede o desafio do pedido ao servidor e mostra a imagem mascarada (sem nome de campeão na URL)', async () => {
     renderCaptcha()
-
-    // Modal renderiza via portal (fora do `container` do render()) -- busca
-    // no document inteiro, igual screen.find* já faz pros outros testes.
-    await waitFor(() => {
-      const img = document.querySelector('img')
-      expect(img?.getAttribute('src')).toBe(
-        `https://ddragon.leagueoflegends.com/cdn/${FAKE_VERSION}/img/champion/Kaisa.png`,
-      )
-    })
+    await waitFor(() => expect(document.querySelector('img')?.getAttribute('src')).toBe(CHALLENGE.image_url))
+    expect(issueAcceptChallenge).toHaveBeenCalledWith('order-1')
+    expect(CHALLENGE.image_url).not.toMatch(/kaisa|champion\/[A-Za-z]+\.png/i)
   })
 
-  it('rejeita o nome sem a grafia exata (minúsculo, sem apóstrofo) e não chama onSuccess', async () => {
+  it('resposta certa (decidida pelo servidor) chama onSuccess com o id do desafio', async () => {
+    verifyAcceptChallenge.mockResolvedValue({ success: true })
     const user = userEvent.setup()
     const { onSuccess } = renderCaptcha()
-
-    const input = await screen.findByPlaceholderText('Nome do campeão')
-    await user.type(input, 'kaisa')
+    await user.type(await screen.findByPlaceholderText('Nome do campeão'), "Kai'Sa")
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('c-1'))
+    expect(verifyAcceptChallenge).toHaveBeenCalledWith('c-1', "Kai'Sa")
+  })
 
-    expect(await screen.findByText('Nome incorreto, tente novamente com outro campeão.')).toBeInTheDocument()
+  it('resposta errada mostra as tentativas restantes e não chama onSuccess', async () => {
+    verifyAcceptChallenge.mockResolvedValue({ success: false, error: 'wrong_answer', attempts_left: 2 })
+    const user = userEvent.setup()
+    const { onSuccess } = renderCaptcha()
+    await user.type(await screen.findByPlaceholderText('Nome do campeão'), 'ahri')
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(await screen.findByText(/ainda tem 2 tentativa/)).toBeInTheDocument()
     expect(onSuccess).not.toHaveBeenCalled()
   })
 
-  it('aceita o nome exatamente como o catálogo retorna (maiúsculas e apóstrofo corretos)', async () => {
+  it('sem tentativas restantes pede uma imagem nova', async () => {
+    verifyAcceptChallenge.mockResolvedValue({ success: false, error: 'wrong_answer', attempts_left: 0 })
     const user = userEvent.setup()
-    const { onSuccess } = renderCaptcha()
-
-    const input = await screen.findByPlaceholderText('Nome do campeão')
-    await user.type(input, "Kai'Sa")
+    renderCaptcha()
+    await user.type(await screen.findByPlaceholderText('Nome do campeão'), 'ahri')
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(issueAcceptChallenge).toHaveBeenCalledTimes(2))
   })
 
-  it('aceita o nome com qualquer capitalização, desde que o apóstrofo esteja certo (case-insensitive)', async () => {
-    const user = userEvent.setup()
-    const { onSuccess } = renderCaptcha()
-
-    const input = await screen.findByPlaceholderText('Nome do campeão')
-    await user.type(input, "KAI'SA")
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
+  it('falha ao carregar o desafio mostra erro e permite tentar de novo', async () => {
+    issueAcceptChallenge.mockRejectedValueOnce(new Error('order_unavailable'))
+    renderCaptcha()
+    expect(await screen.findByText('order_unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
   })
 })

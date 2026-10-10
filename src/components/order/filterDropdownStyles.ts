@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Estilo compartilhado pelos 3 triggers de filtro em dropdown (status,
 // categoria de serviço, subfiltros de tipo) -- fonte única pra garantir que

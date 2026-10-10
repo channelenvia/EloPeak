@@ -1,5 +1,6 @@
+import { useSharedNow } from '@/hooks/useSharedNow'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { Hint } from './Hint'
 import { describeOrderStatus, type OrderViewerRole } from '@/lib/orderStatusInfo'
 import type { Order, BoosterStatus } from '@/types'
@@ -72,6 +73,7 @@ interface OrderStatusBadgeProps {
 
 export function OrderStatusBadge({ order, viewerRole, description, onAction, actionLabel, align, paymentInAnalysis }: OrderStatusBadgeProps) {
   const group = getOrderStatusGroup(order)
+  useSharedNow() // re-renderiza quando o prazo estoura, sem depender de outro render
   const overdue = group === 'in_progress' && isOrderOverdue({
     match_sync_started_at: order.match_sync_started_at ?? null,
     estimated_hours: order.estimated_hours ?? null,

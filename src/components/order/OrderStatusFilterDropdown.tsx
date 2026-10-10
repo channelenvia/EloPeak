@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Popover } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { FILTER_CHEVRON_CLASS, filterOptionRowClass, filterTriggerClass } from './filterDropdownStyles'
 import { ORDER_LIST_TABS, type OrderListTab, type OrderListTabCounts } from '@/api/orders'
 

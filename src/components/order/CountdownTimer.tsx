@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useSharedNow } from '@/hooks/useSharedNow'
 import { Clock } from 'lucide-react'
 
 interface CountdownTimerProps {
@@ -10,17 +10,8 @@ interface CountdownTimerProps {
   estimatedHours: number | null
 }
 
-function useNow(intervalMs: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs)
-    return () => window.clearInterval(id)
-  }, [intervalMs])
-  return now
-}
-
 export function CountdownTimer({ startedAt, estimatedHours }: CountdownTimerProps) {
-  const now = useNow(30_000)
+  const now = useSharedNow()
   if (!startedAt || estimatedHours == null) return null
 
   const deadline = new Date(startedAt).getTime() + estimatedHours * 60 * 60 * 1000

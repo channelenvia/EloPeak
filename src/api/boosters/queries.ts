@@ -1,3 +1,4 @@
+import { escapeLikePattern, isBoosterProfileId } from '@/lib/boosterPath'
 import { supabase } from '@/lib/supabase'
 import { normalizeApiError } from '@/api/core/errors'
 import type { BoosterAdminNote, BoosterProfile } from '@/types'
@@ -61,8 +62,11 @@ export async function listPublicBoosters(): Promise<BoosterProfile[]> {
   return (data ?? []) as unknown as BoosterProfile[]
 }
 
-export async function getPublicBooster(displayName: string): Promise<BoosterProfile | null> {
-  const { data, error } = await supabase.from('public_booster_profiles').select('*').eq('display_name', displayName).maybeSingle()
+// `ref` e o display_name (URL publica); um uuid ainda resolve por id, so por compatibilidade.
+export async function getPublicBooster(ref: string): Promise<BoosterProfile | null> {
+  const query = supabase.from('public_booster_profiles').select('*')
+  // Nome de exibicao e unico sem diferenciar maiusculas: /boosters/neo e /boosters/Neo abrem o mesmo perfil.
+  const { data, error } = await (isBoosterProfileId(ref) ? query.eq('id', ref) : query.ilike('display_name', escapeLikePattern(ref))).maybeSingle()
   if (error) throw normalizeApiError(error)
   return data as unknown as BoosterProfile | null
 }

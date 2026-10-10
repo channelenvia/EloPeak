@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { ORDER_SAFE_COLUMNS } from '@/lib/orderColumns'
 import { normalizeApiError } from '@/api/core/errors'
-import type { OrderStatus, ServiceType } from '@/types'
+import type { OrderRankAssessment, OrderStatus, ServiceType } from '@/types'
 import type {
   BoosterDuoMatch, BoosterOrdersPage, CustomerOrderState, DuoAccountHistoryEntry, Order, OrderCoachingTopic, OrderDropRequest, OrderMatch,
   OrderListTab, OrderListTabCounts, OrderRankVerification, OrderStatusHistory, SlotInfo,
@@ -313,4 +313,32 @@ export async function getBoosterSlotInfo(boosterId: string): Promise<SlotInfo & 
   })
   if (error) throw normalizeApiError(error)
   return data as unknown as SlotInfo & { allowed: boolean }
+}
+
+// Mesmos numeros (progresso, credito do booster, reembolso) para admin, cliente e booster.
+export interface OrderSettlementPreview {
+  paid: number
+  already_refunded: number
+  remaining: number
+  progress_pct: number
+  gross_consumed: number
+  booster_credit: number
+  booster_share_pct: number
+  refund_amount: number
+  platform_retained: number
+  status: string
+}
+
+export async function getOrderSettlementPreview(orderId: string, coachingPct?: number): Promise<OrderSettlementPreview | null> {
+  const { data, error } = await supabase.rpc('order_settlement_preview', { p_order_id: orderId, p_coaching_pct: coachingPct })
+  if (error) throw normalizeApiError(error)
+  const result = data as unknown as ({ success: boolean } & OrderSettlementPreview)
+  return result?.success ? result : null
+}
+
+// Avaliacao do sistema sobre um elo declarado pelo cliente (so o admin enxerga: RLS).
+export async function getOrderRankAssessment(orderId: string): Promise<OrderRankAssessment | null> {
+  const { data, error } = await supabase.from('order_rank_assessments').select('*').eq('order_id', orderId).maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return (data ?? null) as unknown as OrderRankAssessment | null
 }

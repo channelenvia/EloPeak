@@ -5,6 +5,7 @@ import { handleCors } from '../_shared/cors.ts'
 import { errorResponse, jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { getAuthUser } from '../_shared/authUser.ts'
+import { enterRiotContext } from '../_shared/riotLookup.ts'
 import { HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import {
@@ -64,7 +65,7 @@ async function logAttempt(
     errorReason?: string
   },
 ) {
-  await serviceClient.from('order_rank_verifications').insert({
+  const { error } = await serviceClient.from('order_rank_verifications').insert({
     order_id: params.orderId,
     requested_by: params.requestedBy,
     riot_id_checked: params.riotId,
@@ -76,6 +77,8 @@ async function logAttempt(
     passed: params.passed,
     error_reason: params.errorReason ?? null,
   })
+  // Esse historico alimenta o progresso do pedido (drop/cancelamento): falha de gravacao nao pode passar em silencio.
+  if (error) console.error('verify-order-rank: falha ao registrar a verificacao', error.code ?? error.message)
 }
 
 serve(async (req) => {
@@ -88,6 +91,7 @@ serve(async (req) => {
 
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
+    enterRiotContext({ userId: auth.user.id, tier: 'priority' })
     const { user, client: userClient } = auth
 
     const rateLimit = await consumeUserRateLimit('verify-order-rank', user.id, 10, 300)
@@ -201,7 +205,12 @@ serve(async (req) => {
     const result = completed as { success?: boolean; error?: string } | null
     if (completeErr || !result?.success) {
       console.error('complete_verified_order failed', result?.error ?? completeErr?.message)
-      return errorResponse(req, result?.error ?? 'Falha ao concluir pedido', 500)
+      // Corrida (duas verificacoes ao mesmo tempo) ou pedido que mudou: o segundo chamador ve um estado, nao o texto cru do banco.
+      const stateErrors = new Set(['order_not_found', 'invalid_status', 'order_not_active', 'already_completed', 'rank_not_reached'])
+      if (result?.error && stateErrors.has(result.error)) {
+        return errorResponse(req, 'O pedido mudou de estado. Atualize a página.', 409, result.error)
+      }
+      return errorResponse(req, 'Falha ao concluir pedido', 500)
     }
 
     return jsonResponse(req, {

@@ -11,6 +11,7 @@ import { OrderInfoGrid, type OrderInfoGridItem } from './OrderInfoGrid'
 import { OrderMatchHistory } from './OrderMatchHistory'
 import { OrderProgress } from './OrderProgress'
 import { OrderRankSummary } from './OrderRankSummary'
+import { DeclaredRankBanner } from './DeclaredRankBanner'
 import { OrderTimeline } from './OrderTimeline'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { getOrderMatchSyncGate } from '@/lib/utils'
@@ -104,6 +105,7 @@ export function OrderDetailShell({
             />
           )}
 
+          <DeclaredRankBanner order={order} viewer={viewerRole} />
           <OrderRankSummary order={order} />
           {showProgress && <OrderProgress order={order} hideRankBadges />}
 

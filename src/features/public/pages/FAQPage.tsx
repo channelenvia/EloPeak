@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { SEOHead } from '@/components/SEOHead'
 import { ScrollReveal } from '@/components/motion/ScrollReveal'
 import { DISCORD_SUPPORT_URL } from '@/lib/discordSupport'

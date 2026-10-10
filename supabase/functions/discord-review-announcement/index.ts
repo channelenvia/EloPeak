@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { z } from 'https://esm.sh/zod@3.23.8'
 import { jsonResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { fetchWithTimeout } from '../_shared/http.ts'
+import { fetchDiscordWithRetry } from '../_shared/discordFetch.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { coreServiceFields, rankIconTier, cardThumbnailUrl, eloPeakFooter, escapeDiscordMarkdown } from '../_shared/discordRankFormat.ts'
 import { DISCORD_API, BOT_TOKEN, APP_URL } from '../_shared/discordJobAnnounce.ts'
@@ -110,7 +110,7 @@ serve(async (req) => {
     const coreFields = order ? coreServiceFields(order) : [{ name: '🛠️ Serviço', value: '—', inline: true }]
     const thumbnailUrl = cardThumbnailUrl(APP_URL, order ? rankIconTier(order) : null)
 
-    const discordRes = await fetchWithTimeout(`${DISCORD_API}/channels/${CHANNEL_REVIEWS}/messages`, {
+    const discordRes = await fetchDiscordWithRetry(`${DISCORD_API}/channels/${CHANNEL_REVIEWS}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -129,7 +129,7 @@ serve(async (req) => {
           thumbnail: { url: thumbnailUrl },
           footer: eloPeakFooter(APP_URL),
         }],
-        allowed_mentions: { parse: ['users'] },
+        allowed_mentions: { parse: [] }, // M-30: nenhum ping vindo de texto de usuario (as mencoes nos embeds nao notificam mesmo)
       }),
     })
 

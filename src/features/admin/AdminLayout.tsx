@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ShoppingBag, Users, DollarSign, Shield,
-  RefreshCw, AlertTriangle, Landmark, Banknote, History,
+  RefreshCw, AlertTriangle, Landmark, Banknote, History, Star,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import type { SidebarNavSection } from '@/components/layout/AppSidebar'
@@ -16,6 +16,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
       { href: '/admin/customers',    icon: Users,           label: 'Clientes'    },
       { href: '/admin/drops',        icon: AlertTriangle,   label: 'Drops'       },
       { href: '/admin/duo-accounts', icon: Landmark,        label: 'Contas Duo'  },
+      { href: '/admin/reviews',      icon: Star,            label: 'Avaliações'  },
       { href: '/admin/audit',        icon: History,         label: 'Auditoria'   },
     ],
   },

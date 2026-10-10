@@ -1,3 +1,4 @@
+import { isValidCpf } from '@/lib/cpf'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -7,7 +8,7 @@ import { Avatar } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import { signOut } from '@/lib/supabase'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { AvatarIconPicker } from '@/components/profile/AvatarIconPicker'
 import { DiscordAccountNotice } from '@/components/DiscordAccountNotice'
 import type { UserRole } from '@/types'
@@ -120,7 +121,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
   async function handleSaveFullName() {
     if (!profile) return
     setFullNameSaving(true)
-    await boosterMutations.updateFullName.mutateAsync({ userId: profile.id, fullName: fullName.trim() || null })
+    await boosterMutations.updateFullName.mutateAsync({ fullName: fullName.trim() || null })
     setFullNameSaving(false)
     setFullNameSaved(true)
     setTimeout(() => setFullNameSaved(false), 3000)
@@ -129,11 +130,11 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
   async function handleSaveCpf() {
     if (!profile) return
     const digits = cpf.replace(/\D/g, '')
-    if (digits.length !== 11) { setCpfError('CPF inválido'); return }
+    if (!isValidCpf(digits)) { setCpfError('CPF inválido'); return }
     setCpfSaving(true)
     setCpfError(null)
     try {
-      await boosterMutations.updateCpf.mutateAsync({ userId: profile.id, cpf: digits })
+      await boosterMutations.updateCpf.mutateAsync({ cpf: digits })
       setCpfSaved(true)
       setTimeout(() => setCpfSaved(false), 3000)
     } catch {
@@ -168,7 +169,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
         <Dialog.Content
           asChild
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="fixed right-0 top-0 h-full w-96 bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl focus:outline-hidden"
+          className="fixed right-0 top-0 h-full w-96 max-w-full bg-bg-surface/90 backdrop-blur-xl border-l border-border-subtle z-50 flex flex-col shadow-2xl focus:outline-hidden"
         >
           <aside>
             {/* Header */}

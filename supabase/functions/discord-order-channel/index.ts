@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { z } from 'https://esm.sh/zod@3.23.8'
 import { jsonResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { fetchWithTimeout } from '../_shared/http.ts'
+import { fetchDiscordWithRetry } from '../_shared/discordFetch.ts'
 import { verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { eloPeakFooter } from '../_shared/discordRankFormat.ts'
 import {
@@ -82,7 +82,7 @@ async function createDiscordChannel(name: string, type: number, overwrites: obje
   if (parentId) body.parent_id = parentId
   if (topic) body.topic = topic
 
-  const res = await fetchWithTimeout(`${DISCORD_API}/guilds/${GUILD_ID}/channels`, {
+  const res = await fetchDiscordWithRetry(`${DISCORD_API}/guilds/${GUILD_ID}/channels`, {
     method: 'POST',
     headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -120,7 +120,7 @@ async function createOrderVoiceChannel(
 }
 
 async function deleteDiscordChannel(channelId: string) {
-  const res = await fetchWithTimeout(`${DISCORD_API}/channels/${channelId}`, {
+  const res = await fetchDiscordWithRetry(`${DISCORD_API}/channels/${channelId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bot ${BOT_TOKEN}` },
   })

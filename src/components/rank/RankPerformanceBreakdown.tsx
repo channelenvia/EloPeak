@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { Zap, Trophy, TrendingUp, Sprout, Swords, Star, Gamepad2 } from 'lucide-react'
 import { Card, RankBadge, Skeleton, EmptyState } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { RANK_PERFORMANCE_GROUPS } from '@/lib/lolTaxonomy'
 import { useBoosterPerformanceByRank } from '@/api/boosters'
 

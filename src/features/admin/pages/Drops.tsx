@@ -1,4 +1,6 @@
 // src/features/admin/pages/Drops.tsx
+import { parseCompletionPct } from '@/lib/coachCompletion'
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useEffect, useState } from 'react'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { CardGrid } from '@/components/ui/CardGrid'
@@ -21,7 +23,7 @@ export function AdminDropsPage() {
   // pct sempre retorna 0 pra ele) -- pede quanto do pacote o coach já deu
   // antes de aprovar o drop, em vez de pagar sempre 0% (ver migration
   // 20260908090000). Só usado quando a solicitação pendente é de coaching.
-  const [completionPct, setCompletionPct] = useState('0')
+  const [completionPct, setCompletionPct] = useState('')
   // O Modal só é fechado (zerando completionPct) via Cancelar/backdrop/
   // sucesso -- mas `resolving` também pode trocar direto de uma solicitação
   // pra outra sem passar por ali (ex.: o valor de `id` muda mantendo o
@@ -29,12 +31,12 @@ export function AdminDropsPage() {
   // podia vazar como o % de outra se o admin abrisse uma segunda sem fechar
   // a primeira antes.
   useEffect(() => {
-    setCompletionPct('0')
+    setCompletionPct('')
   }, [resolving?.id])
 
   const [search, setSearch] = useState('')
 
-  const { data: requests, isLoading } = useAdminDropRequests()
+  const { data: requests, isLoading, isError, error, refetch } = useAdminDropRequests()
 
   // Nome do booster em vez do UUID cru — mesma ideia do admin/pages/OrderDetail.tsx.
   const boosterIds = [...new Set((requests ?? []).map((r) => r.booster_id))]
@@ -64,7 +66,7 @@ export function AdminDropsPage() {
           requestId: params.id, approve: params.approve, adminNote: params.note || undefined,
           coachingCompletionPct: params.coachingCompletionPct,
         },
-        { onSuccess: () => { setResolving(null); setAdminNote(''); setCompletionPct('0') } },
+        { onSuccess: () => { setResolving(null); setAdminNote(''); setCompletionPct('') } },
       ),
   }
 
@@ -102,6 +104,7 @@ export function AdminDropsPage() {
       {/* Pending */}
       <section>
         <h3 className="text-base font-semibold text-ink mb-3">Pendentes</h3>
+        <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
         {isLoading ? (
           <CardGrid cols={4}>
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
@@ -307,7 +310,7 @@ export function AdminDropsPage() {
       {/* Resolve modal */}
       <Modal
         open={!!resolving}
-        onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote(''); setCompletionPct('0') } }}
+        onOpenChange={(open) => { if (!open) { setResolving(null); setAdminNote(''); setCompletionPct('') } }}
         title={resolving?.approve ? 'Aprovar solicitação de drop' : 'Rejeitar solicitação de drop'}
       >
         <div>
@@ -348,7 +351,7 @@ export function AdminDropsPage() {
                     className="input-base w-full text-sm"
                   />
                   <p className="text-xs text-ink-muted mt-1">
-                    Coaching não tem como medir progresso automaticamente -- informe quanto do pacote já foi dado antes do drop. 0% se nada foi entregue ainda.
+                    Coaching não tem como medir progresso automaticamente -- informe quanto do pacote já foi dado antes do drop. Digite 0 se nada foi entregue ainda (o campo não pode ficar vazio).
                   </p>
                 </div>
               )}
@@ -357,18 +360,19 @@ export function AdminDropsPage() {
           )
         })()}
         <ActionBar>
-          <Button disabled={resolve.isPending} variant="secondary" onClick={() => { setResolving(null); setAdminNote(''); setCompletionPct('0') }}>
+          <Button disabled={resolve.isPending} variant="secondary" onClick={() => { setResolving(null); setAdminNote(''); setCompletionPct('') }}>
             Cancelar
           </Button>
           <Button
             variant={resolving?.approve ? 'success' : 'danger'}
             loading={resolve.isPending}
+            disabled={!!resolving?.approve && pendingRequests.find((r) => r.id === resolving.id)?.order?.service_type === 'coaching' && parseCompletionPct(completionPct) === null}
             onClick={() => {
               if (!resolving) return
               const isCoaching = pendingRequests.find(r => r.id === resolving.id)?.order?.service_type === 'coaching'
               resolve.mutate({
                 id: resolving.id, approve: resolving.approve, note: adminNote,
-                coachingCompletionPct: resolving.approve && isCoaching ? Number(completionPct) || 0 : undefined,
+                coachingCompletionPct: resolving.approve && isCoaching ? parseCompletionPct(completionPct) ?? undefined : undefined,
               })
             }}
           >

@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { constantTimeEqual } from '../_shared/crypto.ts'
 import { jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { fetchWithTimeout } from '../_shared/http.ts'
+import { fetchDiscordWithRetry } from '../_shared/discordFetch.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { eloPeakFooter } from '../_shared/discordRankFormat.ts'
 import { DISCORD_API, BOT_TOKEN, APP_URL } from '../_shared/discordJobAnnounce.ts'
@@ -12,10 +12,12 @@ import { DISCORD_API, BOT_TOKEN, APP_URL } from '../_shared/discordJobAnnounce.t
 // só que com um secret PRÓPRIO em vez de reaproveitar o deles (o cron não
 // tem acesso ao valor configurado lá, e não devia -- superfícies de auth
 // separadas por integração).
-const CRON_SECRET = Deno.env.get('DISCORD_CRON_SECRET') ?? ''
+// Aceita DISCORD_TOP3_CRON_SECRET (mesmo nome do vault: discord_top3_cron_secret) e o legado DISCORD_CRON_SECRET.
+const CRON_SECRET = Deno.env.get('DISCORD_TOP3_CRON_SECRET') ?? Deno.env.get('DISCORD_CRON_SECRET') ?? ''
 // IDs de canal não são credenciais -- não precisam de secret/env, só o
 // bot precisa ter sido convidado com permissão de enviar mensagem neles.
-const CHANNEL_TOP3 = '1531134555015086293'
+// Env primeiro; o fallback e o canal atual de producao (nao quebra o deploy se a env nao estiver definida).
+const CHANNEL_TOP3 = Deno.env.get('DISCORD_CHANNEL_TOP3') ?? '1531134555015086293'
 
 interface TopBoosterRow {
   booster_id: string
@@ -68,7 +70,7 @@ serve(async (req) => {
     // reflete exatamente quem está com a comissão de Top 3 (55% -> 60%).
     const { data: top3Profiles, error: profilesError } = await db
       .from('booster_profiles')
-      .select('user_id, display_name')
+      .select('user_id, display_name, total_completed')
       .eq('is_top3', true)
     if (profilesError) {
       console.error('fetch is_top3 profiles failed', profilesError.message)
@@ -81,7 +83,7 @@ serve(async (req) => {
 
     const { data: segments, error: segmentsError } = await db
       .from('booster_performance_segments')
-      .select('booster_id, total_matches, wins, average_kda, review_count, average_rating, performance_score, completed_orders')
+      .select('booster_id, total_matches, wins, average_kda, review_count, average_rating, performance_score')
       .in('booster_id', boosterIds)
       .eq('service_type', '__all__')
       .eq('rank_bucket', '__all__')
@@ -92,6 +94,8 @@ serve(async (req) => {
       return jsonResponse(req, { error: 'fetch_segments_failed' }, 500)
     }
 
+    // Pedidos concluidos vem de booster_profiles.total_completed (a coluna do segmento nunca e escrita: ficava em 0).
+    const completedByBoosterId = new Map((top3Profiles ?? []).map((p) => [p.user_id as string, p.total_completed as number | null]))
     const displayNameByBoosterId = new Map((top3Profiles ?? []).map((p) => [p.user_id as string, p.display_name as string]))
     const boosters: TopBoosterRow[] = (segments ?? [])
       .map((s) => ({
@@ -103,7 +107,7 @@ serve(async (req) => {
         review_count: s.review_count as number | null,
         performance_score: s.performance_score as number | null,
         total_matches: s.total_matches as number | null,
-        completed_orders: s.completed_orders as number | null,
+        completed_orders: completedByBoosterId.get(s.booster_id as string) ?? null,
       }))
       .sort((a, b) => (b.performance_score ?? 0) - (a.performance_score ?? 0))
 
@@ -160,7 +164,7 @@ serve(async (req) => {
 
     // Tudo dentro do embed (sem `content` solto acima) -- a mensagem inteira
     // fica contida numa única "badge".
-    const discordRes = await fetchWithTimeout(`${DISCORD_API}/channels/${CHANNEL_TOP3}/messages`, {
+    const discordRes = await fetchDiscordWithRetry(`${DISCORD_API}/channels/${CHANNEL_TOP3}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -173,7 +177,7 @@ serve(async (req) => {
           // ia pra raiz mesmo). Composto explicitamente aqui em vez de
           // embutido no fallback, que agora é o mesmo de todo outro arquivo.
           url: `${APP_URL}/boosters`,
-          description: 'Ranking recalculado automaticamente: **45% Win Rate + 30% KDA + 15% Pedidos Concluídos + 10% Avaliações** (mínimo de 10 pedidos concluídos pra entrar).',
+          description: 'Ranking recalculado automaticamente: **45% Win Rate + 30% KDA + 25% Avaliações** (mínimo de 10 pedidos concluídos pra entrar).',
           color: 0xFACC15,
           fields,
           footer: eloPeakFooter(APP_URL),

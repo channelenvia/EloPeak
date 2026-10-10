@@ -16,6 +16,8 @@ const PROFESSIONAL_PROFILE_MESSAGES: Record<string, string> = {
   invalid_hours: 'Informe uma faixa de horas válida (1 a 24).',
   full_name_required: 'Nome completo é obrigatório.',
   invalid_cpf: 'CPF inválido.',
+  cpf_taken: 'Este CPF já está cadastrado em outra conta de booster.',
+  bio_too_long: 'A bio pode ter no máximo 256 caracteres.',
   available_days_required: 'Selecione ao menos um dia disponível.',
 }
 
@@ -67,11 +69,14 @@ export async function updateProfessionalProfile(params: UpdateProfessionalProfil
 }
 
 export async function adminApproveBooster(params: { boosterId: string; newStatus: 'approved' | 'rejected' | 'suspended' }) {
-  return callRpc('approve_booster', { p_booster_id: params.boosterId, p_new_status: params.newStatus })
+  return callRpc('approve_booster', { p_booster_id: params.boosterId, p_new_status: params.newStatus }, {
+    active_orders_exist: 'O booster tem pedidos em aberto. Realoque ou conclua antes de mudar o status.',
+    booster_removed: 'Booster removido não pode ser reaprovado por aqui.',
+  })
 }
 
 export async function expelBooster(params: { boosterId: string; reason: string }) {
-  return invokeEdgeFunction<{ success: true }>('expel-booster', {
+  return invokeEdgeFunction<{ success: true; balance: number; pending_payout_requests: number }>('expel-booster', {
     body: { booster_id: params.boosterId, reason: params.reason },
     requireAuth: true,
   })

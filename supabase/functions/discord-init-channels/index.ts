@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { constantTimeEqual } from '../_shared/crypto.ts'
 import { jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
-import { fetchWithTimeout } from '../_shared/http.ts'
+import { fetchDiscordWithRetry } from '../_shared/discordFetch.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { DISCORD_API, BOT_TOKEN } from '../_shared/discordJobAnnounce.ts'
 
@@ -16,7 +16,7 @@ const CHANNELS = {
 }
 
 async function send(channelId: string, payload: object) {
-  const res = await fetchWithTimeout(`${DISCORD_API}/channels/${channelId}/messages`, {
+  const res = await fetchDiscordWithRetry(`${DISCORD_API}/channels/${channelId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

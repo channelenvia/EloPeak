@@ -1,3 +1,4 @@
+import { boosterProfilePath } from '@/lib/boosterPath'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Eye } from 'lucide-react'
@@ -19,7 +20,7 @@ export function BoosterServicesPage() {
     <div className="space-y-6">
       <PageHeader title="Serviços" description="Configure seu perfil profissional e os serviços de coach que você oferece aos clientes." actions={boosterDisplayName && (
           <Button asChild variant="outline" size="sm">
-            <Link to={`/boosters/${encodeURIComponent(boosterDisplayName)}`} target="_blank" rel="noopener noreferrer">
+            <Link to={boosterProfilePath({ display_name: boosterDisplayName })} target="_blank" rel="noopener noreferrer">
               <Eye className="h-4 w-4" />
               Visualizar como cliente
             </Link>

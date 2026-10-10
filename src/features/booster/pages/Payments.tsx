@@ -129,7 +129,7 @@ function WithdrawalWindowClosedCard() {
         <h3 className="text-base font-semibold text-ink">Solicitação de saque fechada</h3>
       </div>
       <p className="text-xs text-ink-secondary">
-        Saques só podem ser solicitados nos dias 15 e 30 de cada mês. Próxima janela:{' '}
+        Saques só podem ser solicitados no dia 15 e no último dia de cada mês. Próxima janela:{' '}
         <span className="font-bold text-ink">{nextWithdrawalDayLabel(new Date())}</span>.
       </p>
     </Card>
@@ -171,6 +171,16 @@ export function BoosterPaymentsPage() {
           <StatCard key={label} label={label} icon={icon} color={color} value={loadingTotals ? <Skeleton className="h-6 w-20" /> : currency(value)} />
         ))}
       </div>
+
+      {(totals?.available_balance ?? 0) < 0 && (
+        <div className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-ink" role="alert" data-testid="negative-balance">
+          <p className="font-semibold text-danger">Seu saldo está negativo ({currency(totals?.available_balance ?? 0)})</p>
+          <p className="text-ink-secondary mt-1">
+            Isso acontece quando uma penalidade de drop ou um estorno é maior que o saldo disponível. Saques ficam
+            bloqueados até o saldo voltar a ser positivo com os próximos ganhos. Cada débito aparece no extrato com o pedido de origem.
+          </p>
+        </div>
+      )}
 
       {withdrawalWindowOpen ? (
         <RequestPayoutCard available={totals?.available_balance ?? 0} />

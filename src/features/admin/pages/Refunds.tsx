@@ -7,7 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, Check, MessageCircle, Plus, RefreshCw, Undo2, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, MessageCircle, Plus, RefreshCw, Undo2, Wallet, XCircle } from 'lucide-react'
 import { Button, Card, CurrencyMaskedInput, EmptyState, ErrorAlert, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
@@ -15,9 +15,10 @@ import type { Refund } from '@/types'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminAdjustBoosterBalance, useAdminRefunds, useAdminReviewCases, useProfileUsername, useProfileUsernames } from '@/api/admin'
 import type { AdminReviewCase } from '@/api/admin'
-import { useAdminCancelManualRefund, useAdminConfirmManualRefund, useAdminCreateManualRefund, useOrder } from '@/api/orders'
+import { useAdminCancelManualRefund, useAdminConfirmManualRefund, useAdminCreateManualRefund, useOrder, useOrderSettlementPreview } from '@/api/orders'
 import { useBoosterPayoutTotals } from '@/api/payouts'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
+import { CancelWithoutRefundModal } from '@/features/admin/components/CancelWithoutRefundModal'
 
 const REFUND_STATUS_LABEL: Record<Refund['status'], string> = {
   pending: 'A reembolsar',
@@ -41,45 +42,39 @@ const ORDER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 interface ManualRefundFormData {
   orderId: string
   reason: string
-  amountCents: number
 }
 
 function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: boolean; onClose: () => void; initialOrderId?: string }) {
   const currency = useCurrency()
   const createRefund = useAdminCreateManualRefund()
 
-  const { control, register, handleSubmit, watch, reset, trigger, formState: { errors, isValid } } = useForm<ManualRefundFormData>({
+  const { register, handleSubmit, watch, reset, formState: { errors, isValid } } = useForm<ManualRefundFormData>({
     resolver: zodResolver(z.object({
       orderId: z.string().refine((v) => ORDER_ID_PATTERN.test(v.trim()), 'ID inválido — cole o UUID completo do pedido (visível na URL da página do pedido).'),
       reason: z.string().trim().min(10, 'Motivo deve ter pelo menos 10 caracteres.').max(500),
-      amountCents: z.number({ error: 'Informe um valor de reembolso.' }).int().min(1, 'Informe um valor de reembolso.'),
     })),
-    defaultValues: { orderId: initialOrderId, reason: '', amountCents: 0 },
+    defaultValues: { orderId: initialOrderId, reason: '' },
     mode: 'onChange',
   })
 
   const orderId = watch('orderId')
-  const amountCents = watch('amountCents')
   const trimmedId = orderId.trim()
   const looksLikeUuid = ORDER_ID_PATTERN.test(trimmedId)
   const { data: lookupOrder, isFetching: lookupLoading } = useOrder(looksLikeUuid ? trimmedId : undefined)
   const { data: customerUsername } = useProfileUsername(lookupOrder?.customer_id)
 
-  const maxCents = lookupOrder ? Math.round(lookupOrder.total_price * 100) : undefined
-  // O teto some/aparece conforme o pedido é encontrado -- revalida o campo
-  // já digitado assim que isso muda (mesmo padrão de RequestPayoutCard,
-  // booster/pages/Payments.tsx).
-  useEffect(() => { void trigger('amountCents') }, [maxCents, trigger])
+  const { data: preview, isFetching: previewLoading } = useOrderSettlementPreview(lookupOrder ? trimmedId : undefined)
 
   function close() {
     onClose()
-    reset({ orderId: '', reason: '', amountCents: 0 })
+    reset({ orderId: '', reason: '' })
   }
 
-  const canSubmit = isValid && looksLikeUuid && !!lookupOrder && (!maxCents || amountCents <= maxCents)
+  const isUnderReview = lookupOrder?.status === 'under_review'
+  const canSubmit = isValid && looksLikeUuid && !!lookupOrder && isUnderReview && !!preview && preview.refund_amount > 0
 
   function onSubmit(data: ManualRefundFormData) {
-    createRefund.mutate({ orderId: data.orderId.trim(), reason: data.reason.trim(), amount: data.amountCents / 100 }, { onSuccess: close })
+    createRefund.mutate({ orderId: data.orderId.trim(), reason: data.reason.trim() }, { onSuccess: close })
   }
 
   return (
@@ -109,19 +104,18 @@ function NewManualRefundModal({ open, onClose, initialOrderId = '' }: { open: bo
         )}
       </div>
 
-      <div>
-        <label className="text-xs font-semibold text-ink-secondary block mb-1.5">Valor do reembolso</label>
-        <Controller
-          control={control}
-          name="amountCents"
-          render={({ field }) => (
-            <CurrencyMaskedInput valueCents={field.value} onChangeCents={field.onChange} maxCents={maxCents} aria-label="Valor do reembolso" />
-          )}
-        />
-        {maxCents !== undefined && amountCents > maxCents && (
-          <p className="text-xs text-danger mt-1">Valor não pode passar do total do pedido ({currency(lookupOrder!.total_price)}).</p>
-        )}
-      </div>
+      {lookupOrder && !isUnderReview && (
+        <p className="text-xs text-warning">Marque o pedido como &quot;Analisar&quot; antes de reembolsar ou cancelar.</p>
+      )}
+      {lookupOrder && previewLoading && <p className="text-xs text-ink-muted">Calculando…</p>}
+      {preview && (
+        <div className="rounded-lg bg-bg-raised px-3 py-2.5 text-xs space-y-1" data-testid="settlement-preview">
+          <p className="font-semibold text-ink-secondary">Cálculo (definido pelo sistema)</p>
+          <p>Valor pago: <span className="font-semibold text-ink">{currency(preview.paid)}</span> · Progresso: <span className="font-semibold text-ink">{preview.progress_pct}%</span></p>
+          <p>Booster recebe pelo progresso: <span className="font-semibold text-ink">{currency(preview.booster_credit)}</span></p>
+          <p>Reembolso ao cliente: <span className="font-semibold text-success">{currency(preview.refund_amount)}</span></p>
+        </div>
+      )}
 
       <div>
         <label htmlFor="manual-refund-reason" className="text-xs font-semibold text-ink-secondary block mb-1.5">Motivo (mín. 10 caracteres)</label>
@@ -270,6 +264,7 @@ function AdjustBoosterBalanceModal({ boosterId, open, onClose }: { boosterId: st
 function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReviewCase; boosterName?: string | null; onOpenRefund: (orderId: string) => void }) {
   const currency = useCurrency()
   const [adjustOpen, setAdjustOpen] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   return (
     <Card variant="operational" padding="md" className="border-danger/30 bg-danger/[0.03]">
@@ -297,6 +292,9 @@ function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReview
           <Button variant="secondary" size="sm" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onOpenRefund(item.order_id)}>
             Marcar pra reembolsar
           </Button>
+          <Button variant="secondary" size="sm" leftIcon={<XCircle className="h-3.5 w-3.5" />} onClick={() => setCancelOpen(true)}>
+            Cancelar sem reembolso
+          </Button>
           {item.last_assigned_booster_id && (
             <Button variant="secondary" size="sm" leftIcon={<Wallet className="h-3.5 w-3.5" />} onClick={() => setAdjustOpen(true)}>
               Ajustar saldo do booster
@@ -305,6 +303,7 @@ function ReviewCaseCard({ item, boosterName, onOpenRefund }: { item: AdminReview
         </div>
       </div>
 
+      <CancelWithoutRefundModal orderId={item.order_id} open={cancelOpen} onClose={() => setCancelOpen(false)} />
       {item.last_assigned_booster_id && (
         <AdjustBoosterBalanceModal boosterId={item.last_assigned_booster_id} open={adjustOpen} onClose={() => setAdjustOpen(false)} />
       )}

@@ -1,16 +1,13 @@
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { toAppZoneWallClock } from './timezone'
 import { format, formatDistanceToNow } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { ptBR } from 'date-fns/locale/pt-BR'
 import type { Order, OrderStatus, PaymentStatus, RankTier, BoosterStatus, OrderExtra } from '@/types'
 import type { PayoutRequestStatus } from '@/api/payouts'
 
 export { RANK_TIER_ORDER } from '../../shared/pricing'
 
-// Tailwind class merging
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+// Tailwind class merging (implementacao em ./cn, reexportada para os imports existentes)
+export { cn } from './cn'
 
 // Moeda BRL — formatter único de módulo (locale/moeda fixos).
 const brlFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
@@ -20,11 +17,11 @@ export function formatCurrency(amount: number): string {
 
 // Date formatting
 export function formatDate(date: string | Date) {
-  return format(new Date(date), 'dd MMM yyyy', { locale: ptBR })
+  return format(toAppZoneWallClock(new Date(date)), 'dd MMM yyyy', { locale: ptBR })
 }
 
 export function formatDateTime(date: string | Date) {
-  return format(new Date(date), 'dd MMM yyyy · HH:mm', { locale: ptBR })
+  return format(toAppZoneWallClock(new Date(date)), 'dd MMM yyyy · HH:mm', { locale: ptBR })
 }
 
 export function timeAgo(date: string | Date) {
@@ -399,4 +396,11 @@ export function initials(name: string) {
     .map((n) => n[0])
     .join('')
     .toUpperCase()
+}
+
+// CPF para listas: so os extremos ficam visiveis (o completo aparece apenas no detalhe).
+export function maskCpf(cpf: string | null | undefined): string {
+  const digits = (cpf ?? '').replace(/\D/g, '')
+  if (digits.length !== 11) return '—'
+  return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`
 }

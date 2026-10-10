@@ -1,25 +1,16 @@
 import { MessageSquareText } from 'lucide-react'
 import { EmptyState, Skeleton } from '@/components/ui'
 import { usePublicReviews } from '@/api/reviews'
-import { PLACEHOLDER_TESTIMONIALS } from '../data/placeholderTestimonials'
 import { TestimonialCard } from './TestimonialCard'
 
 // Avaliações reais e públicas (reviews.is_public = true) -- nunca depoimentos
 // inventados. Se ainda não houver avaliações suficientes, mostra um estado
 // vazio explícito em vez de inventar conteúdo (ver master-prompt seção 28.1).
-//
-// TEMP: site ainda em fase de testes, sem clientes reais -- usando
-// depoimentos fictícios (ver ../data/placeholderTestimonials.ts) só pro
-// carrossel não ficar vazio. Antes de qualquer lançamento real, apagar
-// USE_PLACEHOLDER abaixo (e o arquivo de dados) e voltar a depender só de
-// `usePublicReviews`.
-const USE_PLACEHOLDER = true
 
 export function TestimonialsCarousel() {
-  const { data: realReviews, isLoading } = usePublicReviews()
-  const reviews = USE_PLACEHOLDER ? PLACEHOLDER_TESTIMONIALS : realReviews
+  const { data: reviews, isLoading } = usePublicReviews()
 
-  if (!USE_PLACEHOLDER && isLoading) {
+  if (isLoading) {
     return (
       <div className="max-w-screen-xl mx-auto px-5 sm:px-8 flex gap-6 overflow-hidden">
         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-80 shrink-0 rounded-2xl" />)}

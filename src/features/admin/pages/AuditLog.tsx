@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useMemo, useState } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -40,7 +41,7 @@ function EntityCell({ entry }: { entry: AuditLogEntry }) {
 
 export function AdminAuditLogPage() {
   const [search, setSearch] = useState('')
-  const { data: logs, isLoading } = useAdminAuditLogs()
+  const { data: logs, isLoading, isError, error, refetch } = useAdminAuditLogs()
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -71,6 +72,7 @@ export function AdminAuditLogPage() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
+      <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}

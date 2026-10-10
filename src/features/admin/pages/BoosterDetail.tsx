@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useParams, Link } from 'react-router-dom'
 import { InlineEmpty } from '@/components/ui/EmptyState'
 import { Badge } from '@/components/ui/Badge'
@@ -16,11 +17,12 @@ export function AdminBoosterDetailPage() {
   const { id } = useParams<{ id: string }>()
   const currency = useCurrency()
 
-  const { data: booster, isLoading } = useAdminBoosterDetail(id)
+  const { data: booster, isLoading, isError, error, refetch } = useAdminBoosterDetail(id)
   const { data: slotInfo } = useBoosterSlotInfo(booster?.user_id, booster?.status === 'approved')
   const { data: boosterOrders, isLoading: loadingOrders } = useBoosterOrdersPage(booster?.user_id, 'in_progress', 1, 8)
 
   if (isLoading) return <Skeleton className="h-48 w-full" />
+  if (isError) return <QueryErrorNotice isError error={error} onRetry={refetch} />
   if (!booster) return <p className="text-ink-muted">Booster não encontrado.</p>
 
   // Mesmas duas estatísticas do mini-perfil público (Concluídos + Rank
@@ -199,7 +201,7 @@ export function AdminBoosterDetailPage() {
                   {slotInfo.is_top3 ? 'Top3' : 'Regular'}
                 </Badge>
               </h3>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { label: 'Solo', value: slotInfo.solo_count, icon: Swords, color: 'text-brand bg-brand/10' },
                   { label: 'Duo',  value: `${slotInfo.duo_count}`, icon: Users, color: 'text-accent bg-accent/10' },

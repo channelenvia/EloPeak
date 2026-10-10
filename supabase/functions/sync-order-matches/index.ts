@@ -4,6 +4,7 @@ import { handleCors } from '../_shared/cors.ts'
 import { errorResponse, jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { getAuthUser } from '../_shared/authUser.ts'
+import { enterRiotContext } from '../_shared/riotLookup.ts'
 import { HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { syncOrderMatches, type OrderForMatchSync } from '../_shared/orderMatchSync.ts'
@@ -25,6 +26,7 @@ serve(async (req) => {
 
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
+    enterRiotContext({ userId: auth.user.id, tier: 'priority' })
     const { user, client: userClient } = auth
 
     // Reduzido de 20 -> 6 chamadas/5min: o sync automático (JobDetail, a

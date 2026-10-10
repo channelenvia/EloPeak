@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Popover } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 interface OrderDetailWidgetProps {
   icon: React.ElementType

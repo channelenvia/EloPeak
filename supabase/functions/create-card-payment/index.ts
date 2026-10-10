@@ -6,6 +6,8 @@ import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { getAuthUser } from '../_shared/authUser.ts'
 import { fetchWithTimeout, HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
+import { hasAcceptedCurrentLegal } from '../_shared/legalGate.ts'
+import { alertAdmins } from '../_shared/adminAlert.ts'
 import { classifyCardPayment, extractThreeDsInfo } from '../_shared/cardPayment.ts'
 
 const MP_ACCESS_TOKEN = Deno.env.get('MERCADOPAGO_ACCESS_TOKEN') ?? ''
@@ -53,6 +55,18 @@ async function fetchPayment(paymentId: string | number): Promise<MercadoPagoPaym
 
 // Cobrança criada no MP que NÃO ficou vinculada ao pedido (falha de banco ou
 // corrida entre duas tentativas): desfaz para o cliente nunca pagar sem pedido.
+// Depois de um timeout/queda o MP pode ter cobrado mesmo assim: procura a cobranca do pedido antes de
+// responder, para o cliente nunca pagar duas vezes (H-12).
+async function findPaymentByOrder(orderId: string): Promise<MercadoPagoPayment | null> {
+  const resp = await fetchWithTimeout(
+    `${MP_API}/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc&limit=5`,
+    { headers: mpHeaders },
+  )
+  if (!resp.ok) return null
+  const body = await resp.json() as { results?: MercadoPagoPayment[] }
+  return (body.results ?? []).find((p) => classifyCardPayment(p.status) !== 'rejected') ?? null
+}
+
 async function reverseUnrecordedPayment(mp: MercadoPagoPayment): Promise<boolean> {
   const outcome = classifyCardPayment(mp.status)
   const resp = outcome === 'approved'
@@ -132,6 +146,9 @@ serve(async (req) => {
     if (!rateLimit.allowed) return rateLimitResponse(req, rateLimit.retryAfter)
     if (orderErr || !order) return errorResponse(req, 'Order not found', 404)
     if (order.customer_id !== user.id) return errorResponse(req, 'Forbidden', 403)
+    if (!await hasAcceptedCurrentLegal(supabaseAdmin(), user.id)) {
+      return errorResponse(req, 'Aceite os Termos de Uso e a Política de Privacidade vigentes para continuar.', 403, 'LEGAL_NOT_ACCEPTED')
+    }
     if (order.status !== 'awaiting_payment') return errorResponse(req, 'Order is not awaiting payment', 400, 'ORDER_NOT_AWAITING_PAYMENT')
 
     const amountBrl = Number(order.total_price)
@@ -158,7 +175,13 @@ serve(async (req) => {
       return errorResponse(req, 'O pagamento anterior não pode mais ser reutilizado. Cancele este pedido e crie um novo.', 409, 'PAYMENT_TERMINAL', { order_id: order.id })
     }
 
-    const mpResp = await fetchWithTimeout(`${MP_API}/v1/payments`, {
+    // Teto de tentativas por pedido (card testing): 8 por hora, alem do limite por usuario.
+    const orderAttempts = await consumeUserRateLimit('create-card-payment-order', order.id, 8, 3600)
+    if (!orderAttempts.allowed) return rateLimitResponse(req, orderAttempts.retryAfter)
+
+    let mpResp: Response
+    try {
+      mpResp = await fetchWithTimeout(`${MP_API}/v1/payments`, {
       method: 'POST',
       headers: {
         ...mpHeaders,
@@ -191,6 +214,19 @@ serve(async (req) => {
         notification_url: `${SUPABASE_URL}/functions/v1/mercadopago-webhook`,
       }),
     }, MP_TIMEOUT_MS)
+    } catch (err) {
+      // Timeout/rede: o MP pode ter aprovado. Consulta pela referencia do pedido antes de falar em erro.
+      console.error('Mercado Pago card payment request did not complete', err instanceof Error ? err.name : 'unknown')
+      const found = await findPaymentByOrder(order.id).catch(() => null)
+      if (!found) {
+        return errorResponse(
+          req,
+          'Não conseguimos confirmar o pagamento agora. Aguarde um minuto e tente de novo — você não será cobrado duas vezes.',
+          504, 'PAYMENT_UNKNOWN', { order_id: order.id },
+        )
+      }
+      mpResp = new Response(JSON.stringify(found), { status: 200 })
+    }
 
     if (!mpResp.ok) {
       // 4xx do MP aqui costuma ser dado de cartão/token inválido -- não vaza o corpo.
@@ -224,7 +260,12 @@ serve(async (req) => {
       // pedido): desfaz a cobrança para ninguém pagar sem pedido.
       console.error('Failed to persist card payment for order', order.id, String(mp.id))
       const reversed = await reverseUnrecordedPayment(mp).catch(() => false)
-      if (!reversed) console.error('CRITICAL: card payment charged but unrecorded and NOT reversed', order.id, String(mp.id))
+      if (!reversed) {
+        console.error('CRITICAL: card payment charged but unrecorded and NOT reversed', order.id, String(mp.id))
+        await alertAdmins('payment_unrecorded_not_reversed', 'Cobrança de cartão sem pedido vinculado',
+          `Pedido ${order.id}: o cartão foi cobrado (MP ${String(mp.id)}) mas não foi registrado nem estornado. Estorne manualmente no Mercado Pago.`,
+          { order_id: order.id, mp_payment_id: String(mp.id) })
+      }
       return errorResponse(
         req,
         reversed

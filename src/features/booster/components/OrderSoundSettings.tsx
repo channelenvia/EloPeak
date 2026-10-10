@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Volume2, VolumeX, Play, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useBoosterSoundStore } from '@/stores/boosterSoundStore'
 import { ORDER_SOUND_OPTIONS, playOrderSound } from '@/features/booster/hooks/orderSoundLibrary'
 

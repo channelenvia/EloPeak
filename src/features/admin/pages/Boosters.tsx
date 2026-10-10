@@ -1,3 +1,4 @@
+import { useCurrency } from '@/hooks/useCurrency'
 import { useRef, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { ActionBar } from '@/components/ui/ActionBar'
@@ -239,6 +240,7 @@ export function AdminBoostersPage() {
       updateBoosterStatusMutation.mutate({ boosterId: params.id, newStatus: params.status }),
   }
   const expelBoosterMutation = useExpelBooster()
+  const currency = useCurrency()
 
   const filtered = (boosters ?? []).filter((b) =>
     !search || b.display_name.toLowerCase().includes(search.trim().toLowerCase())
@@ -280,6 +282,13 @@ export function AdminBoostersPage() {
 
       {expelBoosterMutation.isError && (
         <ErrorAlert message={(expelBoosterMutation.error as Error).message} />
+      )}
+
+      {expelBoosterMutation.isSuccess && (expelBoosterMutation.data.balance !== 0 || expelBoosterMutation.data.pending_payout_requests > 0) && (
+        <p className="text-xs text-warning">
+          Booster removido. Pendências financeiras para decidir: saldo de {currency(expelBoosterMutation.data.balance)}
+          {expelBoosterMutation.data.pending_payout_requests > 0 && ` e ${expelBoosterMutation.data.pending_payout_requests} saque(s) em aberto`}.
+        </p>
       )}
 
       {isLoading ? (

@@ -1,3 +1,5 @@
+import { boosterProfilePath } from '@/lib/boosterPath'
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useMemo } from 'react'
 import { Card } from '@/components/ui/Card'
 import { LiveDot } from '@/components/ui/Badge'
@@ -21,15 +23,14 @@ const MEDAL: Record<number, { border: string; badge: string; text: string }> = {
 
 // ── TopBoosterCard ───────────────────────────────────────────────────────────
 // Seleção sistemática (get_top_boosters) — nunca uma lista fixa/manual.
-// Ver supabase/migrations_archive/054_booster_performance_segments.sql e
-// 055_top_boosters_selection.sql para a fórmula, o fallback e o desempate.
+// Fórmula, fallback e desempate: ver a função get_top_boosters nas migrations.
 
 function TopBoosterCard({ entry, position }: { entry: TopBoosterEntry; position: number }) {
   const medal = MEDAL[position]
 
   return (
     <Link
-      to={`/boosters/${encodeURIComponent(entry.display_name)}`}
+      to={boosterProfilePath(entry)}
       className={cn(
         'card flex flex-col gap-3 p-5 border-2 transition-all hover:-translate-y-1 hover:shadow-card-hover',
         medal.border,
@@ -78,7 +79,7 @@ function TopBoosterCard({ entry, position }: { entry: TopBoosterEntry; position:
 
 function BoosterCard({ booster, winRate }: { booster: BoosterProfile; winRate: number }) {
   return (
-    <Link to={`/boosters/${encodeURIComponent(booster.display_name)}`}>
+    <Link to={boosterProfilePath(booster)}>
       <Card variant="standard" padding="sm" className="flex flex-col items-center text-center gap-3 hover:border-brand/30 hover:shadow-card-hover transition-all cursor-pointer h-full">
         <Avatar src={booster.avatar_url} name={booster.display_name} size="lg" />
 
@@ -141,7 +142,7 @@ function BoosterCardSkeleton() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function BoostersPage() {
-  const { data: boosters, isLoading } = usePublicBoosters()
+  const { data: boosters, isLoading, isError, error, refetch } = usePublicBoosters()
   const { data: top3 } = useTopBoosters(3)
 
   const boosterUserIds = useMemo(() => (boosters ?? []).map(b => b.user_id), [boosters])
@@ -185,6 +186,7 @@ export function BoostersPage() {
         </p>
       </div>
 
+      <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {Array.from({ length: 10 }).map((_, i) => <BoosterCardSkeleton key={i} />)}

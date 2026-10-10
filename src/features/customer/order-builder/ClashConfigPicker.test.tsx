@@ -97,4 +97,37 @@ describe('ClashConfigPicker', () => {
     expect(useOrderBuilderStore.getState().clashDay).toBe('sunday')
     expect(screen.queryByText('Tier')).not.toBeInTheDocument()
   })
+
+  it('sem rank em nenhuma fila: oferece escolher o tier manualmente e marca o elo como declarado', async () => {
+    lookupRiotRankMock.mockResolvedValue({ found: true, ranked: false })
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.type(screen.getByPlaceholderText('NomeDoInvocador#TAG'), 'Fulano#BR1')
+    await user.click(screen.getByRole('button', { name: 'Verificar elo' }))
+    expect(await screen.findByText('Não encontramos o seu elo automaticamente')).toBeInTheDocument()
+    expect(useOrderBuilderStore.getState().riotVerified).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /Tier 1/i }))
+    const state = useOrderBuilderStore.getState()
+    expect(state.clashTier).toBe('tier_1')
+    expect(state.rankDeclared).toBe(true)
+    expect(state.riotVerified).toBe(true)
+    expect(screen.getByTestId('declared-rank-notice')).toBeInTheDocument()
+  })
+
+  it('consulta as duas filas e usa o MAIOR elo (mesma regra do backend)', async () => {
+    lookupRiotRankMock.mockImplementation(async (_id, queue) => queue === 'flex'
+      ? { found: true, ranked: true, tier: 'diamond', division: 'IV', league_points: 10 }
+      : { found: true, ranked: true, tier: 'silver', division: 'II', league_points: 10 })
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.type(screen.getByPlaceholderText('NomeDoInvocador#TAG'), 'Fulano#BR1')
+    await user.click(screen.getByRole('button', { name: 'Verificar elo' }))
+    await screen.findByText('Tier detectado automaticamente pelo seu rank atual.')
+
+    expect(useOrderBuilderStore.getState().clashTier).toBe('tier_1')
+    expect(useOrderBuilderStore.getState().rankDeclared).toBe(false)
+  })
 })

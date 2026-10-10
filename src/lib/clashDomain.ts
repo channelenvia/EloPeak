@@ -5,6 +5,7 @@
 export * from '../../shared/clashDomain'
 
 import type { ClashDay } from '@/types'
+import { toAppZoneWallClock } from './timezone'
 
 // Próxima ocorrência do dia da semana escolhido, a partir de uma data de
 // referência (created_at do pedido, ou "agora" na revisão pré-pagamento,
@@ -12,7 +13,7 @@ import type { ClashDay } from '@/types'
 // compartilhado) -- usado por ClashDetailsBlock e CustomerOrderCard pra não
 // duplicar o cálculo.
 export function getClashDateParts(referenceDate: string, clashDay: ClashDay) {
-  const date = new Date(referenceDate)
+  const date = toAppZoneWallClock(new Date(referenceDate))
   const targetDay = clashDay === 'saturday' ? 6 : 0
   const currentDay = date.getDay()
   const daysUntil = (targetDay - currentDay + 7) % 7

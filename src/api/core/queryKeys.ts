@@ -30,6 +30,7 @@ export const queryKeys = {
     boosterDuoMatches: (orderId: string) => ['orders', 'booster-duo-matches', orderId] as const,
     topics: (orderId: string) => ['orders', 'topics', orderId] as const,
     latestRankVerification: (orderId: string) => ['orders', 'detail', orderId, 'rank-verifications', 'latest'] as const,
+    rankAssessment: (orderId: string) => ['orders', 'detail', orderId, 'rank-assessment'] as const,
     history: (orderId: string) => ['orders', 'detail', orderId, 'history'] as const,
     dropRequest: (orderId: string) => ['orders', 'detail', orderId, 'drop-request'] as const,
   },

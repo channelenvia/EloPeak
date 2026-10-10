@@ -40,7 +40,8 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
 
   return (
     <div>
-      <p className="text-xs text-ink-secondary mb-4">Evite entrar na conta até o pedido terminar.</p>
+      <p className="text-xs text-ink-secondary mb-1">Evite entrar na conta até o pedido terminar.</p>
+      <p className="text-xs text-warning mb-4">O booster usa essas credenciais para entrar na sua conta. Troque a senha da conta Riot assim que o pedido terminar (ou se ele for trocado de booster).</p>
       {canSet && (
         <div className="space-y-3">
           <div>

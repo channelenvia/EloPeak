@@ -3,7 +3,10 @@ import { z } from 'https://esm.sh/zod@3.23.8'
 import { handleCors } from '../_shared/cors.ts'
 import { errorResponse, jsonResponse, rateLimitResponse } from '../_shared/responses.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
+import { hasAcceptedCurrentLegal } from '../_shared/legalGate.ts'
+import { scheduleRankAssessment } from '../_shared/rankAssessmentJob.ts'
 import { getAuthUser } from '../_shared/authUser.ts'
+import { enterRiotContext } from '../_shared/riotLookup.ts'
 import { fetchWithTimeout, HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit } from '../_shared/rateLimit.ts'
 import { validateAndPriceIntent } from '../_shared/orderPricing.ts'
@@ -46,6 +49,7 @@ serve(async (req) => {
 
     const auth = await getAuthUser(req.headers.get('Authorization'))
     if (!auth) return errorResponse(req, 'Unauthorized', 401)
+    enterRiotContext({ userId: auth.user.id, tier: 'interactive' })
 
     // Endpoint mais caro do sistema (cria pedido, gera QR PIX na Mercado Pago,
     // pode consultar a Riot) — limite mais apertado que os outros endpoints
@@ -68,6 +72,9 @@ serve(async (req) => {
     const userClient = auth.client
     const { user } = auth
     const serviceClient = supabaseAdmin()
+    if (!await hasAcceptedCurrentLegal(serviceClient, user.id)) {
+      return errorResponse(req, 'Aceite os Termos de Uso e a Política de Privacidade vigentes para continuar.', 403, 'LEGAL_NOT_ACCEPTED')
+    }
     let requestedOrderId = body.order_id
 
     if (!requestedOrderId && body.idempotency_key) {
@@ -232,8 +239,7 @@ serve(async (req) => {
           console.error('create-pix-payment order insert failed', {
             code: insertErr?.code ?? 'missing_inserted_row',
             message: insertErr?.message ?? 'Insert returned no row',
-            details: insertErr?.details ?? null,
-            hint: insertErr?.hint ?? null,
+            // details/hint podem citar valores da linha (riot_id, notas do cliente): ficam fora do log.
             serviceType: normalized.serviceType,
           })
           return errorResponse(req, 'Failed to create order', 500)
@@ -241,6 +247,8 @@ serve(async (req) => {
       } else {
         orderId = inserted.id
         order = inserted
+        // Elo declarado pelo cliente: o sistema confere a plausibilidade em segundo plano (so o admin ve).
+        scheduleRankAssessment(serviceClient, inserted.id, normalized, RIOT_API_KEY)
       }
     } else {
       return badRequest(req, 'Missing order_id or intent')
@@ -291,6 +299,7 @@ serve(async (req) => {
           qr_code: mp.point_of_interaction?.transaction_data?.qr_code,
           qr_code_base64: mp.point_of_interaction?.transaction_data?.qr_code_base64,
           expires_at: mp.date_of_expiration,
+          server_time: new Date().toISOString(),
           reused: true,
         })
       }
@@ -315,6 +324,11 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
     // Amount sourced exclusively from the order row — client cannot influence this value
     const amountBrl = Number(order.total_price)
+
+    // O MP exige e-mail do pagador; sem ele devolve um 400 generico. Falha cedo e com mensagem clara (mesma regra do cartao).
+    if (!user.email) {
+      return errorResponse(req, 'Sua conta não tem e-mail cadastrado. Atualize seu e-mail para pagar com PIX.', 400, 'PAYER_EMAIL_MISSING', { order_id: orderId })
+    }
 
     const mpResp = await fetchWithTimeout('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
@@ -345,6 +359,11 @@ serve(async (req) => {
     }
 
     let mp = await mpResp.json()
+    // Resposta sem id seria gravada como o texto "undefined" e quebraria a conciliacao do webhook.
+    if (mp?.id === undefined || mp?.id === null || String(mp.id) === '') {
+      console.error('Mercado Pago PIX response without payment id', orderId)
+      return jsonResponse(req, { error: 'Falha ao criar pagamento PIX', order_id: orderId }, 502)
+    }
     const mpPaymentId = String(mp.id)
 
     // MP occasionally returns the payment before the PIX QR image has
@@ -386,6 +405,7 @@ serve(async (req) => {
       qr_code: mp.point_of_interaction?.transaction_data?.qr_code,
       qr_code_base64: mp.point_of_interaction?.transaction_data?.qr_code_base64,
       expires_at: mp.date_of_expiration,
+      server_time: new Date().toISOString(),
       reused: false,
     })
   } catch (err) {

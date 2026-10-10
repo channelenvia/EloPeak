@@ -199,8 +199,9 @@ export function JobDetailPage() {
   const isRankGated = order.target_rank != null
   const completionGate = canMarkOrderComplete(order, new Date())
   const objectiveReached = completionGate.allowed
-  const dropVisible = ['assigned', 'in_progress', 'paused', 'awaiting_customer'].includes(order.status) && !pendingDrop
+  // 3o drop e so do admin (RN-08): com 2 drops o booster nao consegue pedir.
   const dropLimitReached = order.drop_count >= 2
+  const dropVisible = ['assigned', 'in_progress', 'paused', 'awaiting_customer'].includes(order.status) && !pendingDrop
   const showDuoAccountWidget = order.boost_mode === 'duo' && order.assigned_booster_id === profile?.id
     && ['assigned', 'in_progress', 'paused', 'completed'].includes(order.status)
   const showAccessTokenWidget = orderRequiresAccountAccess(order) && order.assigned_booster_id === profile?.id
@@ -316,19 +317,12 @@ export function JobDetailPage() {
         )}
         onDrop={dropVisible ? () => setDropModalOpen(true) : undefined}
         dropDisabled={dropLimitReached}
-        dropTooltip="Limite de drops atingido."
+        dropTooltip="Limite de drops atingido. Fale com a equipe."
         primary={primaryAction}
       />
 
       {updateStatus.isError && (
-          <ErrorAlert message={(() => {
-            const code = updateStatus.error instanceof Error ? updateStatus.error.message : null
-            if (code === 'objective_not_reached') return 'Ainda faltam vitórias contratadas para marcar como concluído.'
-            if (code === 'no_matches_played') return 'Sincronize ao menos 1 partida deste pedido antes de marcar como concluído.'
-            if (code === 'clash_completion_window_closed') return 'Clash só pode ser marcado como concluído a partir das 23h.'
-            if (code === 'requires_rank_verification') return 'Use "Finalizar pedido" para acionar a verificação de rank via Riot API.'
-            return code ?? 'Erro ao atualizar status'
-          })()} />
+          <ErrorAlert message={updateStatus.error instanceof Error ? updateStatus.error.message : 'Erro ao atualizar status'} />
         )}
         {verifyRank.isError && (
           <ErrorAlert message={verifyRank.error instanceof Error ? verifyRank.error.message : 'Erro ao verificar rank'} />

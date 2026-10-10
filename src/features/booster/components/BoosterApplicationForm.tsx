@@ -1,3 +1,4 @@
+import { isValidCpf } from '@/lib/cpf'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -5,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button, Card } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { checkRateLimit, limits } from '@/lib/rateLimit'
 import { useOnboardBooster } from '@/api/boosters'
 
@@ -26,7 +27,7 @@ const PEAK_OPTIONS = [
 
 const schema = z.object({
   full_name:         z.string().min(3, 'Nome completo obrigatório'),
-  cpf:               z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, 'CPF inválido (ex: 000.000.000-00)'),
+  cpf:               z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, 'CPF inválido (ex: 000.000.000-00)').refine(isValidCpf, 'CPF inválido (confira os dígitos)'),
   opgg_link:         z.string().min(1, 'Link do OP.GG obrigatório').url('URL inválida'),
   bio:               z.string().min(1, 'Conte um pouco sobre você').max(256, 'Máximo 256 caracteres'),
   peak_tier:         z.enum(['grandmaster', 'challenger'], { error: 'Selecione seu rank de pico' }),

@@ -1,5 +1,5 @@
 import { FormField } from '@/components/ui/FormField'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { LANES, LANE_ICON_URL } from '@/lib/lolTaxonomy'
 import type { BoostMode } from '@/types'
 

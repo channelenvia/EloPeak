@@ -7,6 +7,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const supabaseUrl = env.VITE_SUPABASE_URL?.replace(/\/$/, '')
 
+  // Build de producao sem estas envs publica um site quebrado em silencio (suporte some, pagamento falha): avisa alto.
+  if (mode === 'production') {
+    for (const name of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_MP_PUBLIC_KEY', 'VITE_DISCORD_TICKET_URL']) {
+      if (!env[name]) console.warn(`\n[build] AVISO: ${name} nao definida - recurso correspondente fica indisponivel.\n`)
+    }
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

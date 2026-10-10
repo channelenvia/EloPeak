@@ -1,3 +1,4 @@
+import { boosterProfilePath } from '@/lib/boosterPath'
 import { Link } from 'react-router-dom'
 import { m } from 'framer-motion'
 import {
@@ -334,7 +335,7 @@ export function HomePage() {
                   viewport={{ once: true }} transition={{ duration: 0.4, delay: index * 0.08 }}
                 >
                   <Link
-                    to={`/boosters/${encodeURIComponent(booster.display_name)}`}
+                    to={boosterProfilePath(booster)}
                     className="card p-5 flex flex-col gap-4 h-full hover:shadow-card-hover hover:-translate-y-1 hover:border-brand/25 transition-all"
                   >
                     <div className="flex items-center gap-3">

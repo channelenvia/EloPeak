@@ -91,7 +91,9 @@ serve(async (req) => {
           if (preferredBooster?.discord_id) {
             await sendDirectMessage(preferredBooster.discord_id, buildExclusiveJobDM(order))
           }
-        } else if (CHANNEL_JOBS) {
+        } else {
+          // Sem canal configurado NAO marca como anunciado (o pedido ficaria sem aviso para sempre).
+          if (!CHANNEL_JOBS) throw new Error('DISCORD_CHANNEL_JOBS not configured')
           await sendChannelMessage(CHANNEL_JOBS, buildPublicJobEmbed(order))
         }
 

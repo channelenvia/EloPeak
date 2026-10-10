@@ -1,5 +1,6 @@
 import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { RouteError } from '@/components/RouteError'
 import { SuspensePage, RequireAuth } from './routeGuards'
 
 // Layouts (eager — pequenos, reutilizados em toda a sessão)
@@ -9,6 +10,7 @@ import { BoosterLayout } from '@/features/booster/BoosterLayout'
 import { AdminLayout } from '@/features/admin/AdminLayout'
 
 // Public pages
+const NotFoundPage     = lazy(() => import('@/features/public/pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
 const HomePage         = lazy(() => import('@/features/public/pages/HomePage').then(m => ({ default: m.HomePage })))
 const ServicesPage     = lazy(() => import('@/features/public/pages/ServicesPage').then(m => ({ default: m.ServicesPage })))
 const PricingPage      = lazy(() => import('@/features/public/pages/PricingPage').then(m => ({ default: m.PricingPage })))
@@ -51,11 +53,13 @@ const AdminPayoutsPage    = lazy(() => import('@/features/admin/pages/Payouts').
 const AdminRefundsPage    = lazy(() => import('@/features/admin/pages/Refunds').then(m => ({ default: m.AdminRefundsPage })))
 const AdminDropsPage      = lazy(() => import('@/features/admin/pages/Drops').then(m => ({ default: m.AdminDropsPage })))
 const AdminDuoAccountsPage = lazy(() => import('@/features/admin/pages/DuoAccounts').then(m => ({ default: m.AdminDuoAccountsPage })))
+const AdminReviewsPage    = lazy(() => import('@/features/admin/pages/Reviews').then(m => ({ default: m.AdminReviewsPage })))
 const AdminAuditLogPage   = lazy(() => import('@/features/admin/pages/AuditLog').then(m => ({ default: m.AdminAuditLogPage })))
 
 export const router = createBrowserRouter([
   // Public routes
   {
+    errorElement: <RouteError />,
     element: <PublicLayout />,
     children: [
       { path: '/',         element: <SuspensePage><HomePage /></SuspensePage> },
@@ -72,6 +76,7 @@ export const router = createBrowserRouter([
 
   // Booster signup transition — any authenticated user, no layout
   {
+    errorElement: <RouteError />,
     element: <RequireAuth />,
     children: [
       { path: '/apply', element: <SuspensePage><BoosterApplyPage /></SuspensePage> },
@@ -83,11 +88,12 @@ export const router = createBrowserRouter([
   // fluxo de senha). Nunca fica atrás de RequireGuest: a mesma tela precisa
   // continuar acessível logo após o retorno do OAuth, já autenticado, para
   // mostrar os checkboxes de termos e o botão de painel.
-  { path: '/login',    element: <SuspensePage><LoginPage /></SuspensePage> },
-  { path: '/register', element: <Navigate to="/login" replace /> },
+  { errorElement: <RouteError />, path: '/login',    element: <SuspensePage><LoginPage /></SuspensePage> },
+  { errorElement: <RouteError />, path: '/register', element: <Navigate to="/login" replace /> },
 
   // Customer routes
   {
+    errorElement: <RouteError />,
     element: <RequireAuth role="customer" />,
     children: [
       {
@@ -110,6 +116,7 @@ export const router = createBrowserRouter([
 
   // Booster routes
   {
+    errorElement: <RouteError />,
     element: <RequireAuth role="booster" />,
     children: [
       {
@@ -139,6 +146,7 @@ export const router = createBrowserRouter([
 
   // Admin routes
   {
+    errorElement: <RouteError />,
     element: <RequireAuth role="admin" />,
     children: [
       {
@@ -156,6 +164,7 @@ export const router = createBrowserRouter([
           { path: '/admin/refunds',      element: <SuspensePage><AdminRefundsPage /></SuspensePage> },
           { path: '/admin/reviews',      element: <Navigate to="/admin" replace /> },
           { path: '/admin/audit',        element: <SuspensePage><AdminAuditLogPage /></SuspensePage> },
+          { path: '/admin/reviews',      element: <SuspensePage><AdminReviewsPage /></SuspensePage> },
           // Catálogo de serviços/preços passou a ser gerido só pelo sistema (fórmulas
           // em shared/pricing.ts + migrations) — sem UI de admin dedicada.
           { path: '/admin/services',     element: <Navigate to="/admin" replace /> },
@@ -170,5 +179,5 @@ export const router = createBrowserRouter([
   },
 
   // Fallback
-  { path: '*', element: <Navigate to="/" replace /> },
+  { path: '*', element: <SuspensePage><NotFoundPage /></SuspensePage> },
 ])

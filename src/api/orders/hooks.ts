@@ -6,13 +6,13 @@ import type { OrderStatus, ServiceType } from '@/types'
 import { secondsRemaining } from './cooldown'
 import {
   getAdminOrderTabCounts, getBoosterOrder, getBoosterOrderTabCounts, getBoosterSlotInfo, getCustomerOrderState, getCustomerOrderTabCounts, getOrder, getOrderCustomerNickname,
-  getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getOrderPaymentInfo, getPendingDropRequest,
+  getOrderDuoAccountHistory, getOrderDuoPartnerRiotId, getOrderPaidAmount, getOrderPaymentInfo, getOrderSettlementPreview, getPendingDropRequest,
   listAdminOrders, listAvailableJobs, listBoosterOrdersPage, listCustomerOrders, listOrderBoosterDuoMatches, listOrderCoachingTopics,
   listOrderMatches, listOrderStatusHistory, listBoosterActiveOrders, listBoosterCompletedOrdersSince,
 } from './queries'
 import {
-  acceptBoostOrder, addOrderCoachingTopic, adminCancelManualRefund, adminConfirmManualRefund, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
-  confirmOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
+  acceptBoostOrder, addOrderCoachingTopic, adminCancelManualRefund, adminCancelPaidOrder, adminConfirmManualRefund, adminCreateManualRefund, adminDropOrder, adminFlagOrderUnderReview, adminOverrideOrderStatus, adminReassignBooster, cancelPendingOrder,
+  confirmOrderCompletion, disputeOrderCompletion, generatePix, requestCustomerOrderDrop, requestOrderDrop,
   revealOrderCredentials, setOrderCoachingTopicDone, setOrderCredentials, syncOrderMatches,
   updateOrderStatus, verifyOrderRank,
 } from './mutations'
@@ -348,9 +348,22 @@ export function useBoosterSlotInfo(boosterId: string | undefined, enabled: boole
   })
 }
 
+// Uma acao sobre o pedido muda tambem listas, abas com contadores e vagas do booster: invalida tudo isso junto
+// (antes so o detalhe e o estado, e as listas ficavam velhas ate o proximo poll).
+const ORDER_LIST_KEYS = [
+  ['orders', 'customer'], ['orders', 'booster'], ['orders', 'admin'],
+  ['orders', 'customer-tab-counts'], ['orders', 'booster-tab-counts'], ['orders', 'admin-tab-counts'],
+  ['orders', 'booster-active'], ['orders', 'available-jobs'], ['boosters', 'slots'],
+] as const
+
+function invalidateOrderLists(queryClient: ReturnType<typeof useQueryClient>) {
+  for (const queryKey of ORDER_LIST_KEYS) void queryClient.invalidateQueries({ queryKey })
+}
+
 function invalidateOrder(queryClient: ReturnType<typeof useQueryClient>, orderId: string) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId) })
   void queryClient.invalidateQueries({ queryKey: queryKeys.orders.state(orderId) })
+  invalidateOrderLists(queryClient)
 }
 
 export function useSetOrderCredentials(orderId: string) {
@@ -365,6 +378,14 @@ export function useConfirmOrderCompletion(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => confirmOrderCompletion(orderId),
+    onSuccess: () => invalidateOrder(queryClient, orderId),
+  })
+}
+
+export function useDisputeOrderCompletion(orderId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) => disputeOrderCompletion({ orderId, reason }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
 }
@@ -423,6 +444,22 @@ export function useAdminFlagOrderUnderReview(orderId: string) {
 // formulário (não estamos na página do pedido), então invalida usando o
 // orderId que veio nas variables do próprio mutate(). A lista de reembolsos
 // (queryKeys.admin.refunds()) já se atualiza sozinha via realtime.
+export function useOrderSettlementPreview(orderId: string | undefined, coachingPct?: number) {
+  return useQuery({
+    queryKey: ['orders', 'settlement-preview', orderId ?? '', coachingPct ?? null],
+    queryFn: () => getOrderSettlementPreview(orderId!, coachingPct),
+    enabled: !!orderId,
+  })
+}
+
+export function useAdminCancelPaidOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminCancelPaidOrder,
+    onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
+  })
+}
+
 export function useAdminCreateManualRefund() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -482,11 +519,7 @@ export function useAcceptBoostOrder() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: acceptBoostOrder,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.availableJobs() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.slots() })
-      void queryClient.invalidateQueries({ queryKey: ['orders', 'booster'] })
-    },
+    onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
 }
 
@@ -499,7 +532,13 @@ export function useGeneratePix(orderId: string) {
 }
 
 export function useCancelPendingOrder() {
-  return useMutation({ mutationFn: cancelPendingOrder })
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: cancelPendingOrder,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+    },
+  })
 }
 
 export function useSyncOrderMatches(orderId: string) {

@@ -6,7 +6,7 @@ import { callRpc } from '@/api/core/rpc'
 export async function resolveDropRequest(params: { requestId: string; approve: boolean; adminNote?: string; coachingCompletionPct?: number }) {
   return callRpc('resolve_drop_request', {
     p_request_id: params.requestId, p_approve: params.approve, p_admin_note: params.adminNote,
-    p_coaching_completion_pct: params.coachingCompletionPct ?? null,
+    p_coaching_completion_pct: params.coachingCompletionPct ?? undefined,
   }, {
     order_not_found_or_unassigned: 'Não foi possível calcular o valor do drop -- pedido não encontrado ou sem booster atribuído.',
     missing_rank_data: 'Este pedido está sem rank atual/alvo definido -- não é possível calcular o valor do drop.',
@@ -27,5 +27,6 @@ export async function adminAdjustBoosterBalance(params: { boosterId: string; amo
     booster_not_found: 'Booster não encontrado.',
     invalid_amount: 'Informe um valor diferente de zero.',
     invalid_reason: 'O motivo precisa ter pelo menos 10 caracteres.',
+    cannot_adjust_own_balance: 'Você não pode ajustar o seu próprio saldo. Peça a outro admin.',
   }) as Promise<{ success: boolean; error?: string; new_balance?: number }>
 }

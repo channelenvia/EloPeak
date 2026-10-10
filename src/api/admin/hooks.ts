@@ -27,7 +27,11 @@ export function useAdminAdjustBoosterBalance() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminAdjustBoosterBalance,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() })
+      // O ajuste mexe no saldo do booster (cards de totais, extrato e saques).
+      void queryClient.invalidateQueries({ queryKey: ['payouts'] })
+    },
   })
 }
 

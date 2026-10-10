@@ -45,6 +45,8 @@ export interface PixPaymentResponse {
   qr_code?: string
   qr_code_base64?: string | null
   expires_at: string
+  /** Horario do servidor na resposta: base para corrigir relogio local errado no contador do PIX. */
+  server_time?: string
   reused?: boolean
   saved?: boolean
 }

@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Sistema de superfícies funcionais — 7 tipos com um propósito cada. Toda
 // variante carrega a classe base "card"/"card-raised"/"card-glass"/

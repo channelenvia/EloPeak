@@ -11,3 +11,16 @@ export function localDateParts(date: Date, timeZone: string): { y: number; m: nu
   const hour = get('hour')
   return { y: get('year'), m: get('month'), d: get('day'), h: hour === 24 ? 0 : hour }
 }
+
+export const APP_TIMEZONE = 'America/Sao_Paulo'
+
+// Date cujos campos LOCAIS (getHours, getDate...) mostram o relogio de parede de America/Sao_Paulo.
+// Serve so para formatar/derivar dia da semana; nao representa o mesmo instante.
+export function toAppZoneWallClock(date: Date): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+  return new Date(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+}

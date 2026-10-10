@@ -57,7 +57,7 @@ export interface UpdateProfessionalProfileParams {
 // booster_performance_segments com o rank/nome/avatar já anexados.
 export interface TopBoosterEntry {
   booster_id: string
-  /** booster_profiles.id (PK própria) -- não usar pra linkar /boosters/:displayName, que usa display_name. */
+  /** booster_profiles.id (PK própria) -- não usar pra linkar o perfil público: a URL /boosters/:ref usa o display_name. */
   booster_profile_id: string
   display_name: string
   avatar_url: string | null

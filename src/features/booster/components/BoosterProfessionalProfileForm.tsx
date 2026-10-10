@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useOwnProfessionalProfile, useUpdateProfessionalProfile } from '@/api/boosters'
 
 const DAYS = [

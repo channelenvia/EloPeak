@@ -9,6 +9,7 @@ import { isMasterPlusCurrentTier, isDuoBlockedAtTier } from '@/lib/boostDomain'
 import { Info, Check } from 'lucide-react'
 import { RiotIdField } from './RiotIdField'
 import { useRiotLookup } from './useRiotLookup'
+import { DeclaredRankNotice, ManualRankOfferCard } from './ManualRankOfferCard'
 import { useBuilderPricing } from './useBuilderPricing'
 import { CoachPackagePicker } from './CoachPackagePicker'
 import { ClashConfigPicker } from './ClashConfigPicker'
@@ -23,7 +24,7 @@ export function StepConfigure() {
     isMd5, md5MatchesRemaining,
     currentLp, avgLpGain,
     currentPdl, avgPdlGain,
-    riotId, riotAutoFilled, riotVerified, riotLookupLoading, stepAttempted,
+    riotId, riotAutoFilled, riotVerified, riotLookupLoading, stepAttempted, rankDeclared,
     customerLanes, setCustomerLanes,
     setCurrentRank, setTargetRank, setQueueType, setBoostMode,
     setWinsPurchased,
@@ -51,8 +52,8 @@ export function StepConfigure() {
     : false
   const eloDuoBlocked = eloDuoBlockedByCurrent || eloDuoBlockedByTarget
   const {
-    riotLookupMessage, riotLookupError, md5Message, unrankedOffer,
-    resetLookupMessages, lookupRiotRank, lookupForWinBoost, migrateToMd5,
+    riotLookupMessage, riotLookupError, md5Message, unrankedOffer, manualRankOffer,
+    resetLookupMessages, lookupRiotRank, lookupForWinBoost, migrateToMd5, declareRankManually,
   } = useRiotLookup()
 
   // Grão-Mestre só tem um destino válido (Challenger) — a interface pode
@@ -231,6 +232,10 @@ export function StepConfigure() {
           </div>
         )}
 
+        {(serviceType === 'elo_boost' || serviceType === 'win_boost') && !riotVerified && manualRankOffer && (
+          <ManualRankOfferCard onDeclare={declareRankManually} />
+        )}
+
         {/* Riot ID com largura máxima na linha, igual ao fluxo de Elo Boost
             acima -- a consulta usa a fila marcada no seletor embutido no
             campo, e a checagem de elegibilidade MD5 precisa acontecer antes
@@ -274,13 +279,14 @@ export function StepConfigure() {
                   selectedTier={currentRank?.tier ?? null}
                   selectedDivision={currentRank?.division ?? null}
                   onChange={(tier, division) => setCurrentRank({ tier, division })}
-                  disabled={serviceType === 'win_boost' || riotAutoFilled}
+                  disabled={(serviceType === 'win_boost' && !rankDeclared) || riotAutoFilled}
                 />
                 {stepAttempted && !currentRank ? (
                   <p className="text-xs text-danger">Selecione um rank</p>
                 ) : isMd5 ? (
                   <p className="text-xs text-ink-muted">Sem LP — apenas o rank da temporada anterior.</p>
                 ) : null}
+                {rankDeclared && <DeclaredRankNotice pastSeason={isMd5} />}
               </div>
 
               {/* ── Vitórias/Partidas column ── */}
@@ -331,11 +337,12 @@ export function StepConfigure() {
                   selectedTier={currentRank?.tier ?? null}
                   selectedDivision={currentRank?.division ?? null}
                   onChange={(tier, division) => setCurrentRank({ tier, division })}
-                  disabled
+                  disabled={!rankDeclared}
                 />
                 {stepAttempted && !currentRank && (
                   <p className="text-xs text-danger">Selecione um rank</p>
                 )}
+                {rankDeclared && <DeclaredRankNotice />}
 
                 {/* PDL Atual — mesmo cartão para os dois fluxos, só trocando
                     quais campos do estado ficam ligados a cada input. Master+
@@ -345,12 +352,12 @@ export function StepConfigure() {
                   <Card variant="inset" padding="xs" className="space-y-3">
                     {currentIsMasterPlus ? (
                       <PdlFieldRow fields={[
-                        { label: 'PDL Atual', value: currentPdl, min: 0, max: 9999, onChange: setCurrentPdl, disabled: true },
+                        { label: 'PDL Atual', value: currentPdl, min: 0, max: 9999, onChange: setCurrentPdl, disabled: !rankDeclared },
                         { label: 'Média PDL', value: avgPdlGain, min: 1, max: 99, onChange: setAvgPdlGain, disabled: true },
                       ]} />
                     ) : (
                       <PdlFieldRow fields={[
-                        { label: 'PDL Atual', value: currentLp, min: 0, max: 99, onChange: setCurrentLp, disabled: true },
+                        { label: 'PDL Atual', value: currentLp, min: 0, max: 99, onChange: setCurrentLp, disabled: !rankDeclared },
                         { label: 'Média PDL', value: avgLpGain, min: 1, max: 50, onChange: setAvgLpGain, disabled: true },
                       ]} />
                     )}

@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Banknote, CheckCircle2, Clock3, FileText, ShieldCheck, Upload, XCircle } from 'lucide-react'
 import { Button, Card, EmptyState, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
-import { cn, formatDateTime, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
+import { cn, formatDateTime, maskCpf, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -257,7 +257,7 @@ export function AdminPayoutsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink text-sm truncate">{row.booster_legal_name_snapshot ?? '—'}</p>
-                  <p className="text-xs text-ink-muted" data-tabular>{row.booster_cpf_snapshot ?? '—'}</p>
+                  <p className="text-xs text-ink-muted" data-tabular>{maskCpf(row.booster_cpf_snapshot)}</p>
                 </div>
                 <StatusBadge status={row.status} />
               </div>

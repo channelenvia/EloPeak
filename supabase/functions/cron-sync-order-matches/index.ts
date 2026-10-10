@@ -13,6 +13,8 @@ const SYNC_INTERVAL_MS = 30 * 60 * 1000
 // só entra no próximo tick (cron roda de 30 em 30 min, ver migration de
 // agendamento) -- upgrade: paginar ou encurtar o intervalo do cron.
 const MAX_ORDERS_PER_RUN = 200
+// Orcamento de tempo do tick: para antes do limite da funcao e deixa o resto para o proximo tick.
+const RUN_TIME_BUDGET_MS = 100_000
 
 // Varre TODO pedido em status sincronizável sem sync há mais de 30min (ou
 // nunca sincronizado) e roda o mesmo core de sync-order-matches/index.ts pra
@@ -31,6 +33,7 @@ serve(async (req) => {
   })
   if (!auth.ok) return auth.response
 
+  const startedAt = Date.now()
   const db = supabaseAdmin()
   const cutoffIso = new Date(Date.now() - SYNC_INTERVAL_MS).toISOString()
 
@@ -40,7 +43,9 @@ serve(async (req) => {
     .in('status', ['in_progress', 'paused', 'drop_requested'])
     .not('riot_id', 'is', null)
     .or(`last_match_synced_at.is.null,last_match_synced_at.lt.${cutoffIso}`)
-    .order('last_match_synced_at', { ascending: true, nullsFirst: true })
+    // Pela ultima TENTATIVA: pedido que nunca sincroniza (Riot ID errado) vai para o fim da fila em vez de travar o topo.
+    .or(`last_match_sync_attempt_at.is.null,last_match_sync_attempt_at.lt.${cutoffIso}`)
+    .order('last_match_sync_attempt_at', { ascending: true, nullsFirst: true })
     .limit(MAX_ORDERS_PER_RUN)
 
   if (error) {
@@ -54,6 +59,9 @@ serve(async (req) => {
   let abortedByRiotRateLimit = false
 
   for (const order of (dueOrders ?? []) as OrderForMatchSync[]) {
+    if (Date.now() - startedAt > RUN_TIME_BUDGET_MS) break
+    // Marca a tentativa ANTES de sincronizar: falha, skip ou excecao tambem avancam a fila.
+    await db.from('orders').update({ last_match_sync_attempt_at: new Date().toISOString() }).eq('id', order.id)
     try {
       const outcome = await syncOrderMatches(order, db)
       if (outcome.status === 503) {

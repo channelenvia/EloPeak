@@ -1,22 +1,18 @@
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { LiveDot } from '@/components/ui/Badge'
 import { ShoppingBag, Users, TrendingUp } from 'lucide-react'
 import { Card, OrderStatusBadge, Skeleton, StatCard, ErrorAlert } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
 import { Link } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDashboardStats } from '@/api/admin'
 
 // Cores do gráfico lidas dos mesmos tokens usados no resto do app (ver
 // globals.css) em vez de hex cravado -- Recharts não consegue ler classes
 // Tailwind, mas aceita qualquer string CSS válida, incluindo rgb(var(...)).
-const CHART_INK_MUTED = 'rgb(var(--color-ink-muted))'
-const CHART_INK = 'rgb(var(--color-ink))'
-const CHART_SURFACE = 'rgb(var(--color-bg-surface))'
-const CHART_BORDER = 'rgb(var(--color-border-subtle))'
-const CHART_BRAND = 'rgb(var(--color-brand))'
+
+const WeeklyOrdersChart = lazy(() => import('../components/WeeklyOrdersChart'))
 
 export function AdminOverview() {
   const { data: stats, isLoading, isError } = useAdminDashboardStats()
@@ -89,17 +85,9 @@ export function AdminOverview() {
         <Card variant="operational" padding="md" className="flex flex-col">
           <h3 className="text-sm font-semibold text-ink mb-3">Pedidos Esta Semana</h3>
           <div className="flex-1 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: CHART_INK_MUTED }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: CHART_INK_MUTED }} />
-                <Tooltip
-                  contentStyle={{ background: CHART_SURFACE, border: `1px solid ${CHART_BORDER}`, borderRadius: '0.75rem' }}
-                  labelStyle={{ color: CHART_INK, fontSize: 12 }}
-                />
-                <Bar dataKey="orders" fill={CHART_BRAND} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<Skeleton className="h-[220px] w-full" />}>
+              <WeeklyOrdersChart data={chartData} />
+            </Suspense>
           </div>
           <p className="sr-only">
             Pedidos por dia na última semana: {chartData.map((d) => `${d.day}: ${d.orders}`).join(', ')}.

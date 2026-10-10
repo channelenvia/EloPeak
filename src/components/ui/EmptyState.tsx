@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { Button } from './Button'
 import type { LucideIcon } from 'lucide-react'
 import { Inbox } from 'lucide-react'

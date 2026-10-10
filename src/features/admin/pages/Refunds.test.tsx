@@ -17,6 +17,7 @@ vi.mock('@/api/admin', () => ({
 }))
 vi.mock('@/api/orders', () => ({
   useOrder: () => ({ data: null, isFetching: false }),
+  useOrderSettlementPreview: () => ({ data: null, isFetching: false }),
   useAdminCreateManualRefund: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useAdminConfirmManualRefund: vi.fn(),
   useAdminCancelManualRefund: vi.fn(),

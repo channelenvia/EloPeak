@@ -1,4 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { fetchWithTimeout } from './http.ts'
+import { supabaseAdmin } from './supabaseAdmin.ts'
+import { alertAdmins } from './adminAlert.ts'
 import { rankStep, type RankTier, type Division } from '../../../shared/pricing.ts'
 
 // Cap curto e único retry: a Riot devolve 429 com Retry-After em segundos.
@@ -10,12 +13,139 @@ import { rankStep, type RankTier, type Division } from '../../../shared/pricing.
 // normalmente (ver os `if (resp.status === 429)` logo depois de cada chamada).
 const MAX_RETRY_AFTER_SECONDS = 5
 
+// Orcamento da chave compartilhada (checkout, verify, sync e crons), em camadas, na janela de 2 min:
+//  1. cota por usuario (impede que 1 conta esgote o balde de todos);
+//  2. teto das chamadas interativas (preview/checkout/avaliacao), que deixa folga para sync e verify;
+//  3. balde global.
+// consume_edge_rate_limit conta mesmo quando nega: sob saturacao o usuario fica travado ate a janela (2 min) virar.
+// Chamada negada numa camada nao gasta as seguintes. Falha aberto se o contador estiver indisponivel.
+const RIOT_BUDGET_WINDOW_SECONDS = 120
+const RIOT_USER_LIMIT: Record<RiotCallTier, number> = { interactive: 30, priority: 60 }
+const RIOT_INTERACTIVE_LIMIT = 60
+const RIOT_GLOBAL_LIMIT = 90
+
+export type RiotCallTier = 'interactive' | 'priority'
+interface RiotCallContext { userId?: string; tier: RiotCallTier }
+
+// Sem contexto = comportamento antigo (so o balde global, prioridade alta).
+const riotContext = new AsyncLocalStorage<RiotCallContext>()
+
+/** @public usado pelos testes Deno. Marca as chamadas Riot feitas dentro de `fn` com o usuario e a prioridade (interactive = preview/checkout; priority = sync/verify/cron). */
+export function withRiotContext<T>(ctx: RiotCallContext, fn: () => Promise<T>): Promise<T> {
+  return riotContext.run(ctx, fn)
+}
+
+/** Marca o resto desta requisicao (inclusive tarefas em segundo plano que ela dispara). Chamar logo apos autenticar. */
+export function enterRiotContext(ctx: RiotCallContext): void {
+  riotContext.enterWith(ctx)
+}
+
+type BudgetConsumer = (scope: string, subject: string, limit: number) => Promise<boolean>
+
+const dbBudgetConsumer: BudgetConsumer = async (scope, subject, limit) => {
+  const { data, error } = await supabaseAdmin().rpc('consume_edge_rate_limit', {
+    p_scope: scope, p_subject: subject, p_limit: limit, p_window_seconds: RIOT_BUDGET_WINDOW_SECONDS,
+  })
+  // Falha aberto, mas visivel: limitador quebrado nao pode passar em silencio.
+  if (error) console.error('riot budget limiter failed', scope, error.message)
+  return (data as { allowed?: boolean } | null)?.allowed !== false
+}
+
+let budgetConsumer: BudgetConsumer = dbBudgetConsumer
+
+/** @public usado pelos testes Deno (o knip nao os enxerga) */
+export function setRiotBudgetConsumerForTests(consumer: BudgetConsumer | null): void {
+  budgetConsumer = consumer ?? dbBudgetConsumer
+}
+
+async function riotBudgetAvailable(): Promise<boolean> {
+  const ctx = riotContext.getStore() ?? { tier: 'priority' as const }
+  try {
+    if (ctx.userId && !await budgetConsumer('riot-user', ctx.userId, RIOT_USER_LIMIT[ctx.tier])) return false
+    if (ctx.tier === 'interactive' && !await budgetConsumer('riot-interactive', 'all', RIOT_INTERACTIVE_LIMIT)) return false
+    return await budgetConsumer('riot-global', 'all', RIOT_GLOBAL_LIMIT)
+  } catch {
+    return true
+  }
+}
+
+
+// ── Cache curto por conta (H-27) ─────────────────────────────────────────────
+// So checkout/preview passam cacheTtlSeconds; sync de partidas nunca usa (precisa do LP/rank fresco).
+// Falha do cache nunca derruba a consulta.
+interface RiotCacheStore {
+  get(key: string): Promise<unknown | null>
+  set(key: string, value: unknown, ttlSeconds: number): Promise<void>
+}
+
+const dbCacheStore: RiotCacheStore = {
+  async get(key) {
+    const { data } = await supabaseAdmin().from('riot_lookup_cache')
+      .select('payload').eq('cache_key', key).gt('expires_at', new Date().toISOString()).maybeSingle()
+    return data?.payload ?? null
+  },
+  async set(key, value, ttlSeconds) {
+    await supabaseAdmin().from('riot_lookup_cache').upsert({
+      cache_key: key, payload: value, expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+    })
+  },
+}
+
+let cacheStore: RiotCacheStore = dbCacheStore
+
+/** @public usado pelos testes Deno (o knip nao os enxerga) */
+export function setRiotCacheStoreForTests(store: { get(key: string): Promise<unknown | null>; set(key: string, value: unknown): Promise<void> } | null): void {
+  cacheStore = store ?? dbCacheStore
+}
+
+export interface RiotCacheOptions { cacheTtlSeconds?: number }
+
+async function readThroughCache<T extends { ok: boolean }>(
+  key: string, ttlSeconds: number | undefined, fetcher: () => Promise<T>,
+): Promise<T> {
+  if (!ttlSeconds || ttlSeconds <= 0) return fetcher()
+  try {
+    const hit = await cacheStore.get(key)
+    if (hit) return hit as T
+  } catch { /* cache indisponivel: segue sem ele */ }
+  const result = await fetcher()
+  if (result.ok) {
+    try { await cacheStore.set(key, result, ttlSeconds) } catch { /* idem */ }
+  }
+  return result
+}
+
+const TRANSIENT_RETRY_DELAY_MS = 400
+
+// Timeout/queda de rede (AbortError, TypeError) viram 504 em vez de excecao: os chamadores ja mapeiam status >= 500 para upstream_error.
+async function fetchRiotSafely(input: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
+  try {
+    return await fetchWithTimeout(input, init, timeoutMs)
+  } catch {
+    return new Response(null, { status: 504 })
+  }
+}
+
 async function fetchRiotWithRetry(
   input: string,
   init: RequestInit,
   timeoutMs?: number,
 ): Promise<Response> {
-  const resp = await fetchWithTimeout(input, init, timeoutMs)
+  if (!await riotBudgetAvailable()) {
+    return new Response(null, { status: 429, headers: { 'retry-after': String(MAX_RETRY_AFTER_SECONDS) } })
+  }
+  let resp = await fetchRiotSafely(input, init, timeoutMs)
+  // 5xx/timeout/rede: uma nova tentativa curta antes de desistir.
+  if (resp.status >= 500) {
+    await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
+    resp = await fetchRiotSafely(input, init, timeoutMs)
+  }
+  // Chave invalida/expirada (a de desenvolvimento expira em 24 h) e incidente, nao "erro generico".
+  if (resp.status === 401 || resp.status === 403) {
+    void alertAdmins('riot_key_invalid', 'Chave da Riot recusada',
+      `A Riot respondeu ${resp.status}: a RIOT_API_KEY pode ter expirado. Checkout, verificacao de rank e sync de partidas ficam indisponiveis ate trocar a chave.`,
+      { status: resp.status }, 60)
+  }
   if (resp.status !== 429) return resp
 
   const retryAfterSeconds = Math.min(
@@ -23,8 +153,9 @@ async function fetchRiotWithRetry(
     Math.max(1, Number(resp.headers.get('retry-after')) || 1),
   )
   await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
-  return fetchWithTimeout(input, init, timeoutMs)
+  return fetchRiotSafely(input, init, timeoutMs)
 }
+
 
 export const RIOT_TIER_MAP: Record<string, RankTier> = {
   IRON: 'iron', BRONZE: 'bronze', SILVER: 'silver', GOLD: 'gold',
@@ -70,6 +201,16 @@ export async function fetchRiotAccount(
   riotId: string,
   apiKey: string,
   regionalRoute: string,
+  options: RiotCacheOptions = {},
+): Promise<RiotAccountResult> {
+  return readThroughCache(`acct:${regionalRoute}:${riotId.trim().toLowerCase()}`, options.cacheTtlSeconds,
+    () => fetchRiotAccountUncached(riotId, apiKey, regionalRoute))
+}
+
+async function fetchRiotAccountUncached(
+  riotId: string,
+  apiKey: string,
+  regionalRoute: string,
 ): Promise<RiotAccountResult> {
   const hashIdx = riotId.lastIndexOf('#')
   const gameName = riotId.slice(0, hashIdx)
@@ -104,9 +245,19 @@ export interface LeagueEntry {
 
 export type LeagueEntriesResult =
   | { ok: true; entries: LeagueEntry[] }
-  | { ok: false; reason: 'rate_limited' | 'upstream_error'; status: number }
+  | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'wrong_region'; status: number }
 
 export async function fetchLeagueEntries(
+  puuid: string,
+  apiKey: string,
+  platformRoute: string,
+  options: RiotCacheOptions = {},
+): Promise<LeagueEntriesResult> {
+  return readThroughCache(`league:${platformRoute}:${puuid}`, options.cacheTtlSeconds,
+    () => fetchLeagueEntriesUncached(puuid, apiKey, platformRoute))
+}
+
+async function fetchLeagueEntriesUncached(
   puuid: string,
   apiKey: string,
   platformRoute: string,
@@ -118,7 +269,18 @@ export async function fetchLeagueEntries(
   if (resp.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
   if (!resp.ok) return { ok: false, reason: 'upstream_error', status: resp.status }
   const entries = await resp.json() as LeagueEntry[]
-  return { ok: true, entries: Array.isArray(entries) ? entries : [] }
+  const list = Array.isArray(entries) ? entries : []
+  if (list.length > 0) return { ok: true, entries: list }
+
+  // Sem rank: conta nova no servidor ou conta de OUTRO servidor (NA/LAS). So o summoner na plataforma distingue.
+  const summoner = await fetchRiotWithRetry(
+    `https://${platformRoute}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`,
+    { headers: { 'X-Riot-Token': apiKey } },
+  )
+  if (summoner.status === 404) return { ok: false, reason: 'wrong_region', status: 400 }
+  if (summoner.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
+  if (!summoner.ok) return { ok: false, reason: 'upstream_error', status: summoner.status }
+  return { ok: true, entries: [] }
 }
 
 export const RIOT_QUEUE_TYPE: Record<'solo_duo' | 'flex', { leagueQueue: string; matchQueueId: number }> = {
@@ -156,7 +318,10 @@ export async function fetchRankOrdinal(
   leagueQueue: string,
 ): Promise<RankOrdinalResult> {
   const result = await fetchLeagueEntries(puuid, apiKey, platformRoute)
-  if (!result.ok) return result
+  if (!result.ok) {
+    if (result.reason === 'wrong_region') return { ok: false, reason: 'upstream_error', status: 502 }
+    return { ok: false, reason: result.reason, status: result.status }
+  }
   const entry = result.entries.find((e) => e.queueType === leagueQueue)
   const tier = entry?.tier ? RIOT_TIER_MAP[entry.tier] : undefined
   if (!tier) return { ok: false, reason: 'not_ranked', status: 404 }
@@ -258,11 +423,6 @@ export async function fetchLeagueCutoff(
   const sortedDesc = [...points].sort((a, b) => b - a)
   const cutoffIndex = Math.min(sortedDesc.length - 1, Math.floor(sortedDesc.length * CUTOFF_PERCENTILE))
   const cutoffLp = sortedDesc[cutoffIndex]
-  console.log(
-    'riot-league-cutoffs computed', tier, queue,
-    'entries', entries.length, 'active', active.length,
-    'cutoffLp', cutoffLp, 'min', sortedDesc[sortedDesc.length - 1], 'max', sortedDesc[0],
-  )
 
   return { ok: true, cutoffLp }
 }
@@ -344,23 +504,34 @@ export async function fetchRankedMatchIdsThisSplit(
 // Mais recentes primeiro (ordem nativa da Match-V5) — startTime em epoch
 // segundos, sempre orders.match_sync_started_at, nunca partidas anteriores
 // ao início do boost.
+const MATCH_IDS_PAGE_SIZE = 100
+const MATCH_IDS_MAX_PAGES = 3 // teto de seguranca: 300 partidas por sync
+
 export async function fetchMatchIdsSince(
   puuid: string,
   apiKey: string,
   regionalRoute: string,
   matchQueueId: number,
   startTimeEpochSeconds: number,
-  count = 20,
+  count = MATCH_IDS_PAGE_SIZE,
 ): Promise<MatchIdsResult> {
-  const resp = await fetchRiotWithRetry(
-    `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
-    + `?queue=${matchQueueId}&startTime=${startTimeEpochSeconds}&count=${count}`,
-    { headers: { 'X-Riot-Token': apiKey } },
-  )
-  if (resp.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
-  if (!resp.ok) return { ok: false, reason: 'upstream_error', status: resp.status }
-  const matchIds = await resp.json() as string[]
-  return { ok: true, matchIds: Array.isArray(matchIds) ? matchIds : [] }
+  // Pagina de `count` em `count`: pedir so as 20 mais recentes perdia as antigas quando o pedido ficava sem sync.
+  const all: string[] = []
+  for (let page = 0; page < MATCH_IDS_MAX_PAGES; page++) {
+    const resp = await fetchRiotWithRetry(
+      `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
+      + `?queue=${matchQueueId}&startTime=${startTimeEpochSeconds}&start=${page * count}&count=${count}`,
+      { headers: { 'X-Riot-Token': apiKey } },
+    )
+    // Falha no meio da paginacao nunca devolve uma lista parcial como se fosse completa.
+    if (resp.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
+    if (!resp.ok) return { ok: false, reason: 'upstream_error', status: resp.status }
+    const ids = await resp.json() as string[]
+    const pageIds = Array.isArray(ids) ? ids : []
+    all.push(...pageIds)
+    if (pageIds.length < count) break
+  }
+  return { ok: true, matchIds: all }
 }
 
 export interface MatchDetail {
@@ -402,6 +573,14 @@ export function isRemakeMatch(body: RiotMatchV5Body): boolean {
 // resultado não tem sentido (toda partida real tem timePlayed ≈ gameDuration
 // pra todo mundo, um jogador só ficando "menos tempo" no meio de uma partida
 // de verdade não significa que ele causou nada).
+// Duo so conta se a conta registrada jogou no MESMO time do cliente (estar na partida, de qualquer lado, nao basta).
+export function onSameTeam(body: RiotMatchV5Body, puuidA: string, puuidB: string): boolean {
+  const participants = body.info?.participants ?? []
+  const a = participants.find((p) => p.puuid === puuidA)
+  const b = participants.find((p) => p.puuid === puuidB)
+  return a?.teamId != null && b?.teamId != null && a.teamId === b.teamId
+}
+
 export function causedRemake(body: RiotMatchV5Body, puuid: string): boolean {
   if (!isRemakeMatch(body)) return false
   const gameDuration = body.info!.gameDuration!
@@ -512,4 +691,43 @@ export async function fetchMatchBody(
 
   const body = await resp.json() as RiotMatchV5Body
   return { ok: true, body }
+}
+
+// ── Verificacao de elo declarado (rankAssessment) ───────────────────────────
+
+export type SummonerLevelResult =
+  | { ok: true; level: number }
+  | { ok: false; reason: 'rate_limited' | 'upstream_error' | 'not_found'; status: number }
+
+export async function fetchSummonerLevel(puuid: string, apiKey: string, platformRoute: string): Promise<SummonerLevelResult> {
+  const resp = await fetchRiotWithRetry(
+    `https://${platformRoute}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`,
+    { headers: { 'X-Riot-Token': apiKey } },
+  )
+  if (resp.status === 404) return { ok: false, reason: 'not_found', status: 404 }
+  if (resp.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
+  if (!resp.ok) return { ok: false, reason: 'upstream_error', status: resp.status }
+  const body = await resp.json() as { summonerLevel?: number }
+  return typeof body.summonerLevel === 'number' ? { ok: true, level: body.summonerLevel } : { ok: false, reason: 'upstream_error', status: 502 }
+}
+
+// Partidas ranqueadas num intervalo [startTime, endTime] (epoch segundos), mais recentes primeiro.
+export async function fetchRankedMatchIdsInWindow(
+  puuid: string,
+  apiKey: string,
+  regionalRoute: string,
+  matchQueueId: number,
+  startTimeEpochSeconds: number,
+  endTimeEpochSeconds: number,
+  count = 20,
+): Promise<MatchIdsResult> {
+  const resp = await fetchRiotWithRetry(
+    `https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`
+    + `?queue=${matchQueueId}&startTime=${startTimeEpochSeconds}&endTime=${endTimeEpochSeconds}&count=${count}`,
+    { headers: { 'X-Riot-Token': apiKey } },
+  )
+  if (resp.status === 429) return { ok: false, reason: 'rate_limited', status: 429 }
+  if (!resp.ok) return { ok: false, reason: 'upstream_error', status: resp.status }
+  const ids = await resp.json() as string[]
+  return { ok: true, matchIds: Array.isArray(ids) ? ids : [] }
 }

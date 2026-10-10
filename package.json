@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "tsc -b && vite build --configLoader runner",
@@ -10,11 +13,11 @@
     "preview": "vite preview",
     "supabase:start": "supabase start",
     "supabase:migrations:list": "supabase migration list --linked",
-    "supabase:schema:dump": "supabase db dump --linked --schema public --file supabase/schema/current_public_schema.sql",
+    "test:db": "supabase test db",
     "functions:serve": "supabase functions serve --env-file ./supabase/functions/.env.local --no-verify-jwt",
     "functions:debug": "supabase functions serve --env-file ./supabase/functions/.env.local --no-verify-jwt --debug",
     "test": "vitest run --configLoader runner",
-    "test:edge": "deno test --allow-env supabase/functions/_shared/",
+    "test:edge": "deno test --allow-env --allow-net supabase/functions/_shared/",
     "typecheck": "tsc -b --pretty false",
     "typecheck:edge": "deno check supabase/functions/_shared/*.ts supabase/functions/*/index.ts",
     "audit": "npm audit --audit-level=high",

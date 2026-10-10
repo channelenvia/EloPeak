@@ -11,7 +11,7 @@ const WEBHOOK_SECRET = Deno.env.get('DISCORD_WEBHOOK_SECRET') ?? ''
 const payloadSchema = z.object({
   user_id: z.string().uuid(),
   order_id: z.string().uuid(),
-  body: z.string().min(1),
+  body: z.string().min(1).max(4000),
 })
 
 // Mesmas 3 rotas de detalhe do pedido usadas em src/app/router.tsx -- o link

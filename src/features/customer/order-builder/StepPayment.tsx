@@ -31,7 +31,7 @@ const CardPaymentPanel = lazy(() => import('@/components/order/CardPaymentPanel'
 type PixState =
   | { phase: 'idle' }
   | { phase: 'generating' }
-  | { phase: 'waiting'; qr_code: string; qr_base64: string | null; expires_at: string; payment_id: string; order_id: string; total_price: number }
+  | { phase: 'waiting'; qr_code: string; qr_base64: string | null; expires_at: string; server_offset_ms: number; payment_id: string; order_id: string; total_price: number }
   | { phase: 'confirmed' }
   | { phase: 'expired'; order_id: string }
   | { phase: 'error'; message: string; order_id?: string }
@@ -58,6 +58,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
     queueType: s.queueType,
     reset: s.reset,
     riotId: s.riotId,
+    rankDeclared: s.rankDeclared,
     selectedCoachPackage: s.selectedCoachPackage,
     selectedExtraIds: s.selectedExtraIds,
     server: s.server,
@@ -127,7 +128,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
   // Function). Derivado direto do store, sem round-trip extra.
   const catalogReady = isUuid(store.gameId ?? '') && isUuid(store.serviceId ?? '')
   const expiresAt = pix.phase === 'waiting' ? pix.expires_at : null
-  const { remaining, label: countdownLabel } = useCountdown(expiresAt)
+  const { remaining, label: countdownLabel } = useCountdown(expiresAt, pix.phase === 'waiting' ? pix.server_offset_ms : 0)
 
   // At the provider expiration timestamp, cancel/delete the unpaid checkout
   // through the authenticated backend and return the configurator to step 1.
@@ -280,6 +281,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         addon_codes: addonCodes,
         riot_id: store.riotId,
         customer_lanes: store.customerLanes,
+        rank_declared: store.rankDeclared,
       }
     }
 
@@ -298,6 +300,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
             addon_codes: addonCodes,
             riot_id: store.riotId,
             customer_lanes: store.customerLanes,
+            rank_declared: store.rankDeclared,
           }
         : {
             ...baseWithRank,
@@ -307,6 +310,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
             win_package: store.winPackage,
             riot_id: store.riotId,
             customer_lanes: store.customerLanes,
+            rank_declared: store.rankDeclared,
           }
     }
 
@@ -318,6 +322,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
         addon_codes: addonCodes,
         riot_id: store.riotId,
         customer_lanes: store.customerLanes,
+        rank_declared: store.rankDeclared,
       }
     }
 
@@ -337,6 +342,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       // win_boost derrubava a validação com "Body inválido" (400) em vez de
       // cair no valor certo. Manda vazio nesse caso.
       customer_lanes: store.serviceType === 'win_boost' ? store.customerLanes : [],
+      rank_declared: store.serviceType === 'win_boost' ? store.rankDeclared : false,
     }
   }
 
@@ -444,6 +450,7 @@ export function StepPayment({ insideModal = false }: { insideModal?: boolean } =
       qr_code: pixData.qr_code,
       qr_base64: pixData.qr_code_base64 ?? null,
       expires_at: pixData.expires_at,
+      server_offset_ms: pixData.server_time ? new Date(pixData.server_time).getTime() - Date.now() : 0,
       payment_id: String(pixData.payment_id),
       order_id: orderId,
       total_price: Number(pixData.total_price),

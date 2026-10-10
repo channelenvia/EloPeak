@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ChangeEvent } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 interface CurrencyMaskedInputProps {
   /** Valor em centavos (inteiro) -- nunca ponto flutuante em reais, pra não acumular erro de arredondamento. */

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { Star } from 'lucide-react'
 import { Button, ErrorAlert, Modal } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCreateReview } from '@/api/reviews'
 import type { Order } from '@/types'
 

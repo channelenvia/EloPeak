@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 // Substitui o padrão ad-hoc de `<p className="text-xs text-danger">{msg}</p>`
 // espalhado pelas telas — um único componente pra toda mensagem de erro

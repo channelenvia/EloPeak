@@ -3,7 +3,7 @@ import { Briefcase, ChevronDown, SlidersHorizontal, Swords, TrendingUp, Users, Z
 import { FilterTabs, Popover } from '@/components/ui'
 import { CLASH_TIERS, CLASH_DAYS, type ServiceCategory } from './useServiceFilters'
 import { CLASH_TIER_LABEL, CLASH_DAY_LABEL } from '@/lib/clashDomain'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { FILTER_CHEVRON_CLASS, filterOptionRowClass, filterTriggerClass } from './filterDropdownStyles'
 import type { BoostMode, ClashDay, ClashTier, QueueType } from '@/types'
 

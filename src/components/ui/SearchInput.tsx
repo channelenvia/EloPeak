@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'type'> {
   /** "sm" = barra de busca de lista (toolbar, ao lado dos filtros); "md" = campo de busca dentro de modal/picker. */

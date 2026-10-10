@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useEffect, useState } from 'react'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -22,7 +23,7 @@ export function BoosterOrdersPage() {
 
   const { data: isTop3 } = useOwnBoosterTop3Status(profile?.id)
 
-  const { data, isLoading } = useBoosterOrdersPage(profile?.id, statusFilter.tab, page, PAGE_SIZE, statusFilter.includeCanceled)
+  const { data, isLoading, isError, error, refetch } = useBoosterOrdersPage(profile?.id, statusFilter.tab, page, PAGE_SIZE, statusFilter.includeCanceled)
   const { data: tabCounts } = useBoosterOrderTabCounts(profile?.id)
 
   const rawOrders = data?.orders ?? []
@@ -60,6 +61,7 @@ export function BoosterOrdersPage() {
         serviceFilters={serviceFilters}
       />
 
+      <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid >
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}

@@ -43,7 +43,7 @@ function hardWrapLongTokens(text: string): string {
 
 // Destaque visual pro token "@Nome" digitado via autocomplete (ver
 // MentionPopover abaixo) -- só cobre a primeira palavra depois do @, então
-// nomes com espaço ("@Rafael Xavier") destacam só "@Rafael". Cosmético; quem
+// nomes com espaço ("@Maria Silva") destacam só "@Maria". Cosmético; quem
 // de fato importa (a notificação) já é resolvido no envio casando contra
 // mentionTargets.data (ver submitMessage), não por essa regex.
 function renderMessageContent(content: string, onBrandBubble = false) {

@@ -1,6 +1,6 @@
 import { Pencil, Trash2, Clock, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import type { BoosterService } from '@/types'

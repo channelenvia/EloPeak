@@ -27,9 +27,9 @@ export interface RiotRankLookup {
   message?: string
 }
 
-export async function lookupDuoAccountRiotRank(riotId: string): Promise<RiotRankLookup> {
+export async function lookupDuoAccountRiotRank(riotId: string, queue: 'solo_duo' | 'flex' = 'solo_duo'): Promise<RiotRankLookup> {
   return invokeEdgeFunction<RiotRankLookup>('riot-account-rank', {
-    body: { riot_id: riotId, queue: 'solo_duo' },
+    body: { riot_id: riotId, queue },
     requireAuth: true,
   })
 }

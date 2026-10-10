@@ -1,3 +1,4 @@
+import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useState } from 'react'
 import { Badge, LiveDot } from '@/components/ui/Badge'
 import { useParams, Link } from 'react-router-dom'
@@ -17,11 +18,11 @@ import { TestimonialCard } from '../components/TestimonialCard'
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function BoosterPublicProfilePage() {
-  const { displayName } = useParams<{ displayName: string }>()
+  const { displayName } = useParams<{ displayName: string }>() // ref: id do perfil ou, em links antigos, o display_name
   const currency = useCurrency()
   const [viewingService, setViewingService] = useState<BoosterService | null>(null)
 
-  const { data: booster, isLoading } = usePublicBooster(displayName)
+  const { data: booster, isLoading, isError, error, refetch } = usePublicBooster(displayName)
   const { data: services = [] } = usePublicCoachingPackages(booster?.user_id)
   const { data: reviews = [] } = useBoosterReviews(booster?.user_id)
 
@@ -33,6 +34,8 @@ export function BoosterPublicProfilePage() {
       </div>
     </div>
   )
+
+  if (isError) return <div className="max-w-3xl mx-auto px-5 sm:px-8 py-16"><QueryErrorNotice isError error={error} onRetry={refetch} /></div>
 
   if (!booster) return (
     <div className="max-w-3xl mx-auto px-5 sm:px-8 py-16 text-center">
