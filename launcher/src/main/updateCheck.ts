@@ -1,5 +1,5 @@
 // Aviso de nova versao sem infraestrutura de auto-update: o app le um manifesto JSON estatico (config.updateManifestUrl)
-// no formato { "version": "1.2.3", "url": "https://.../Booster-Launcher-Setup.exe", "sha256": "<64 hex>", "notes": "opcional" }
+// no formato { "version": "1.2.3", "url": "https://.../EloPeak-App-1.2.3.exe", "sha256": "<64 hex>", "notes": "opcional" }
 // e avisa o booster. O sha256 do instalador e obrigatorio: sem ele o manifesto e ignorado (nao ha como conferir o download).
 // So aceita https e nunca baixa/executa nada sozinho: o booster abre o link e instala por conta propria.
 

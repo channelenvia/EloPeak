@@ -246,6 +246,7 @@ export function AvailableJobsPage() {
                   <div className="flex flex-col items-end gap-1">
                     <Button
                       size="sm"
+                      className="h-9 px-4"
                       onClick={() => setCaptchaJobId(job.id)}
                       loading={acceptJob.isPending}
                       disabled={!!blocked}

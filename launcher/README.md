@@ -177,14 +177,14 @@ gratuito do Supabase limita arquivos a 50 MB) e o manifesto é o arquivo
 **Para publicar uma versão nova:**
 
 1. Aumente `version` em `launcher/package.json`, rode `npm run package` e pegue o instalador em `release/`.
-2. No repositório de releases: crie a release com a tag `v0.2.0` e anexe `Booster-Launcher-Setup-0.2.0.exe`
+2. No repositório de releases: crie a release com a tag `v0.2.0` e anexe `EloPeak-App-0.2.0.exe`
    (GitHub → Releases → *Draft a new release*; ou `gh release create v0.2.0 <arquivo> -R channelenvia/EloPeak-Launcher`).
-3. Calcule o SHA-256 do instalador (`shasum -a 256 release/Booster-Launcher-Setup-0.2.0.exe`) e só depois atualize
+3. Calcule o SHA-256 do instalador (`shasum -a 256 release/EloPeak-App-0.2.0.exe`) e só depois atualize
    `update.json` na `main` com ele (campo `sha256` **obrigatório**: sem ele o aviso não aparece; o app mostra o
    hash no banner para o booster conferir o download; mesmo formato abaixo):
 
 ```json
-{ "version": "0.2.0", "url": "https://github.com/channelenvia/EloPeak-Launcher/releases/download/v0.2.0/Booster-Launcher-Setup-0.2.0.exe", "sha256": "<64 hex do instalador>", "notes": "o que mudou" }
+{ "version": "0.2.0", "url": "https://github.com/channelenvia/EloPeak-Launcher/releases/download/v0.2.0/EloPeak-App-0.2.0.exe", "sha256": "<64 hex do instalador>", "notes": "o que mudou" }
 ```
 
 (o `raw.githubusercontent.com` guarda cache por ~5 min; o aviso pode demorar esse tempo a aparecer).

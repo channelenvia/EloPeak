@@ -1,7 +1,7 @@
 {
   "name": "elopeak-booster-launcher",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Aplicativo desktop do booster: resolve o token de acesso emitido pelo painel e faz login automático no Riot Client / League of Legends.",
   "author": "EloPeak",
   "main": "dist/main/index.js",
@@ -73,7 +73,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "EloPeak",
-      "artifactName": "Booster-Launcher-Setup-${version}.exe"
+      "artifactName": "EloPeak-App-${version}.exe"
     }
   }
 }

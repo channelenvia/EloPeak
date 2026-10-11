@@ -1,7 +1,7 @@
 -- Acesso e seguranca que antes eram "testes de texto": agora exercitam grants, policies e RPCs de verdade.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'c@t.local', '{}'),
@@ -17,6 +17,8 @@ values ('00000000-0000-0000-0000-0000000000b1', 'B1', 'approved', 'B Um', 'b1@t.
 select ok(not has_column_privilege('authenticated', 'public.orders', 'game_credentials', 'SELECT')
       and not has_column_privilege('anon', 'public.orders', 'game_credentials', 'SELECT'),
   'game_credentials nao e legivel pelo client (select(*) nao devolve o payload cifrado)');
+select ok(has_column_privilege('authenticated', 'public.orders', 'stint_start_rank', 'SELECT'),
+  'stint_start_rank e legivel pelo client para as consultas de pedidos');
 select ok(not has_column_privilege('authenticated', 'public.orders', 'game_credentials', 'UPDATE'), 'nem gravavel direto pelo client');
 select ok(not has_function_privilege('authenticated', 'public.resolve_order_access_token(text,uuid)', 'EXECUTE')
       and not has_function_privilege('anon', 'public.resolve_order_access_token(text,uuid)', 'EXECUTE')

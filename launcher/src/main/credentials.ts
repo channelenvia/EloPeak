@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { app, shell } from 'electron'
 import { clearStoredSession, getSupabaseClient } from './config'
 import { callbackPage, classifyCallbackRequest } from './callbackGate'
-import { describeFunctionError, TOKEN_SHAPE_ERRORS, type FunctionErrorInfo } from './functionErrors'
+import { describeFunctionError, selectCredentialFailure, type FunctionErrorInfo } from './functionErrors'
 
 // Log em arquivo pro fluxo de OAuth — o app roda sem console visível pro
 // booster, então console.log sozinho não ajuda a diagnosticar um login que
@@ -268,8 +268,5 @@ export async function resolveCredentials(accessToken: string): Promise<ResolvedC
   for (const result of results) if (result.ok) return result.credentials
 
   const failures = results.flatMap((r) => (r.ok ? [] : [r.info]))
-  const nonShape = failures.filter((info) => !(info.code && TOKEN_SHAPE_ERRORS.has(info.code)))
-  // Um erro com codigo conhecido (ex.: token_expired) vale mais que um 5xx/timeout do outro endpoint.
-  const definitive = nonShape.find((info) => info.code) ?? nonShape[0]
-  throw new Error(describeFunctionError(definitive ?? failures[0] ?? {}))
+  throw new Error(describeFunctionError(selectCredentialFailure(failures)))
 }

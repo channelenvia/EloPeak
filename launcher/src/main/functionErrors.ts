@@ -9,7 +9,7 @@ export interface FunctionErrorInfo {
 
 const CODE_MESSAGES: Record<string, string> = {
   invalid_token: 'Token inválido. Copie o token novamente na página do pedido.',
-  token_not_found: 'Token inválido. Copie o token novamente na página do pedido.',
+  token_not_found: 'Este token não pertence à conta Discord vinculada no launcher. Saia e entre com o mesmo Discord do booster atribuído ao pedido.',
   token_expired: 'Token expirado. Gere um novo token na página do pedido.',
   token_expired_or_invalid: 'Token expirado. Gere um novo token na página do pedido.',
   order_not_in_progress: 'Este pedido não está em andamento. O login só é liberado enquanto o pedido estiver em andamento.',
@@ -36,3 +36,14 @@ export function describeFunctionError(info: FunctionErrorInfo): string {
 
 // Erros que significam "esse token nao e desse tipo": so neles vale tentar o outro endpoint (pedido x conta Duo).
 export const TOKEN_SHAPE_ERRORS = new Set(['invalid_token', 'token_not_found'])
+
+// Os endpoints de pedido e conta Duo sao consultados em paralelo. Escolhe o
+// erro que realmente explica a falha sem deixar um invalid_token do endpoint
+// errado (ou uma indisponibilidade momentanea dele) esconder que o endpoint
+// correto reconheceu o token, mas para outro usuario Discord.
+export function selectCredentialFailure(failures: FunctionErrorInfo[]): FunctionErrorInfo {
+  const nonShape = failures.filter((info) => !(info.code && TOKEN_SHAPE_ERRORS.has(info.code)))
+  const codedNonShape = nonShape.find((info) => info.code)
+  const identityMismatch = failures.find((info) => info.code === 'token_not_found')
+  return codedNonShape ?? identityMismatch ?? nonShape[0] ?? failures[0] ?? {}
+}

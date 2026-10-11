@@ -41,7 +41,7 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
   return (
     <div>
       <p className="text-xs text-ink-secondary mb-1">Evite entrar na conta até o pedido terminar.</p>
-      <p className="text-xs text-warning mb-4">O booster usa essas credenciais para entrar na sua conta. Troque a senha da conta Riot assim que o pedido terminar (ou se ele for trocado de booster).</p>
+      <p className="text-xs text-ink-secondary mb-4">Suas credenciais são criptografadas em um token para o login do booster.</p>
       {canSet && (
         <div className="space-y-3">
           <div>
@@ -53,7 +53,7 @@ export function CredentialsSection({ order, state }: { order: Order; state?: Cus
             <input id="order-credentials-password" type="password" {...register('password')} placeholder="••••••••" className="input-base w-full text-sm" autoComplete="current-password" maxLength={256} />
             <p className="text-2xs text-ink-muted mt-1">O valor enviado é transformado em payload criptografado no banco. Não compartilhe a senha no chat.</p>
           </div>
-          <Button size="sm" className="w-full" loading={saveCredentials.isPending} disabled={!isValid} onClick={handleSubmit(submit)} variant={saved ? 'success' : 'primary'}>
+          <Button size="sm" className="relative -top-0.5 w-full" loading={saveCredentials.isPending} disabled={!isValid} onClick={handleSubmit(submit)} variant={saved ? 'success' : 'primary'}>
             {saved ? 'Credenciais salvas!' : state.credentials_set ? 'Atualizar credenciais' : 'Salvar credenciais'}
           </Button>
           {saveCredentials.isError && (

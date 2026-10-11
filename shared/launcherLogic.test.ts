@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { checkForUpdate, compareVersions, parseManifest } from '../launcher/src/main/updateCheck'
-import { describeFunctionError, SESSION_EXPIRED_MESSAGE, TOKEN_SHAPE_ERRORS } from '../launcher/src/main/functionErrors'
+import { describeFunctionError, selectCredentialFailure, SESSION_EXPIRED_MESSAGE, TOKEN_SHAPE_ERRORS } from '../launcher/src/main/functionErrors'
 
 describe('compareVersions', () => {
   it('compara major.minor.patch numericamente (1.10.0 > 1.9.0)', () => {
@@ -95,6 +95,7 @@ describe('describeFunctionError', () => {
 
   it('codigos conhecidos tem texto proprio; 5xx e desconhecidos tem fallback claro', () => {
     expect(describeFunctionError({ status: 400, code: 'token_expired' })).toContain('expirado')
+    expect(describeFunctionError({ status: 400, code: 'token_not_found' })).toContain('conta Discord')
     expect(describeFunctionError({ status: 503 })).toContain('servidor')
     expect(describeFunctionError({ status: 400 })).toContain('Não foi possível')
   })
@@ -109,6 +110,12 @@ describe('describeFunctionError', () => {
   it('so invalid_token/token_not_found tentam o outro endpoint', () => {
     expect(TOKEN_SHAPE_ERRORS.has('invalid_token')).toBe(true)
     expect(TOKEN_SHAPE_ERRORS.has('order_not_active')).toBe(false)
+  })
+
+  it('prioriza conta Discord divergente sobre invalid_token ou falha generica do outro endpoint', () => {
+    expect(selectCredentialFailure([{ code: 'invalid_token' }, { code: 'token_not_found' }]).code).toBe('token_not_found')
+    expect(selectCredentialFailure([{ status: 503 }, { code: 'token_not_found' }]).code).toBe('token_not_found')
+    expect(selectCredentialFailure([{ status: 503 }, { code: 'token_expired' }]).code).toBe('token_expired')
   })
 })
 
