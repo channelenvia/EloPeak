@@ -84,7 +84,7 @@ function EloBoostProgress({ order, hideRankBadges = false }: { order: Order; hid
   const locked = isProgressLocked(order)
   const { data: latest } = useLatestVerification(order.id, !locked)
 
-  const initial = order.current_rank as { tier: RankTier; division: Division | null } | null
+  const initial = (order.stint_start_rank ?? order.current_rank) as { tier: RankTier; division: Division | null } | null
   const target = order.target_rank as { tier: RankTier; division: Division | null } | null
   const liveCutoffLp = useLiveCutoff(order.queue_type, target?.tier ?? null, !locked)
   if (!initial || !target) return null

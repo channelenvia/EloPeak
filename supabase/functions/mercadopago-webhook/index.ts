@@ -1,7 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { z } from 'https://esm.sh/zod@3.23.8'
-import { createHmac } from 'node:crypto'
-import { constantTimeEqual } from '../_shared/crypto.ts'
+import { verifyMpSignature } from '../_shared/mpSignature.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { fetchWithTimeout, HttpError, readJsonBody } from '../_shared/http.ts'
 import { consumeUserRateLimit, getClientIp } from '../_shared/rateLimit.ts'
@@ -15,38 +14,6 @@ const webhookBodySchema = z.object({
     id: z.union([z.string(), z.number()]).optional(),
   }).passthrough().optional(),
 }).passthrough()
-
-// Verify Mercado Pago webhook signature (v2 format)
-// Docs: https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
-function verifySignature(
-  xSignature: string | null,
-  xRequestId: string | null,
-  dataId: string,
-): boolean {
-  // Secret is mandatory — if missing the function is misconfigured, not in dev mode
-  if (!MP_WEBHOOK_SECRET) return false
-  if (!xSignature || !xRequestId) return false
-
-  // Parse ts and v1 from "ts=<timestamp>,v1=<hmac>"
-  const parts = Object.fromEntries(xSignature.split(',').map((part) => {
-    const [key, value] = part.split('=', 2)
-    return [key?.trim(), value?.trim()]
-  }))
-  const ts = parts['ts']
-  const v1 = parts['v1']
-  if (!ts || !v1) return false
-
-  const timestamp = Number(ts)
-  if (!Number.isFinite(timestamp)) return false
-  const timestampMs = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
-  const ageMs = Date.now() - timestampMs
-  if (ageMs < -60_000 || ageMs > 10 * 60_000) return false
-
-  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`
-  const expected = createHmac('sha256', MP_WEBHOOK_SECRET).update(manifest).digest('hex')
-
-  return constantTimeEqual(expected, v1)
-}
 
 // Map MP statuses to our internal payment_status enum
 const STATUS_MAP: Record<string, string> = {
@@ -115,7 +82,7 @@ serve(async (req) => {
     } else {
       const xSignature = req.headers.get('x-signature')
       const xRequestId = req.headers.get('x-request-id')
-      if (!verifySignature(xSignature, xRequestId, dataId)) {
+      if (!verifyMpSignature({ secret: MP_WEBHOOK_SECRET, xSignature, xRequestId, dataId })) {
         console.error('Invalid MP webhook signature')
         return new Response('invalid signature', { status: 401 })
       }

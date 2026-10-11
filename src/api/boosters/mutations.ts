@@ -10,6 +10,7 @@ const PROFESSIONAL_PROFILE_MESSAGES: Record<string, string> = {
   not_a_booster: 'Não foi possível identificar sua candidatura de booster.',
   display_name_required: 'Nome de exibição é obrigatório.',
   display_name_taken: 'Este nome de exibição já está em uso por outro booster.',
+  display_name_invalid: 'Use até 32 caracteres: letras, números, espaço, ponto, hífen ou sublinhado.',
   bio_required: 'Conte um pouco sobre você.',
   invalid_peak_rank: 'Selecione seu rank de pico (Grão-mestre ou Desafiante).',
   invalid_opgg_link: 'Link do OP.GG inválido.',

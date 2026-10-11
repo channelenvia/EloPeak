@@ -44,6 +44,7 @@ import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { useAuthStore } from '@/stores/authStore'
 import type { Order } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
+import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
 import {
     CalendarDays,
     CheckCircle2,
@@ -94,7 +95,7 @@ function AssignedBoosterValue({ order }: { order: Order }) {
 function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: Order; open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [pix, setPix] = useState<{ qr_code?: string; qr_code_base64?: string | null; total_price: number; expires_at: string } | null>(null)
+  const [pix, setPix] = useState<{ qr_code?: string; qr_code_base64?: string | null; total_price: number; expires_at: string; server_offset_ms?: number } | null>(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -112,7 +113,8 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
     setMethod(null)
     setCardAcceptance(null)
   }, [order.id, setOpen])
-  const { remaining, label } = useCountdown(pix?.expires_at ?? null)
+  // Offset (servidor - navegador): relogio local adiantado nao pode cancelar o PIX recem-gerado (M-30).
+  const { remaining, label } = useCountdown(pix?.expires_at ?? null, pix?.server_offset_ms ?? 0)
 
   const generatePix = useGeneratePix(order.id)
   const { data: paymentInfo } = useOrderPaymentInfo(order.id, order.status === 'awaiting_payment')
@@ -161,7 +163,10 @@ function PendingPaymentSection({ order, open, onOpenChange: setOpen }: { order: 
     generatePix.mutate(undefined, {
       onSuccess: (response) => {
         if (!response.qr_code) { setError('A função não retornou o código PIX.'); return }
-        setPix(response)
+        setPix({
+          ...response,
+          server_offset_ms: response.server_time ? new Date(response.server_time).getTime() - Date.now() : 0,
+        })
       },
       onError: (err) => {
         if (err instanceof EdgeFunctionError && err.code === 'CARD_PAYMENT_PENDING') {
@@ -348,6 +353,7 @@ function CustomerDropModal({ order, open, onClose }: { order: Order; open: boole
 }
 
 export function OrderDetailPage() {
+  const queryClient = useQueryClient()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const currency = useCurrency()
@@ -390,8 +396,14 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     // Pedido cancelado e NAO pago volta ao configurador; cancelado depois de pago continua visivel (reembolso).
-    if (order?.status === 'canceled' && order.payment_status !== 'paid') navigate('/orders/new?new=1', { replace: true })
-  }, [order?.status, order?.payment_status, navigate])
+    if (order?.status === 'canceled' && order.payment_status !== 'paid') {
+      // Sem ?new=1 o rascunho em andamento sobrevive (M-31); dispensa este pedido e limpa o cache de retomada para o
+      // configurador nao reabrir o pedido cancelado.
+      useOrderBuilderStore.getState().setDismissedOrderId(order.id)
+      queryClient.removeQueries({ queryKey: ['resumable-customer-order'] })
+      navigate('/orders/new', { replace: true })
+    }
+  }, [order?.id, order?.status, order?.payment_status, navigate, queryClient])
 
   // O badge de status é o ponto de entrada das ações do pedido (pagar,
   // enviar credenciais, avaliar) -- os modais abrem por aqui.

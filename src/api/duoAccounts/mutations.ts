@@ -19,7 +19,9 @@ export async function releaseDuoAccountReservation(orderId: string) {
 }
 
 export async function getDuoAccountAccessToken(accountId: string) {
-  return callRpc('get_duo_account_access_token', { p_account_id: accountId }) as Promise<{ success: boolean; error?: string; access_token?: string }>
+  return callRpc('get_duo_account_access_token', { p_account_id: accountId }, {
+    order_not_in_progress: 'Este pedido não está em andamento. O login só é liberado enquanto o pedido estiver em andamento.',
+  }) as Promise<{ success: boolean; error?: string; access_token?: string }>
 }
 
 const OWN_ACCOUNT_MESSAGES: Record<string, string> = {

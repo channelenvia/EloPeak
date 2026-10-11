@@ -82,7 +82,7 @@ export function AdminDropModal({ orderId, serviceType, dropCount, open, onClose 
       )}
       <p className={cn('text-xs', willCancel ? 'text-danger' : 'text-ink-secondary')}>
         {willCancel
-          ? 'Este pedido já foi dropado 2 vezes -- o limite pra voltar pro painel automaticamente foi atingido. Confirmar aqui CANCELA o pedido; o pagamento do booster e o cliente precisam ser tratados manualmente depois.'
+          ? 'Este pedido já foi dropado 2 vezes -- o limite pra voltar pro painel automaticamente foi atingido. Confirmar aqui manda o pedido para análise manual, mantendo o booster; a liquidação (pagamento do booster e reembolso do cliente, por progresso) é feita manualmente depois.'
           : 'O booster é retirado e o pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'}
       </p>
       <ActionBar>

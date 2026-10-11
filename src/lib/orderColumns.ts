@@ -4,7 +4,7 @@
 export const ORDER_SAFE_COLUMNS = [
   'id', 'customer_id', 'service_id', 'service_type', 'game_id', 'booster_service_id',
   'assigned_booster_id', 'status', 'queue_type', 'boost_mode', 'server',
-  'current_rank', 'target_rank', 'wins_purchased', 'sessions_purchased', 'win_package',
+  'current_rank', 'stint_start_rank', 'target_rank', 'wins_purchased', 'sessions_purchased', 'win_package',
   'extras', 'base_price', 'extras_price', 'total_price', 'estimated_hours',
   'customer_notes', 'payment_status', 'credentials_set',
   'credential_expires_at', 'wins_played', 'losses_played', 'completed_at',

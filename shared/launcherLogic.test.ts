@@ -16,30 +16,40 @@ describe('compareVersions', () => {
 })
 
 describe('parseManifest', () => {
+  const SHA = 'a'.repeat(64)
   it('aceita manifesto valido com https', () => {
-    expect(parseManifest({ version: '1.2.0', url: 'https://x.test/setup.exe', notes: 'correcoes' }))
-      .toEqual({ version: '1.2.0', url: 'https://x.test/setup.exe', notes: 'correcoes' })
+    expect(parseManifest({ version: '1.2.0', url: 'https://x.test/setup.exe', sha256: SHA, notes: 'correcoes' }))
+      .toEqual({ version: '1.2.0', url: 'https://x.test/setup.exe', sha256: SHA, notes: 'correcoes' })
+  })
+
+  it('exige sha256 valido do instalador (A12-02): ausente, curto ou nao hexadecimal => null', () => {
+    const base = { version: '1.2.0', url: 'https://x.test/setup.exe' }
+    expect(parseManifest(base)).toBeNull()
+    expect(parseManifest({ ...base, sha256: 'abc' })).toBeNull()
+    expect(parseManifest({ ...base, sha256: 'z'.repeat(64) })).toBeNull()
+    expect(parseManifest({ ...base, sha256: SHA.toUpperCase() })).toMatchObject({ sha256: SHA })
   })
 
   it('rejeita url http, javascript:, versao invalida e formatos inesperados', () => {
-    expect(parseManifest({ version: '1.2.0', url: 'http://x.test/setup.exe' })).toBeNull()
-    expect(parseManifest({ version: '1.2.0', url: 'javascript:alert(1)' })).toBeNull()
-    expect(parseManifest({ version: 'latest', url: 'https://x.test/a' })).toBeNull()
+    expect(parseManifest({ version: '1.2.0', url: 'http://x.test/setup.exe', sha256: SHA })).toBeNull()
+    expect(parseManifest({ version: '1.2.0', url: 'javascript:alert(1)', sha256: SHA })).toBeNull()
+    expect(parseManifest({ version: 'latest', url: 'https://x.test/a', sha256: SHA })).toBeNull()
     expect(parseManifest(null)).toBeNull()
     expect(parseManifest('1.2.0')).toBeNull()
   })
 })
 
 describe('checkForUpdate', () => {
+  const SHA = 'a'.repeat(64)
   const ok = (body: unknown) => vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(JSON.stringify(body)) }) as unknown as typeof fetch
   const MANIFEST = 'https://raw.githubusercontent.com/channelenvia/EloPeak-Launcher/main/update.json'
   const REL = 'https://github.com/channelenvia/EloPeak-Launcher/releases/download'
   const good = `${REL}/v0.2.0/Setup.exe`
 
   it('devolve o manifesto so quando ha versao mais nova', async () => {
-    const newer = await checkForUpdate('0.1.0', MANIFEST, ok({ version: '0.2.0', url: good }))
-    expect(newer).toMatchObject({ version: '0.2.0', url: good })
-    expect(await checkForUpdate('0.2.0', MANIFEST, ok({ version: '0.2.0', url: good }))).toBeNull()
+    const newer = await checkForUpdate('0.1.0', MANIFEST, ok({ version: '0.2.0', url: good, sha256: SHA }))
+    expect(newer).toMatchObject({ version: '0.2.0', url: good, sha256: SHA })
+    expect(await checkForUpdate('0.2.0', MANIFEST, ok({ version: '0.2.0', url: good, sha256: SHA }))).toBeNull()
   })
 
   it.each([
@@ -54,23 +64,23 @@ describe('checkForUpdate', () => {
     ['http', 'http://github.com/channelenvia/EloPeak-Launcher/releases/download/v1/Setup.exe'],
     ['barra invertida', `${REL}\\..\\x`],
   ])('recusa instalador fora dos releases oficiais: %s', async (_nome, url) => {
-    expect(await checkForUpdate('0.1.0', MANIFEST, ok({ version: '0.2.0', url }))).toBeNull()
+    expect(await checkForUpdate('0.1.0', MANIFEST, ok({ version: '0.2.0', url, sha256: SHA }))).toBeNull()
   })
 
   it('o manifesto tem tamanho limitado', async () => {
-    const huge = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(JSON.stringify({ version: '0.2.0', url: good, notes: 'a'.repeat(20_000) })) }) as unknown as typeof fetch
+    const huge = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(JSON.stringify({ version: '0.2.0', url: good, sha256: SHA, notes: 'a'.repeat(20_000) })) }) as unknown as typeof fetch
     expect(await checkForUpdate('0.1.0', MANIFEST, huge)).toBeNull()
   })
 
   it('segue sem redirecionar (redirect: error) para um https nao virar http', async () => {
-    const fetchMock = ok({ version: '0.2.0', url: good })
+    const fetchMock = ok({ version: '0.2.0', url: good, sha256: SHA })
     await checkForUpdate('0.1.0', MANIFEST, fetchMock)
     expect((fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toMatchObject({ redirect: 'error' })
   })
 
   it('sem url configurada, com url http, erro de rede ou resposta ruim: nunca lanca e devolve null', async () => {
     expect(await checkForUpdate('0.1.0', undefined)).toBeNull()
-    expect(await checkForUpdate('0.1.0', 'http://x.test/m.json', ok({ version: '9.9.9', url: 'https://x.test/s.exe' }))).toBeNull()
+    expect(await checkForUpdate('0.1.0', 'http://x.test/m.json', ok({ version: '9.9.9', url: 'https://x.test/s.exe', sha256: SHA }))).toBeNull()
     expect(await checkForUpdate('0.1.0', 'https://x.test/m.json', vi.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch)).toBeNull()
     expect(await checkForUpdate('0.1.0', 'https://x.test/m.json', vi.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch)).toBeNull()
   })
@@ -87,6 +97,13 @@ describe('describeFunctionError', () => {
     expect(describeFunctionError({ status: 400, code: 'token_expired' })).toContain('expirado')
     expect(describeFunctionError({ status: 503 })).toContain('servidor')
     expect(describeFunctionError({ status: 400 })).toContain('Não foi possível')
+  })
+
+  it('pedido fora de em andamento tem mensagem propria, sem vazar detalhe interno, e nao tenta o outro endpoint', () => {
+    const message = describeFunctionError({ status: 400, code: 'order_not_in_progress' })
+    expect(message).toContain('em andamento')
+    expect(message).not.toContain('order_not_in_progress')
+    expect(TOKEN_SHAPE_ERRORS.has('order_not_in_progress')).toBe(false)
   })
 
   it('so invalid_token/token_not_found tentam o outro endpoint', () => {

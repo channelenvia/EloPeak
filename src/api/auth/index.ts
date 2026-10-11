@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { ApiError, normalizeApiError, assertRpcSuccess } from '@/api/core/errors'
+import type { Profile } from '@/types'
+
+// Releitura do proprio perfil (ex.: role mudou no banco depois da aprovacao do booster).
+export async function getOwnProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+  if (error) throw normalizeApiError(error)
+  return data
+}
 
 export interface BoosterPanelFields {
   display_name: string | null
@@ -41,6 +49,7 @@ export async function updateBoosterDisplayName(params: { userId: string; display
     not_a_booster: 'Não foi possível identificar sua conta de booster.',
     display_name_required: 'Nome de exibição é obrigatório.',
     display_name_taken: 'Este nome de exibição já está em uso por outro booster.',
+    display_name_invalid: 'Use até 32 caracteres: letras, números, espaço, ponto, hífen ou sublinhado.',
   })
 }
 
@@ -56,6 +65,10 @@ export async function updateBoosterFullName(params: { fullName: string | null })
 
 export async function updateBoosterCpf(params: { cpf: string }) {
   const { data, error } = await supabase.rpc('update_my_cpf', { p_cpf: params.cpf })
+  // Indice unico de CPF: a violacao vem como 23505 (M-27), nao como {success:false}.
+  if (error?.code === '23505') {
+    throw new ApiError('Este CPF já está cadastrado em outra conta.', { code: 'cpf_taken', cause: error })
+  }
   if (error) throw normalizeApiError(error, 'Não foi possível atualizar o CPF.')
   assertRpcSuccess(data as { success: boolean; error?: string }, {
     invalid_cpf: 'CPF inválido.',

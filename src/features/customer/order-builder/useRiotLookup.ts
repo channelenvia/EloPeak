@@ -77,6 +77,10 @@ export function useRiotLookup() {
       setRiotLookupLoading(false)
     }
 
+    // Riot ID ou fila editados durante a consulta: o resultado e da conta/fila antiga, nao pode virar "Verificado" (M-33).
+    const latest = useOrderBuilderStore.getState()
+    if (latest.riotId.trim() !== trimmed || latest.queueType !== queueType) return null
+
     if (!result?.found) {
       setRiotLookupError('Conta Riot não encontrada.')
       return null
@@ -123,6 +127,8 @@ export function useRiotLookup() {
   function migrateToMd5() {
     if (!unrankedOffer) return
     setService('md5', 'md5')
+    // Mesmo caminho do lookup normal de MD5: o rank da temporada passada e informado e conferido pelo admin (M-28).
+    setRankDeclared(true)
     setMd5MatchesRemainingFromApi(unrankedOffer.matchesRemaining)
     setMd5Blocked(false)
     setRiotVerified(true)

@@ -20,7 +20,6 @@ import { exclusiveBadge, exclusiveTimeLeft, isReassignedToMe, reassignedBadge } 
 import { ServiceFilterBar } from '@/components/order/ServiceFilterBar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
 import { OrderCardDetails } from '@/components/order/OrderCardDetails'
-import { ServiceTagPills } from '@/components/service/ServiceTagPills'
 import { CaptchaChallenge } from '@/components/captcha/CaptchaChallenge'
 
 export function AvailableJobsPage() {
@@ -237,19 +236,7 @@ export function AvailableJobsPage() {
                   </div>
                 )}
 
-                {coachPackage && (
-                  <div className="space-y-2">
-                    {coachPackage.description && (
-                      <p className="text-sm text-ink-secondary leading-relaxed line-clamp-2">{coachPackage.description}</p>
-                    )}
-                    <ServiceTagPills lanes={coachPackage.lanes} champions={coachPackage.champions} specialties={coachPackage.specialties} compact />
-                    {coachPackage.tempo && (
-                      <p className="text-2xs text-ink-muted">Duração por sessão: <span className="font-semibold text-ink">{coachPackage.tempo}</span></p>
-                    )}
-                  </div>
-                )}
-
-                <OrderCardDetails order={job} viewerRole="booster" />
+                <OrderCardDetails order={job} viewerRole="booster" coachPackage={coachPackage} />
 
                 <div className="mt-auto flex items-center justify-between border-t border-border-subtle pt-4">
                   <div>

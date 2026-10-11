@@ -13,14 +13,23 @@ import { describeFunctionError, TOKEN_SHAPE_ERRORS, type FunctionErrorInfo } fro
 // So grava em --dev (nunca em producao) e nunca a URL/query do OAuth (o ?code= e um segredo de uso unico).
 const AUTH_LOG_ENABLED = process.argv.includes('--dev') && !app.isPackaged
 
-function logAuth(line: string): void {
-  if (!AUTH_LOG_ENABLED) return
+function writeAuthLog(line: string): void {
   try {
     const logPath = join(app.getPath('userData'), 'debug.log')
     appendFileSync(logPath, `[${new Date().toISOString()}] ${line}\n`)
   } catch {
     // se nem o log funcionar, não é isso que deve derrubar o login
   }
+}
+
+function logAuth(line: string): void {
+  if (AUTH_LOG_ENABLED) writeAuthLog(line)
+}
+
+// Falhas do login ficam no log tambem em producao (so nome/status/codigo do erro, nunca a mensagem, o code, o verifier ou a URL):
+// sem isso um booster com "nao foi possivel concluir o login" nao deixa rastro para diagnostico.
+function logAuthFailure(step: string, detail: string): void {
+  writeAuthLog(`v${app.getVersion()} ${step}: ${detail}`)
 }
 
 export interface ResolvedCredentials {
@@ -111,7 +120,7 @@ function runDiscordLogin(): Promise<{ ok: true } | { ok: false; error: string }>
       if (action === 'provider_error') {
         // Qualquer pagina da web consegue bater aqui com texto arbitrario: mensagem fixa e o login continua valendo
         // ate o timeout (o booster fechando a aba do Discord so espera os 120 s).
-        reply(false, 'O Discord não concluiu o login. Volte ao Booster Launcher e tente de novo.')
+        reply(false, 'O Discord não concluiu o login. Volte ao EloPeak e tente de novo.')
         return
       }
 
@@ -119,20 +128,23 @@ function runDiscordLogin(): Promise<{ ok: true } | { ok: false; error: string }>
       supabase.auth.exchangeCodeForSession(code!)
         .then(({ error }) => {
           logAuth(`exchangeCodeForSession: ${error ? 'erro' : 'ok'}`)
+          const reason = error ? `${error.name}/${error.status ?? '-'}/${error.code ?? '-'}` : ''
+          if (error) logAuthFailure('exchangeCodeForSession', reason)
           if (!error) {
-            reply(true, 'Pode fechar esta aba e voltar para o Booster Launcher.')
+            reply(true, 'Pode fechar esta aba e voltar para o EloPeak.')
             finish({ ok: true })
             return
           }
           // Codigo que nao confere com o verifier PKCE (ex.: chamada de terceiros): nao derruba o login real, que ainda
           // pode chegar. Depois de algumas falhas desiste.
           exchangeAttempts += 1
-          reply(false, 'Não foi possível concluir o login. Volte ao Booster Launcher e tente de novo.')
+          reply(false, `Não foi possível concluir o login. Volte ao EloPeak e tente de novo. (${reason})`)
           if (exchangeAttempts >= MAX_EXCHANGE_ATTEMPTS) finish({ ok: false, error: 'Falha ao concluir login com Discord.' })
         })
         .catch((err) => {
-          logAuth(`exchangeCodeForSession lancou excecao: ${err instanceof Error ? err.name : 'erro'}`)
-          reply(false, 'Não foi possível concluir o login. Volte ao Booster Launcher e tente de novo.')
+          const name = err instanceof Error ? err.name : 'erro'
+          logAuthFailure('exchangeCodeForSession lancou excecao', name)
+          reply(false, `Não foi possível concluir o login. Volte ao EloPeak e tente de novo. (${name})`)
           finish({ ok: false, error: 'Falha ao concluir login com Discord.' })
         })
     })

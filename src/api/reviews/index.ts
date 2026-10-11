@@ -156,11 +156,8 @@ export interface AdminReview {
 const ADMIN_REVIEWS_KEY = ['admin', 'reviews'] as const
 
 export async function listAdminReviews(limit = 100): Promise<AdminReview[]> {
-  const { data, error } = await supabase
-    .from('reviews')
-    .select('id, order_id, booster_id, rating, content, is_public, is_moderated, admin_note, created_at')
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  // admin_note/is_moderated não são legíveis por authenticated (M-17): só pela RPC admin.
+  const { data, error } = await supabase.rpc('admin_list_reviews', { p_limit: limit })
   if (error) throw normalizeApiError(error)
   return data ?? []
 }

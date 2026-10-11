@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CaptchaChallenge } from './CaptchaChallenge'
 
@@ -65,5 +65,14 @@ describe('CaptchaChallenge — desafio validado no servidor', () => {
     renderCaptcha()
     expect(await screen.findByText('order_unavailable')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
+  })
+  it('imagem que falha ao carregar mostra erro com botão que pede um desafio novo (booster nunca fica preso)', async () => {
+    renderCaptcha()
+    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
+    fireEvent.error(document.querySelector('img')!)
+    expect(await screen.findByText('Não foi possível carregar a imagem do desafio.')).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Tentar de novo' }))
+    await waitFor(() => expect(issueAcceptChallenge).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
   })
 })

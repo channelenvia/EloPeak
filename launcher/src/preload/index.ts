@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('launcher', {
   loginWithDiscord: () => ipcRenderer.invoke('auth:loginWithDiscord'),
   logout: () => ipcRenderer.invoke('auth:logout'),
   submitToken: (token: string) => ipcRenderer.invoke('token:submit', token),
+  cancelToken: () => ipcRenderer.invoke('token:cancel'),
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   onProgress: (callback: (step: string) => void) => {

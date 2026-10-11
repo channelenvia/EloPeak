@@ -1,10 +1,10 @@
 import { DECEIVE_SHA256, isTrustedFile } from './integrity'
 import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import https from 'node:https'
 
 // ── Automação do Riot Client (não-oficial) ─────────────────────────────────
@@ -86,16 +86,6 @@ const FALLBACK_PATHS = [
   'C:\\Riot Games\\Riot Client\\RiotClientServices.exe',
 ]
 
-// Compilar o helper nativo (classe C# abaixo) via Add-Type -TypeDefinition
-// custa várias centenas de ms a mais de um segundo (invoca o compilador do
-// .NET Framework num processo powershell.exe novo, sem nenhum estado
-// aquecido) — isso pesa muito mais no tempo total do login do que qualquer
-// um dos Start-Sleep ajustados no LOGIN_SCRIPT. Por isso compilamos essa
-// classe uma única vez (ver prewarmNativeHelper, chamado na abertura do
-// Booster Launcher) e cacheamos o .dll aqui; da segunda execução em diante
-// (inclusive entre reaberturas do app) o LOGIN_SCRIPT só faz Add-Type -Path,
-// que é só carregar um assembly já compilado — muito mais rápido.
-const NATIVE_HELPER_DIR = join(process.env.LOCALAPPDATA ?? tmpdir(), 'EloBoostBoosterLauncher')
 
 // Janela total de espera pela confirmação do login (poll da API somente-
 // leitura) e intervalo entre cada consulta.
@@ -121,47 +111,66 @@ export interface AutoLoginResult {
 // Deceive (https://github.com/molenzwiebel/Deceive, binário vendorizado em
 // vendor/deceive/) senta entre o Riot Client e o servidor de chat e reescreve
 // só a presença ("online"/"offline") — login, partida e chat continuam
-// funcionando normalmente. A Riot já confirmou publicamente que usar o
-// Deceive não gera banimento. Por isso, sempre que formos nós a abrir o Riot
-// Client (cold start), abrimos via Deceive em vez do executável direto — se o
-// binário não estiver presente por algum motivo (build sem vendor, path
-// errado), cai pro spawn direto de sempre, sem travar o login.
+// funcionando normalmente. O fluxo e obrigatorio: o Riot Client/League so sao
+// abertos ATRAVES do Deceive. Se o binario estiver ausente, corrompido (hash
+// diferente) ou nao subir, o login para com erro explicito; nunca ha spawn
+// direto do Riot Client (a presenca ficaria exposta).
+export class DeceiveUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DeceiveUnavailableError'
+  }
+}
+
 const trustedDeceivePaths = new Set<string>()
 const rejectedDeceivePaths = new Set<string>()
+const DECEIVE_SPAWN_TIMEOUT_MS = 5_000
 
-function resolveDeceiveExecutable(): string | null {
-  const path = app.isPackaged
+function deceivePath(): string {
+  return app.isPackaged
     ? join(process.resourcesPath, 'vendor', 'Deceive.exe')
     : join(__dirname, '..', '..', 'vendor', 'deceive', 'Deceive.exe')
-  if (!existsSync(path)) return null
+}
+
+// Caminho do Deceive confiavel, ou lanca DeceiveUnavailableError (ausente / hash nao confere).
+export function requireDeceiveExecutable(): string {
+  const path = deceivePath()
+  if (!existsSync(path)) {
+    throw new DeceiveUnavailableError('Deceive não encontrado. Reinstale o EloPeak.')
+  }
   if (trustedDeceivePaths.has(path)) return path
-  if (rejectedDeceivePaths.has(path)) return null
-  // Nunca executa um binario que nao bate com o hash vendorizado: cai no spawn direto do Riot Client (sem Deceive).
-  if (!isTrustedFile(path, DECEIVE_SHA256)) {
+  if (rejectedDeceivePaths.has(path) || !isTrustedFile(path, DECEIVE_SHA256)) {
     rejectedDeceivePaths.add(path)
-    console.error('Deceive.exe não confere com o hash esperado -- ignorado. Reinstale o launcher.')
-    return null
+    throw new DeceiveUnavailableError('O Deceive está corrompido ou foi alterado (verificação de integridade falhou). Reinstale o EloPeak.')
   }
   trustedDeceivePaths.add(path)
   return path
 }
 
-// `lol` diz pro Deceive qual jogo abrir sozinho (equivalente ao que
-// findRiotClientExecutable + spawn fariam), evitando o seletor interativo
-// "qual jogo abrir" que ele mostra sem argumento nenhum. `fallbackArgs` só é
-// usado se o Deceive não estiver disponível — mantém o comportamento de
-// sempre de cada chamador (prelaunch sem args, login com --launch-product).
-function launchRiotClient(executable: string, fallbackArgs: string[]): void {
-  const deceiveExecutable = resolveDeceiveExecutable()
-  if (deceiveExecutable) {
-    spawn(deceiveExecutable, ['lol'], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: dirname(deceiveExecutable),
-    }).unref()
-    return
-  }
-  spawn(executable, fallbackArgs, { detached: true, stdio: 'ignore' }).unref()
+// `lol` (argumento fixo, nada vindo de token/credencial) diz pro Deceive qual jogo abrir sozinho.
+// Resolve quando o processo realmente nasceu; 'error' (ENOENT/EACCES/antivirus) vira DeceiveUnavailableError em vez de
+// uma excecao nao tratada no processo main.
+function launchViaDeceive(): Promise<void> {
+  const executable = requireDeceiveExecutable()
+  return new Promise((resolve, reject) => {
+    let child: ChildProcess
+    try {
+      child = spawn(executable, ['lol'], { detached: true, stdio: 'ignore', cwd: dirname(executable) })
+    } catch {
+      reject(new DeceiveUnavailableError('Não foi possível iniciar o Deceive (bloqueado pelo sistema ou antivírus?).'))
+      return
+    }
+    const timer = setTimeout(() => resolve(), DECEIVE_SPAWN_TIMEOUT_MS)
+    child.once('error', () => {
+      clearTimeout(timer)
+      reject(new DeceiveUnavailableError('Não foi possível iniciar o Deceive (bloqueado pelo sistema ou antivírus?).'))
+    })
+    child.once('spawn', () => {
+      clearTimeout(timer)
+      child.unref()
+      resolve()
+    })
+  })
 }
 
 const GAME_PROCESS_IMAGES = ['League of Legends.exe', 'LeagueClient.exe']
@@ -218,7 +227,7 @@ const RIOT_CLIENT_PROCESS_IMAGES = [
 // deixou aberto de uma sessão/teste anterior, aberto manualmente, etc.), a
 // presença dele já conectou direto no servidor de chat real — reabrir por
 // cima não muda isso, então derrubamos os processos do Riot Client pra forçar
-// um cold start real na próxima chamada de launchRiotClient (dessa vez via
+// um cold start real na próxima chamada de launchViaDeceive (dessa vez via
 // Deceive). Só derruba RiotClientServices/Ux/CrashHandler — nunca o próprio
 // League, que pode estar em uso de uma sessão anterior.
 function killRiotClientProcesses(): Promise<void> {
@@ -276,7 +285,7 @@ function sleep(ms: number): Promise<void> {
 
 async function waitForLockfile(timeoutMs: number): Promise<LockfileInfo> {
   const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() - start < timeoutMs && !cancelRequested) {
     const info = readLockfile()
     if (info) return info
     await sleep(25)
@@ -330,9 +339,8 @@ function localApiRequest(
 // visíveis pra qualquer processo que liste a linha de comando de outros
 // processos, ex.: Gerenciador de Tarefas) — em vez disso lê as duas pela
 // stdin do processo powershell.exe. O script em si não tem segredo nenhum.
-// Fonte do helper nativo — usada tanto pra compilar o .dll cacheado com
-// antecedência (prewarmNativeHelper) quanto como fallback inline no
-// LOGIN_SCRIPT, caso o cache não exista ou esteja corrompido.
+// Fonte do helper nativo — compilada inline (Add-Type -TypeDefinition) pelo
+// LOGIN_SCRIPT a cada login; nao ha mais .dll cacheado em disco.
 const NATIVE_TYPE_SOURCE = `
 using System;
 using System.Collections.Generic;
@@ -617,13 +625,11 @@ public class EloBoostNativeWin {
 }
 `.trim()
 
-// O nome do .dll cacheado carrega um hash do próprio código-fonte — assim,
-// se NATIVE_TYPE_SOURCE mudar numa atualização futura do app, o cache antigo
-// (compilado a partir da versão anterior da classe) simplesmente não bate
-// mais com esse nome e é ignorado, sem risco de carregar um assembly velho
-// que não tenha um método novo que o LOGIN_SCRIPT passou a chamar.
-const NATIVE_HELPER_VERSION = createHash('sha1').update(NATIVE_TYPE_SOURCE).digest('hex').slice(0, 10)
-const NATIVE_HELPER_DLL = join(NATIVE_HELPER_DIR, `EloBoostNativeWin.${NATIVE_HELPER_VERSION}.dll`)
+// O helper nativo e SEMPRE compilado inline (Add-Type -TypeDefinition) a cada login: um .dll cacheado em pasta gravavel
+// pelo usuario seria carregado no processo que recebe a senha do cliente, e nenhum hash guardado em disco protege
+// contra quem ja roda como o mesmo usuario. O custo e a compilacao C# no caminho do login (centenas de ms).
+// O parametro -NativeDllPath dos scripts fica vazio de proposito.
+const NO_CACHED_NATIVE_DLL = ''
 
 const LOGIN_SCRIPT = `
 param([string]$NativeDllPath)
@@ -855,17 +861,18 @@ function Clear-OverlaysAndAbort {
   # teclado real - da pra limpar direto (SelectAllAndDelete), sem clicar de
   # novo. Clicar de novo NAO funcionaria: acertaria nosso proprio overlay
   # (que ja esta cobrindo esse campo), nao o campo real do Riot por baixo.
-  if ($overlays.Count -ge 1) {
-    [EloBoostNativeWin]::SelectAllAndDelete()
-  }
-  # O campo anterior (usuario), se os dois ja tinham sido preenchidos, nao
-  # esta mais com foco - precisa clicar pra limpar, o que exige tirar o
-  # overlay dele do caminho primeiro. Unico ponto com uma janela de exposicao
-  # (breve, so o usuario, so nesse caminho de abort ja incomum).
-  if ($overlays.Count -ge 2) {
-    [EloBoostNativeWin]::DestroyOverlay($overlays[0])
-    [EloBoostNativeWin]::ClickAt($userPoint.X, $userPoint.Y)
-    [EloBoostNativeWin]::SelectAllAndDelete()
+  # Teclas e cliques sao cegos: so limpa se o Riot Client ainda e a janela em foco (nunca Ctrl+A/Delete em outra janela).
+  if ([EloBoostNativeWin]::GetForegroundWindow() -eq $hwnd) {
+    if ($overlays.Count -ge 1) {
+      [EloBoostNativeWin]::SelectAllAndDelete()
+    }
+    # O campo anterior (usuario), se os dois ja tinham sido preenchidos, nao esta mais com foco - precisa clicar
+    # pra limpar, o que exige tirar o overlay dele do caminho primeiro. Unico ponto com uma janela de exposicao.
+    if ($overlays.Count -ge 2) {
+      [EloBoostNativeWin]::DestroyOverlay($overlays[0])
+      [EloBoostNativeWin]::ClickAt($userPoint.X, $userPoint.Y)
+      [EloBoostNativeWin]::SelectAllAndDelete()
+    }
   }
   [EloBoostNativeWin]::BlockInput($false) | Out-Null
   foreach ($h in $overlays) { [EloBoostNativeWin]::DestroyOverlay($h) }
@@ -878,6 +885,22 @@ function Clear-OverlaysAndAbort {
 function Confirm-NotTampered {
   if ($criticalWatch.ElapsedMilliseconds -gt $MAX_CRITICAL_MS) {
     Clear-OverlaysAndAbort
+  }
+}
+
+# Clique e digitacao sao cegos (coordenadas de tela): se outra janela passou a frente do Riot Client (navegador,
+# Discord, popup do Windows), o login/senha iriam para ela. Reconfirma o foco ANTES de cada clique e de cada texto;
+# sem foco, libera o input, apaga o que ja foi digitado (Clear-FilledFields so age com o Riot em foco) e aborta.
+function Assert-RiotForeground {
+  if ([EloBoostNativeWin]::GetForegroundWindow() -ne $hwnd) {
+    # Clear-FilledFields so age com o Riot em foco: traz ele de volta (melhor esforco) antes de limpar o que foi digitado.
+    try { [EloBoostNativeWin]::ForceForeground($hwnd); Start-Sleep -Milliseconds 40 } catch { }
+    Clear-FilledFields
+    [EloBoostNativeWin]::BlockInput($false) | Out-Null
+    foreach ($h in $overlays) { [EloBoostNativeWin]::DestroyOverlay($h) }
+    $script:fieldsTouched = 0
+    Write-Error 'WINDOW_NOT_FOCUSED'
+    exit 5
   }
 }
 
@@ -900,22 +923,34 @@ if ($scriptClock.ElapsedMilliseconds -gt ${SCRIPT_START_DEADLINE_MS}) {
   Write-Error 'START_TOO_LATE'
   exit 3
 }
+# O foco pode ter ido embora durante a espera de ate 30 s: traz o Riot de volta e confere ANTES de travar o input.
+[EloBoostNativeWin]::ForceForeground($hwnd)
+Start-Sleep -Milliseconds 30
+if ([EloBoostNativeWin]::GetForegroundWindow() -ne $hwnd) {
+  Write-Error 'WINDOW_NOT_FOCUSED'
+  exit 5
+}
 [EloBoostNativeWin]::BlockInput($true) | Out-Null
 try {
+  Assert-RiotForeground
   [EloBoostNativeWin]::ClickAt($userPoint.X, $userPoint.Y)
   Start-Sleep -Milliseconds 20
   $overlays.Add([EloBoostNativeWin]::CreateOverlay($userFieldRect.X, $userFieldRect.Y, $userFieldRect.W, $userFieldRect.H))
   $fieldsTouched = 1
+  Assert-RiotForeground
   Clear-AndType -text $username
   Confirm-NotTampered
 
+  Assert-RiotForeground
   [EloBoostNativeWin]::ClickAt($passPoint.X, $passPoint.Y)
   Start-Sleep -Milliseconds 20
   $overlays.Add([EloBoostNativeWin]::CreateOverlay($passFieldRect.X, $passFieldRect.Y, $passFieldRect.W, $passFieldRect.H))
   $fieldsTouched = 2
+  Assert-RiotForeground
   Clear-AndType -text $password
   Confirm-NotTampered
 
+  Assert-RiotForeground
   [EloBoostNativeWin]::ClickAt($loginPoint.X, $loginPoint.Y)
   # O SendInput e sincrono: so uma folga curta antes de soltar o BlockInput e os overlays.
   Start-Sleep -Milliseconds 60
@@ -1024,6 +1059,20 @@ export function killActiveLogin(): void {
   activeLoginChild = null
 }
 
+// Cancelamento pedido pelo booster: interrompe o preenchimento em curso e faz as esperas seguintes abortarem.
+// O Deceive/Riot Client ja abertos ficam de pe (fecha-los derrubaria um jogo/sessao do booster).
+let cancelRequested = false
+const CANCELLED: AutoLoginResult = { ok: false, step: 'cancelled', error: 'Autenticação cancelada.' }
+
+export function beginLogin(): void {
+  cancelRequested = false
+}
+
+export function cancelLogin(): void {
+  cancelRequested = true
+  killActiveLogin()
+}
+
 function simulateCredentialsEntry(username: string, password: string, wasAlreadyRunning: boolean): Promise<void> {
   return new Promise((resolve, reject) => {
     const scriptPath = join(tmpdir(), `eloboost-riot-login-${randomUUID()}.ps1`)
@@ -1033,7 +1082,7 @@ function simulateCredentialsEntry(username: string, password: string, wasAlready
       try { unlinkSync(scriptPath) } catch { /* melhor esforço — não é crítico */ }
     }
 
-    const nativeDllPath = existsSync(NATIVE_HELPER_DLL) ? NATIVE_HELPER_DLL : ''
+    const nativeDllPath = NO_CACHED_NATIVE_DLL
     const child = spawn(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-NativeDllPath', nativeDllPath],
@@ -1065,6 +1114,11 @@ function simulateCredentialsEntry(username: string, password: string, wasAlready
           'Login abortado por segurança: o preenchimento foi interrompido ou monitorado de forma anômala.'
           + ' Os campos foram limpos antes de continuar. Tente novamente.',
         ))
+      } else if (stderr.includes('WINDOW_NOT_FOCUSED')) {
+        reject(new Error(
+          'Login abortado por segurança: outra janela passou na frente do Riot Client. Nada foi digitado fora dele.'
+          + ' Deixe o Riot Client em primeiro plano e tente novamente.',
+        ))
       } else if (stderr.includes('START_TOO_LATE')) {
         reject(new Error('O Riot Client demorou demais para abrir a tela de login. Aguarde ele terminar de carregar e tente de novo.'))
       } else if (stderr.includes('WINDOW_NOT_FOUND')) {
@@ -1090,7 +1144,7 @@ function simulateCredentialsEntry(username: string, password: string, wasAlready
 // Riot, então dá pra usar como confirmação depois do preenchimento simulado.
 async function waitForAuthenticated(lockfile: LockfileInfo, timeoutMs: number): Promise<boolean> {
   const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() - start < timeoutMs && !cancelRequested) {
     try {
       const response = await localApiRequest(lockfile, 'POST', '/rso-auth/v2/authorizations', {
         clientId: 'riot-client',
@@ -1149,7 +1203,7 @@ function clickToLaunchLeague(): Promise<boolean> {
     const cleanup = () => {
       try { unlinkSync(scriptPath) } catch { /* melhor esforço — não é crítico */ }
     }
-    const nativeDllPath = existsSync(NATIVE_HELPER_DLL) ? NATIVE_HELPER_DLL : ''
+    const nativeDllPath = NO_CACHED_NATIVE_DLL
 
     try {
       const child = spawn(
@@ -1169,7 +1223,7 @@ function clickToLaunchLeague(): Promise<boolean> {
 export interface RiotClientState {
   wasAlreadyRunning: boolean
   deceiveRunning: boolean
-  /** O Riot Client precisaria reiniciar (sem Deceive) mas o jogo esta aberto: parar ANTES de consumir o token. */
+  /** O League esta aberto: parar ANTES de consumir o token. */
   blockedByGame: boolean
   checkedAt: number
 }
@@ -1180,9 +1234,9 @@ const STATE_MAX_AGE_MS = 3_000
 // tirando a checagem do Deceive (tasklist) do caminho critico.
 export async function inspectRiotClient(): Promise<RiotClientState> {
   const wasAlreadyRunning = readLockfile() !== null
-  const deceiveRunning = wasAlreadyRunning && resolveDeceiveExecutable() ? await isDeceiveRunning() : true
-  const needsRestart = wasAlreadyRunning && !deceiveRunning
-  const blockedByGame = needsRestart ? await isAnyProcessRunning(GAME_PROCESS_IMAGES) : false
+  const deceiveRunning = wasAlreadyRunning ? await isDeceiveRunning() : true
+  // Com o League aberto o login nao tem tela para preencher (e trocar de conta derrubaria a partida): sempre para antes do token.
+  const blockedByGame = await isAnyProcessRunning(GAME_PROCESS_IMAGES)
   return { wasAlreadyRunning, deceiveRunning, blockedByGame, checkedAt: Date.now() }
 }
 
@@ -1193,8 +1247,13 @@ export async function autoLoginToRiotClient(
   manualExecutablePath?: string | null,
   preflight?: RiotClientState,
 ): Promise<AutoLoginResult> {
-  const executable = findRiotClientExecutable(manualExecutablePath)
-  if (!executable) {
+  if (cancelRequested) return CANCELLED
+  try {
+    requireDeceiveExecutable()
+  } catch (err) {
+    return { ok: false, step: 'deceive_unavailable', error: err instanceof Error ? err.message : 'Deceive indisponível.' }
+  }
+  if (!findRiotClientExecutable(manualExecutablePath)) {
     return { ok: false, step: 'find_executable', error: 'Riot Client não encontrado nesta máquina.' }
   }
 
@@ -1217,7 +1276,7 @@ export async function autoLoginToRiotClient(
   // de presença dele já está direto no servidor real — nada do que fizermos
   // agora esconde isso. Derruba e trata como cold start pra garantir que
   // desta vez o login (e a invisibilidade) passem pelo Deceive.
-  if (wasAlreadyRunning && resolveDeceiveExecutable() && !state.deceiveRunning) {
+  if (wasAlreadyRunning && !state.deceiveRunning) {
     onProgress('Reiniciando o Riot Client em modo invisível…')
     try {
       await restartRiotClientWithoutDeceive()
@@ -1233,13 +1292,19 @@ export async function autoLoginToRiotClient(
     onProgress('Riot Client já aberto…')
     lockfile = readLockfile()!
   } else {
-    onProgress('Abrindo o Riot Client…')
-    launchRiotClient(executable, ['--launch-product=league_of_legends', '--launch-patchline=live'])
+    onProgress('Iniciando o Deceive e o Riot Client…')
+    try {
+      await launchViaDeceive()
+    } catch (err) {
+      return { ok: false, step: 'deceive_unavailable', error: err instanceof Error ? err.message : 'Não foi possível iniciar o Deceive.' }
+    }
+    if (cancelRequested) return CANCELLED
 
     try {
       onProgress('Aguardando o Riot Client iniciar…')
       lockfile = await waitForLockfile(45_000)
     } catch (err) {
+      if (cancelRequested) return CANCELLED
       return { ok: false, step: 'wait_lockfile', error: err instanceof Error ? err.message : 'Timeout' }
     }
   }
@@ -1253,10 +1318,12 @@ export async function autoLoginToRiotClient(
     await sleep(20)
   }
 
+  if (cancelRequested) return CANCELLED
   onProgress('Preenchendo login…')
   try {
     await simulateCredentialsEntry(loginId, password, wasAlreadyRunning)
   } catch (err) {
+    if (cancelRequested) return CANCELLED
     return {
       ok: false,
       step: 'submit_credentials',
@@ -1266,6 +1333,7 @@ export async function autoLoginToRiotClient(
 
   onProgress('Aguardando confirmação do login…')
   const authenticated = await waitForAuthenticated(lockfile, LOGIN_CONFIRMATION_TIMEOUT_MS)
+  if (cancelRequested) return CANCELLED
   if (authenticated) {
     onProgress('Login concluído. Abrindo o League of Legends…')
     let launched = await launchLeagueClient(lockfile)
@@ -1291,81 +1359,4 @@ export async function autoLoginToRiotClient(
 
 export function isRiotClientAvailable(manualPath?: string | null): boolean {
   return findRiotClientExecutable(manualPath) !== null
-}
-
-// Chamado logo na abertura do Booster Launcher, antes do booster colar
-// qualquer token — só pra deixar o Riot Client já de pé (tela de login
-// carregada) enquanto o booster está no Discord/colando o token. Quando o
-// login de verdade acontecer em autoLoginToRiotClient, o lockfile já vai
-// existir e o fluxo entra direto no caminho de "warm start" (sem a folga de
-// 8s do cold start). Sem credenciais nesse momento, então sem argumento de
-// produto/patchline — o "Jogar" é disparado explicitamente depois do login
-// via launchLeagueClient. Silencioso de propósito: se o Riot Client não
-// estiver instalado ainda, o erro real e explicado aparece só quando o
-// booster efetivamente tentar entrar no jogo.
-export async function prelaunchRiotClient(manualExecutablePath?: string | null): Promise<void> {
-  const executable = findRiotClientExecutable(manualExecutablePath)
-  if (!executable) return
-
-  if (readLockfile()) {
-    // Mesmo lógica de restart do autoLoginToRiotClient (ver comentário lá):
-    // já aberto sem Deceive não vira invisível só por já estar de pé.
-    if (!resolveDeceiveExecutable() || (await isDeceiveRunning())) return
-    try {
-      await restartRiotClientWithoutDeceive()
-    } catch {
-      return // jogo aberto: o prelaunch nunca derruba nada; o login explica se precisar
-    }
-  }
-
-  try {
-    launchRiotClient(executable, [])
-  } catch {
-    // melhor esforço — a tentativa "de verdade" acontece no login
-  }
-}
-
-// Chamado junto com prelaunchRiotClient na abertura do Booster Launcher —
-// compila o helper nativo (ver comentário em NATIVE_HELPER_DLL) uma única
-// vez e cacheia o .dll em disco, pra tirar o custo de compilação C# do
-// caminho crítico do login. Só roda se o cache ainda não existir (inclusive
-// entre reaberturas do app — o .dll sobrevive). Silencioso de propósito: se
-// a compilação falhar por qualquer motivo, o LOGIN_SCRIPT recompila inline
-// como sempre fez, só que mais devagar.
-export function prewarmNativeHelper(): void {
-  if (existsSync(NATIVE_HELPER_DLL)) return
-
-  try {
-    mkdirSync(NATIVE_HELPER_DIR, { recursive: true })
-  } catch {
-    return
-  }
-
-  const scriptPath = join(tmpdir(), `eloboost-compile-native-${randomUUID()}.ps1`)
-  const script = `
-$ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
-${NATIVE_TYPE_SOURCE}
-'@ -OutputAssembly '${NATIVE_HELPER_DLL.replace(/'/g, "''")}' -OutputType Library
-`.trim()
-
-  try {
-    writeFileSync(scriptPath, script, 'utf-8')
-  } catch {
-    return
-  }
-
-  try {
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-      { detached: true, stdio: 'ignore', windowsHide: true },
-    )
-    const cleanup = () => { try { unlinkSync(scriptPath) } catch { /* melhor esforço */ } }
-    child.on('exit', cleanup)
-    child.on('error', cleanup)
-    child.unref()
-  } catch {
-    try { unlinkSync(scriptPath) } catch { /* melhor esforço */ }
-  }
 }

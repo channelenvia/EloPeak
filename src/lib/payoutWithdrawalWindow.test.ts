@@ -36,3 +36,18 @@ describe('nextWithdrawalDayLabel', () => {
     expect(nextWithdrawalDayLabel(new Date('2026-09-01T12:00:00Z'))).toBe('15/09')
   })
 })
+
+// Fronteira de fuso (A14-10): o dia valido e o de America/Sao_Paulo (UTC-3), nao o UTC.
+describe('fronteira de fuso America/Sao_Paulo', () => {
+  it('02:30Z do dia 16 ainda e dia 15 em Sao Paulo (aberto)', () => {
+    expect(isWithdrawalWindowOpen(new Date('2026-08-16T02:30:00Z'))).toBe(true)
+  })
+
+  it('02:30Z do dia 15 ainda e dia 14 em Sao Paulo (fechado)', () => {
+    expect(isWithdrawalWindowOpen(new Date('2026-08-15T02:30:00Z'))).toBe(false)
+  })
+
+  it('02:30Z do dia 1 ainda e o ultimo dia do mes anterior em Sao Paulo (aberto)', () => {
+    expect(isWithdrawalWindowOpen(new Date('2026-09-01T02:30:00Z'))).toBe(true)
+  })
+})

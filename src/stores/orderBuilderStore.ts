@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { getBoostFlow, isMasterPlusCurrentTier, isDuoBlockedAtTier, type BoostFlow, type BoostMode as BoostFlowMode } from '@/lib/boostDomain'
+import { getBoostFlow, isMasterPlusCurrentTier, isMasterPlusOrAboveTier, isDuoBlockedAtTier, type BoostFlow, type BoostMode as BoostFlowMode } from '@/lib/boostDomain'
 import { DEFAULT_COUPON_CODE } from '@/lib/pricing'
 import type { GameSlug, ServiceType, QueueType, BoostMode, Rank, ClashTier, ClashDay } from '@/types'
 
@@ -347,6 +347,8 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
       // Rank alvo depende do rank atual (progressão válida muda) — sempre
       // limpo ao trocar o rank atual, o usuário escolhe de novo.
       targetRank: null,
+      // Duo -> solo forcado: as rotas do cliente (duo) viram "rotas pedidas ao booster" (solo) -- limpa (H-10).
+      customerLanes: nextMode !== state.boostMode ? [] : state.customerLanes,
       selectedExtraIds: flowChanged ? new Set<string>() : state.selectedExtraIds,
       winPackage: flowChanged ? null : state.winPackage,
       currentLp: forcedMasterPlus ? 0 : state.currentLp,
@@ -370,7 +372,7 @@ export const useOrderBuilderStore = create<OrderBuilderState>()(
       if (state.serviceType === 'elo_boost' && state.queueType !== 'flex' && isMasterPlusCurrentTier(state.currentRank.tier)) {
         return {}
       }
-      if (state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isMasterPlusCurrentTier(state.currentRank.tier)) {
+      if (state.serviceType === 'win_boost' && state.queueType === 'solo_duo' && isMasterPlusOrAboveTier(state.currentRank.tier)) {
         return {}
       }
     }

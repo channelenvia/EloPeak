@@ -11,11 +11,11 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 22, cache: npm }
-      - uses: denoland/setup-deno@v2
-        with: { deno-version: v2.x }
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with: { deno-version: 2.9.6 }
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -28,12 +28,13 @@ jobs:
       - run: npm run test:edge
       - run: npm run deadcode
       - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
 
   database:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with: { version: 2.119.0 }
       - name: Sobe o banco do zero (aplica todas as migrations)
         run: supabase db start
@@ -46,10 +47,25 @@ jobs:
       run:
         working-directory: launcher
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 22, cache: npm, cache-dependency-path: launcher/package-lock.json }
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  # Proveniencia do Deceive vendorizado (A16-05): o binario do repo tem de ser o asset oficial do upstream v1.18.0 e
+  # bater com o hash fixado no codigo -- trocar binario+hash num mesmo PR nao passa.
+  deceive-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compara o Deceive.exe vendorizado com o release oficial v1.18.0
+        run: |
+          curl -fsSL -o /tmp/Deceive.official.exe https://github.com/molenzwiebel/Deceive/releases/download/v1.18.0/Deceive.exe
+          official=$(sha256sum /tmp/Deceive.official.exe | cut -d' ' -f1)
+          vendored=$(sha256sum launcher/vendor/deceive/Deceive.exe | cut -d' ' -f1)
+          pinned=$(grep -oE "DECEIVE_SHA256 = '[0-9a-f]{64}'" launcher/src/main/integrity.ts | grep -oE '[0-9a-f]{64}')
+          echo "oficial=$official vendorizado=$vendored fixado=$pinned"
+          test "$official" = "$vendored" && test "$vendored" = "$pinned"

@@ -177,7 +177,7 @@ export function CustomerOrderCard({
         )}
 
         <div className="flex-1">
-          <OrderCardDetails order={order} viewerRole={viewerRole} />
+          <OrderCardDetails order={order} viewerRole={viewerRole} coachPackage={coachPackage} />
         </div>
 
         <OrderCardFooter order={order} value={order.total_price} valueLabel="Total pago" currency={currency} />

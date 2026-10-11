@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { applyCoupon, getWinBoostPrice } from '@/lib/pricing'
-import { getBoostFlow, resolveAddonLabel, isValidRiotId } from '@/lib/boostDomain'
+import { getBoostFlow, isWinPackageAvailable, resolveAddonLabel, isValidRiotId } from '@/lib/boostDomain'
 import { ChevronRight, ChevronLeft, RotateCcw, Shield, Clock, Star, UserCheck, Tag, X } from 'lucide-react'
 import type { ServiceType, Rank } from '@/types'
 import { useAuthStore } from '@/stores/authStore'
@@ -28,6 +28,7 @@ import { StepConfigure } from '../order-builder/StepConfigure'
 import { StepExtras } from '../order-builder/StepExtras'
 import { StepReview } from '../order-builder/StepReview'
 import { StepPayment } from '../order-builder/StepPayment'
+import { consumeIsReloadMount, shouldAutoResumePendingOrder } from '../order-builder/resumeDecision'
 
 // "Pagamento" não aparece mais no stepper visual -- pagamento não é mais uma
 // tela navegável, virou o popup que abre a partir da Revisão (ver
@@ -149,20 +150,18 @@ export function OrderBuilderPage() {
   })
 
   useEffect(() => {
-    if (!resumableOrder?.id || pendingOrderId || explicitlyStartingNewOrder || hasCatalogEntryIntent) return
-    // Pedido que o cliente já dispensou explicitamente via "Sair e
-    // reiniciar" -- ?new=1 só vale pra ESSA visita; sem essa checagem,
-    // voltar depois por um link comum (Meus Pedidos -> Novo Pedido, sem
-    // ?new=1 nenhum) reabria o auto-resume pro mesmo pedido de novo. O
-    // pedido continua pagável em Meus Pedidos, só não é mais empurrado pra
-    // cá sozinho.
-    if (resumableOrder.id === dismissedOrderId) return
+    // Pedido dispensado via "Sair e reiniciar"/"Voltar" não reabre sozinho (?new=1 só vale pra ESSA visita), e sem
+    // rascunho local (aba nova) a Revisão nasceria vazia -- o pedido segue pagável em Meus Pedidos (H-8).
+    if (!resumableOrder?.id || !shouldAutoResumePendingOrder({
+      resumableOrderId: resumableOrder.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent,
+      dismissedOrderId, hasLocalDraft: !!serviceType,
+    })) return
     // Mantém a revisão visível, mas não abre o popup automaticamente.
     setStep('review')
     setSearchParams({ order: resumableOrder.id }, { replace: true })
   }, [
     resumableOrder?.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, dismissedOrderId,
-    setStep, setSearchParams,
+    serviceType, setStep, setSearchParams,
   ])
 
   useEffect(() => {
@@ -179,6 +178,8 @@ export function OrderBuilderPage() {
   function goBackFromReview() {
     const orderId = searchParams.get('order')
     if (orderId) {
+      // Sem isso o auto-resume reabria este mesmo pedido enquanto o cancelamento ainda nao refletia no cache (H-8).
+      setDismissedOrderId(orderId)
       void invokeEdgeFunction('cancel-pending-order', {
         body: { order_id: orderId },
         timeoutMs: 20_000,
@@ -270,7 +271,7 @@ export function OrderBuilderPage() {
   // já reseta direto no clique de "Configurar novo pedido" -- isto cobre só
   // quem chega aqui por navegação externa.
   useEffect(() => {
-    if (explicitlyStartingNewOrder && !hasCatalogEntryIntent) {
+    if (explicitlyStartingNewOrder && !hasCatalogEntryIntent && !consumeIsReloadMount()) {
       reset()
       setStep('service')
     }
@@ -365,11 +366,13 @@ export function OrderBuilderPage() {
   const completedSteps = steps.slice(0, currentIdx)
   const StepContent = STEP_COMPONENTS[step]
   const WIN_PACKAGE_DISCOUNTS: Record<number, number> = { 1: 10, 3: 20, 5: 30 }
-  const winPackagePrice = winPackage && currentRank
+  // Rascunho antigo pode trazer winPackage no fluxo Master+, onde o servidor o ignora (H-7).
+  const visibleWinPackage = winPackage && isWinPackageAvailable(flow) ? winPackage : null
+  const winPackagePrice = visibleWinPackage && currentRank
     ? Math.round(
         getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
-        * winPackage
-        * (1 - (WIN_PACKAGE_DISCOUNTS[winPackage] ?? 0) / 100)
+        * visibleWinPackage
+        * (1 - (WIN_PACKAGE_DISCOUNTS[visibleWinPackage] ?? 0) / 100)
         * 100
       ) / 100
     : 0
@@ -525,9 +528,9 @@ export function OrderBuilderPage() {
                   <span className="text-ink">{currency(basePrice)}</span>
                 </div>
 
-                {winPackage && (
+                {visibleWinPackage && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-ink-secondary">Pacote {winPackage} {winPackage === 1 ? 'vitória' : 'vitórias'} (-{WIN_PACKAGE_DISCOUNTS[winPackage]}%)</span>
+                    <span className="text-ink-secondary">Pacote {visibleWinPackage} {visibleWinPackage === 1 ? 'vitória' : 'vitórias'} (-{WIN_PACKAGE_DISCOUNTS[visibleWinPackage]}%)</span>
                     <span className="text-ink">+{currency(winPackagePrice)}</span>
                   </div>
                 )}

@@ -32,6 +32,11 @@ export function isMasterPlusCurrentTier(tier: RankTier): tier is 'master' | 'gra
   return tier === 'master' || tier === 'grandmaster'
 }
 
+// Master ou acima (inclui Challenger): win_boost Duo na fila Solo/Duo nao e aceito a partir daqui (M-11).
+export function isMasterPlusOrAboveTier(tier: RankTier): boolean {
+  return isMasterPlusCurrentTier(tier) || tier === 'challenger'
+}
+
 // A Riot agora libera Duo (fila solo/duo) até o rank Mestre — Grão-Mestre e
 // Challenger continuam bloqueados pra Duo em qualquer serviço de progressão
 // por rank (Elo Boost, Vitórias). Exceção: MD5 nunca bloqueia Duo por rank
@@ -42,6 +47,12 @@ export function isMasterPlusCurrentTier(tier: RankTier): tier is 'master' | 'gra
 // chama sempre combina com `queueType === 'solo_duo'` (ver getBoostFlow).
 export function isDuoBlockedAtTier(tier: RankTier): boolean {
   return tier === 'grandmaster' || tier === 'challenger'
+}
+
+// Pacote de vitórias extras (win_package): a intent Master+ não o envia e o servidor o ignora nesse fluxo,
+// então a UI não pode vendê-lo ali (H-7).
+export function isWinPackageAvailable(flow: BoostFlow | null): boolean {
+  return flow !== null && flow !== 'master_plus'
 }
 
 // Tiers sem divisão (I–IV) — Master, Grão-Mestre e Challenger são medidos só

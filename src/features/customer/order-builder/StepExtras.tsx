@@ -7,7 +7,7 @@ import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
 import { CheckCircle2, Zap, Tv, Crosshair, User, Trophy, Shield, Lightbulb, Mic } from 'lucide-react'
 import { Skeleton } from '@/components/ui'
 import { getWinBoostPrice } from '@/lib/pricing'
-import { getBoostFlow, resolveAddonLabel } from '@/lib/boostDomain'
+import { getBoostFlow, isWinPackageAvailable, resolveAddonLabel } from '@/lib/boostDomain'
 import { CLASH_ADDON_CODES } from '@/lib/clashDomain'
 import type { ServiceExtra } from '@/types'
 
@@ -51,13 +51,10 @@ export function StepExtras() {
     : serviceType === 'win_boost' || serviceType === 'md5' || isClash
       ? (boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
       : null
-  // Pacote de vitórias extras vale pra qualquer tier de Elo Boost, Master+
-  // incluso -- WIN_PRICE_CENTS (getWinBoostPrice, shared/pricing.ts) já tem
-  // preço por vitória próprio pra master/grandmaster/challenger, só não é o
-  // mesmo preço usado pra calcular o trecho Master+ em si (que vem da
-  // master_plus_pricing por faixa de PDL). computeOrderPrice no backend já
-  // soma winPackagePrice sem excluir Master+ nenhum -- só faltava aqui.
-  const showWinPackages = !!currentRank && serviceType === 'elo_boost'
+  // Pacote de vitórias extras só no fluxo padrão de Elo Boost: a intent Master+
+  // não envia win_package e o servidor o ignora nesse fluxo -- vender aqui
+  // somaria ao total da tela um item que o pedido não leva (H-7).
+  const showWinPackages = !!currentRank && serviceType === 'elo_boost' && isWinPackageAvailable(flow)
 
   const unitWinPrice = useMemo(
     () => (showWinPackages && currentRank

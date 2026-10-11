@@ -3,34 +3,31 @@ import { Badge, RankBadge } from '@/components/ui'
 import { OrderFact, OrderFacts } from './OrderFact'
 import { RankProgressionRail } from '@/components/rank/RankProgressionRail'
 import { ServiceTagPills } from '@/components/service/ServiceTagPills'
-import { useBoosterServiceDetails } from '@/api/coaching'
 import { formatRank, sortOrderExtras } from '@/lib/utils'
 import { getLaneDisplayItems } from '@/lib/lolTaxonomy'
 import { CLASH_DAY_LABEL, CLASH_TIER_BOUNDARY_RANKS, CLASH_TIER_LABEL, getClashDateParts } from '@/lib/clashDomain'
 import { rankStep } from '@/lib/pricing'
-import type { Division, Order, RankTier } from '@/types'
+import type { BoosterService, Division, Order, RankTier } from '@/types'
 
 interface OrderCardDetailsProps {
   order: Order
   viewerRole: 'customer' | 'booster' | 'admin'
+  coachPackage?: BoosterService | null
 }
 
 // Bloco de detalhes reaproveitado por todo card-resumo de pedido (cliente,
 // booster, jobs disponíveis): rank atual → objetivo (com histórico de drop se
 // houver), vitórias restantes, dia/tier do Clash, Riot ID e extras. Fonte
 // única pra esses campos ficarem sempre em sincronia visual entre os papéis.
-export function OrderCardDetails({ order, viewerRole }: OrderCardDetailsProps) {
+export function OrderCardDetails({ order, viewerRole, coachPackage }: OrderCardDetailsProps) {
   const laneItems = getLaneDisplayItems(order, viewerRole)
-  const currentRank = order.current_rank as { tier: RankTier; division: Division | null } | null
+  // Origem do progresso: rank inicial do stint (current_rank é o rank ao vivo do sync).
+  const currentRank = (order.stint_start_rank ?? order.current_rank) as { tier: RankTier; division: Division | null } | null
   const targetRank = order.target_rank as { tier: RankTier; division: Division | null } | null
   const hasWinProgress = order.wins_purchased != null
-  // Mesmo pacote (descrição, rotas/campeões/especialidades, duração) exibido
-  // na aba "Pegar" do booster (AvailableJobs.tsx) -- pra um pedido de
-  // coaching ficar com a mesma cara bonitinha em toda lista de pedidos
-  // (cliente, booster, admin), não só na hora de aceitar.
-  const { data: coachPackage } = useBoosterServiceDetails(
-    order.service_type === 'coaching' ? (order.booster_service_id ?? undefined) : undefined,
-  )
+  // O card-pai resolve o pacote uma única vez (ou em lote na aba "Pegar") e
+  // o entrega aqui. Assim título e detalhes compartilham a mesma fonte sem
+  // repetir conteúdo nem disparar uma segunda consulta por card.
   // Drop não muda o conteúdo do card -- só um badge "Dropado" ao lado do
   // código do pedido (ver CustomerOrderCard/CompletedOrderCard).
   const winsPct = hasWinProgress && order.wins_purchased

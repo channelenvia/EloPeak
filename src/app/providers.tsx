@@ -29,15 +29,16 @@ const queryClient = new QueryClient({
 })
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setSession, setProfile, setLoading, setInitialized } = useAuthStore()
+  const { setSession, setProfile, setProfileError, setLoading, setInitialized } = useAuthStore()
   const discordJoinInFlight = useRef(false)
 
   useEffect(() => {
-    let initialized = false
+    // Evento de auth mais novo que o getSession() inicial: aí o getSession tardio é que fica obsoleto (H-6).
+    let authEventSeen = false
 
     // Resolve session immediately from cache — no network needed for logged-out users
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (initialized) return
+      if (authEventSeen) return
       setSession(session)
       if (session?.user) {
         const displayName = (session.user.user_metadata?.name ?? session.user.user_metadata?.full_name) as string | undefined
@@ -48,7 +49,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         // place (authStore.ts).
         useAuthStore.getState().reset()
         setInitialized(true)
-        initialized = true
       }
     })
 
@@ -56,10 +56,19 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'INITIAL_SESSION') return // Handled by getSession() above
+        const previousUserId = useAuthStore.getState().session?.user.id
         setSession(session)
         // Renovacao de token nao muda quem esta logado: nada de PageLoader nem refetch do perfil
         // (antes isso desmontava checkout, chat e modais a cada refresh de token).
         if (event === 'TOKEN_REFRESHED') return
+        // So eventos com tratamento proprio de perfil tornam o getSession() inicial obsoleto (TOKEN_REFRESHED nao).
+        authEventSeen = true
+        // Outra aba entrou com OUTRA conta (sem SIGNED_OUT): nada da conta anterior pode sobrar no cache nem no rascunho (M-24).
+        if (session?.user && previousUserId && previousUserId !== session.user.id) {
+          useAuthStore.getState().setProfile(null)
+          queryClient.clear()
+          useOrderBuilderStore.getState().reset()
+        }
         if (session?.user) {
           if (event === 'SIGNED_IN') {
             const provider = (session.user.app_metadata as Record<string, string>).provider
@@ -75,7 +84,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
           // account can leak into the next session in the same browser.
           useAuthStore.getState().reset()
           setInitialized(true)
-          initialized = true
           queryClient.clear()
           useOrderBuilderStore.getState().reset()
         }
@@ -86,7 +94,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeout = setTimeout(() => {
       setLoading(false)
       setInitialized(true)
-      initialized = true
     }, 3000)
 
     return () => {
@@ -104,10 +111,14 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('id', userId)
       .maybeSingle()
     let data = initialData
+    // Resposta tardia de quem ja saiu/trocou de conta nao pode escrever perfil nem erro no store.
+    const isStale = () => useAuthStore.getState().session?.user.id !== userId
+    if (isStale()) return
 
     if (error) {
       if (import.meta.env.DEV) console.error('fetchProfile: failed to load profile', error)
       setProfile(null)
+      setProfileError(true)
       setLoading(false)
       setInitialized(true)
       return
@@ -121,9 +132,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('*')
         .eq('id', userId)
         .maybeSingle()
+      if (isStale()) return
       if (result.error) {
         if (import.meta.env.DEV) console.error('fetchProfile: failed to load profile after ensure_profile_exists', result.error)
         setProfile(null)
+        setProfileError(true)
         setLoading(false)
         setInitialized(true)
         return

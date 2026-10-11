@@ -101,8 +101,8 @@ body {
   animation: fadeSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.screen.hidden { display: none; }
-.hidden { display: none; }
+.screen.hidden { display: none !important; } /* sem !important, .update-banner { display: flex } (declarado depois) vencia e o aviso ficava sempre visivel */
+.hidden { display: none !important; } /* sem !important, .update-banner { display: flex } (declarado depois) vencia e o aviso ficava sempre visivel */
 
 .screen { animation: fadeSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 

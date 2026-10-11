@@ -32,7 +32,7 @@ export function escapeHtml(value: string): string {
 
 // Pagina mostrada no navegador depois do Discord: so diz "pode fechar" quando deu certo.
 export function callbackPage(ok: boolean, message: string): string {
-  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Booster Launcher</title></head>'
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>EloPeak</title></head>'
     + '<body style="font-family:sans-serif;background:#0f1115;color:#e6e8eb;display:flex;align-items:center;'
     + 'justify-content:center;height:100vh;margin:0;text-align:center;padding:0 24px">'
     + `<p style="color:${ok ? '#e6e8eb' : '#ff8a8a'}">${escapeHtml(message)}</p></body></html>`

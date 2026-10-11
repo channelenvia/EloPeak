@@ -3,6 +3,7 @@ export {}
 interface UpdateInfo {
   version: string
   url: string
+  sha256: string
   notes?: string
 }
 
@@ -12,6 +13,7 @@ interface LauncherApi {
   openExternal(url: string): Promise<void>
   loginWithDiscord(): Promise<{ ok: true } | { ok: false; error: string }>
   logout(): Promise<void>
+  cancelToken(): Promise<void>
   submitToken(token: string): Promise<{ ok: true; leagueLaunched?: boolean } | { ok: false; error?: string }>
   onProgress(callback: (step: string) => void): () => void
 }
@@ -34,6 +36,7 @@ const submitTokenBtn = document.getElementById('submit-token-btn') as HTMLButton
 const submitTokenSpinner = document.getElementById('submit-token-spinner')!
 const submitTokenLabel = document.getElementById('submit-token-label')!
 const progressBox = document.getElementById('progress')!
+const cancelBtn = document.getElementById('cancel-token-btn') as HTMLButtonElement
 const progressText = document.getElementById('progress-text')!
 const resultError = document.getElementById('result-error')!
 const resultErrorText = document.getElementById('result-error-text')!
@@ -69,6 +72,9 @@ async function init(): Promise<void> {
     if (!update) return
     updateUrl = update.url
     updateVersion.textContent = update.version
+    // Permite conferir o instalador baixado (SHA-256 do manifesto) antes de executar.
+    updateBanner.title = `SHA-256 do instalador: ${update.sha256}`
+    updateVersion.textContent = `${update.version} (SHA-256 ${update.sha256.slice(0, 12)}…)`
     updateBanner.classList.remove('hidden')
   }).catch(() => { /* sem rede: ignora */ })
 
@@ -118,7 +124,8 @@ submitTokenBtn.addEventListener('click', async () => {
   submitTokenSpinner.classList.remove('hidden')
   submitTokenLabel.textContent = 'Autenticando…'
   progressBox.classList.remove('hidden')
-  progressText.textContent = 'Resolvendo token…'
+  progressText.textContent = 'Verificando o token…'
+  cancelBtn.classList.remove('hidden')
   try {
     const result = await window.launcher.submitToken(token)
     if (result.ok) {
@@ -141,10 +148,16 @@ submitTokenBtn.addEventListener('click', async () => {
   } finally {
     // O token nunca fica no campo depois de uma tentativa (sucesso ou erro).
     tokenInput.value = ''
+    cancelBtn.classList.add('hidden')
     submitTokenBtn.removeAttribute('disabled')
     submitTokenSpinner.classList.add('hidden')
     submitTokenLabel.textContent = 'Autenticar'
   }
+})
+
+cancelBtn.addEventListener('click', () => {
+  cancelBtn.setAttribute('disabled', 'true')
+  void window.launcher.cancelToken().finally(() => cancelBtn.removeAttribute('disabled'))
 })
 
 updateBtn.addEventListener('click', () => {

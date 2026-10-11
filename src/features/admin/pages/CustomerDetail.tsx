@@ -56,14 +56,14 @@ export function AdminCustomerDetailPage() {
       <div>
         <h3 className="text-base font-semibold text-ink mb-3">Pedidos</h3>
         {loadingOrders ? (
-          <CardGrid cols={4}>
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
+          <CardGrid cols={3}>
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
           </CardGrid>
         ) : !orders?.length ? (
           <Card padding="none"><EmptyState icon={ShoppingBag} title="Nenhum pedido ainda" /></Card>
         ) : (
           <>
-          <CardGrid cols={4}>
+          <CardGrid cols={3}>
             {ordersPage.pageItems.map((order) => (
               <CustomerOrderCard key={order.id} order={order} currency={currency} basePath="/admin/orders" viewerRole="admin" />
             ))}

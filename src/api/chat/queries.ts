@@ -9,6 +9,7 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_unavailable: 'O chat ainda não está disponível para este pedido.',
   chat_locked: 'O chat deste pedido está bloqueado.',
   forbidden: 'Você não tem acesso a este chat.',
+  rate_limited: 'Muitas tentativas. Aguarde um minuto.',
 }
 
 export async function getOrderChat(orderId: string): Promise<OrderChatState> {

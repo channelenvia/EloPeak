@@ -393,6 +393,9 @@ const MD5_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Re
     duo: {
       iron: 540, bronze: 628, silver: 726, gold: 809, platinum: 953,
       emerald: 1498, diamond: 1999, master: 3350,
+      // Proporcional ao solo pela razao duo/solo do Master (3350/1602): sem linha propria o fallback cobrava
+      // Duo em GM/Challenger MAIS BARATO que Solo (L-8).
+      grandmaster: 6252, challenger: 10012,
     },
   },
   flex: {
@@ -403,6 +406,9 @@ const MD5_PRICE_CENTS: Record<QueueType, { solo: Record<string, number>; duo: Re
     duo: {
       iron: 540, bronze: 628, silver: 726, gold: 809, platinum: 953,
       emerald: 1498, diamond: 1999, master: 3350,
+      // Proporcional ao solo pela razao duo/solo do Master (3350/1602): sem linha propria o fallback cobrava
+      // Duo em GM/Challenger MAIS BARATO que Solo (L-8).
+      grandmaster: 6252, challenger: 10012,
     },
   },
 }
@@ -503,6 +509,9 @@ export function applyMasterPlusPdlDiscount(
   currentTier: RankTier,
   queue: QueueType,
   _masterPlusCutoffs?: MasterPlusCutoffs,
+  // Valor da vitoria da propria modalidade (mesma regra do apply_order_drop e do applyLpModifier): Duo Flex nao
+  // recebe o desconto calculado sobre a vitoria SOLO (L-6).
+  mode: 'solo' | 'duo' = 'solo',
 ): number {
   if (basePrice <= 0) return basePrice
   const clampedPdl = Math.max(0, currentPdl)
@@ -510,7 +519,7 @@ export function applyMasterPlusPdlDiscount(
   if (discountedGames <= 0) return basePrice
 
   const baseCents = moneyToCents(basePrice)
-  const winValueCents = moneyToCents(getWinBoostPrice(queue, currentTier, 'solo'))
+  const winValueCents = moneyToCents(getWinBoostPrice(queue, currentTier, mode))
   return centsToMoney(applyBankedWinDiscount(baseCents, discountedGames, winValueCents))
 }
 
@@ -659,6 +668,7 @@ export function computeOrderPrice(input: OrderPriceInput): OrderPriceResult {
             currentRank.tier,
             input.queueType,
             input.masterPlusCutoffs,
+            boostMode === 'duo' ? 'duo' : 'solo',
           )
           estimatedHours = estimateEloBoostHours({
             currentRank,

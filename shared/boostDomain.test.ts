@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   BOOST_CURRENT_RANK_TIERS, STANDARD_RANK_TIERS, PRIORITY_ADDON_CODE,
   BOOST_ADDON_CODES, PDL_BRACKETS, NO_DIVISION_TIERS,
-  isStandardTier, isMasterPlusCurrentTier, isDuoBlockedAtTier, getBoostFlow, tierHasDivisions,
+  isStandardTier, isMasterPlusCurrentTier, isMasterPlusOrAboveTier, isWinPackageAvailable, isDuoBlockedAtTier, getBoostFlow, tierHasDivisions,
   getPdlBracket, isAddonCodeValidForFlow, hasDuplicateAddonCodes,
   sortAddonsBySortOrder, isRankLocked,
 } from './boostDomain'
@@ -251,5 +251,31 @@ describe('isRankLocked', () => {
 
   it('nothing is locked when there is no current rank yet', () => {
     expect(isRankLocked({ tier: 'iron', division: 'I' }, null)).toBe(false)
+  })
+})
+
+describe('isMasterPlusOrAboveTier (M-11)', () => {
+  it('inclui challenger, que isMasterPlusCurrentTier nao cobre', () => {
+    expect(isMasterPlusOrAboveTier('master')).toBe(true)
+    expect(isMasterPlusOrAboveTier('grandmaster')).toBe(true)
+    expect(isMasterPlusOrAboveTier('challenger')).toBe(true)
+    expect(isMasterPlusCurrentTier('challenger')).toBe(false)
+  })
+
+  it('nao inclui tiers padrao', () => {
+    expect(isMasterPlusOrAboveTier('diamond')).toBe(false)
+    expect(isMasterPlusOrAboveTier('iron')).toBe(false)
+  })
+})
+
+describe('isWinPackageAvailable (H-7)', () => {
+  it('fluxo Master+ nao vende pacote de vitorias (a intent nao o envia)', () => {
+    expect(isWinPackageAvailable('master_plus')).toBe(false)
+    expect(isWinPackageAvailable(null)).toBe(false)
+  })
+
+  it('fluxos padrao vendem', () => {
+    expect(isWinPackageAvailable('solo_standard')).toBe(true)
+    expect(isWinPackageAvailable('duo_standard')).toBe(true)
   })
 })

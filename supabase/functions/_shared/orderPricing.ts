@@ -4,6 +4,7 @@ import {
   type BoostFlow,
   isAddonCodeValidForFlow,
   isMasterPlusCurrentTier,
+  isMasterPlusOrAboveTier,
   isDuoBlockedAtTier,
   isStandardTier,
   hasDuplicateAddonCodes,
@@ -832,7 +833,7 @@ export async function validateAndPriceIntent(
     }
     if (
       normalized.serviceType === 'win_boost' && normalized.boostMode === 'duo'
-      && normalized.queueType !== 'flex' && isMasterPlusCurrentTier(verifiedTier)
+      && normalized.queueType !== 'flex' && isMasterPlusOrAboveTier(verifiedTier)
     ) {
       return { ok: false, response: badRequest(req, 'Duo não é aceito a partir de Master na fila Solo/Duo — escolha Flex') }
     }

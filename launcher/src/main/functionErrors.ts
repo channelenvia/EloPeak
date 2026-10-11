@@ -12,6 +12,7 @@ const CODE_MESSAGES: Record<string, string> = {
   token_not_found: 'Token inválido. Copie o token novamente na página do pedido.',
   token_expired: 'Token expirado. Gere um novo token na página do pedido.',
   token_expired_or_invalid: 'Token expirado. Gere um novo token na página do pedido.',
+  order_not_in_progress: 'Este pedido não está em andamento. O login só é liberado enquanto o pedido estiver em andamento.',
   order_not_active: 'Este pedido não está mais ativo.',
   order_not_paid_or_active: 'Este pedido não está mais ativo.',
   booster_not_authorized: 'Sua conta de booster não está aprovada.',

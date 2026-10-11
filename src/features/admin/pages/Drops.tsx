@@ -63,7 +63,8 @@ export function AdminDropsPage() {
     mutate: (params: { id: string; approve: boolean; note: string; coachingCompletionPct?: number }) =>
       resolveMutation.mutate(
         {
-          requestId: params.id, approve: params.approve, adminNote: params.note || undefined,
+          requestId: params.id, orderId: requests?.find((r) => r.id === params.id)?.order_id,
+          approve: params.approve, adminNote: params.note || undefined,
           coachingCompletionPct: params.coachingCompletionPct,
         },
         { onSuccess: () => { setResolving(null); setAdminNote(''); setCompletionPct('') } },
@@ -130,7 +131,7 @@ export function AdminDropsPage() {
 
                 {(r.order?.drop_count ?? 0) >= 2 && (
                   <span
-                    title="Este pedido já foi dropado 2 vezes -- aprovar essa solicitação vai CANCELAR o pedido em vez de devolvê-lo pro painel."
+                    title="Este pedido já foi dropado 2 vezes -- aprovar essa solicitação manda o pedido para análise manual, mantendo o booster, em vez de devolvê-lo pro painel."
                     className="badge text-2xs font-bold bg-danger/10 text-danger w-fit"
                   >
                     Cancela o pedido
@@ -332,7 +333,7 @@ export function AdminDropsPage() {
           const note = !resolving?.approve
             ? 'O pedido volta ao status anterior.'
             : willCancel
-              ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui CANCELA o pedido em vez de devolvê-lo pro painel. Trate o pagamento do booster e o cliente manualmente depois.'
+              ? 'Este pedido já foi dropado 2 vezes -- aprovar aqui manda o pedido para análise manual, mantendo o booster, em vez de devolvê-lo pro painel. A liquidação (pagamento do booster e reembolso do cliente, por progresso) é feita manualmente depois.'
               : 'O pedido volta pro painel. Pagamento proporcional ao progresso já concluído.'
           return (
             <>

@@ -105,7 +105,13 @@ function ChampionCaptcha({ orderId, onSuccess }: { orderId: string; onSuccess: (
   return (
     <div className="space-y-3">
       <div className="w-40 h-40 mx-auto rounded-xl overflow-hidden border border-border-subtle bg-bg-raised select-none">
-        <img src={challenge.image_url} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+        <img
+          src={challenge.image_url}
+          alt=""
+          draggable={false}
+          onError={() => setLoadError('Não foi possível carregar a imagem do desafio.')}
+          className="w-full h-full object-cover pointer-events-none"
+        />
       </div>
       <input
         value={value}

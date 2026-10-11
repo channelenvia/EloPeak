@@ -52,7 +52,7 @@ export async function confirmOrderCompletion(orderId: string) {
 // quem chamou poder explicar um eventual sync_required_before_* do RPC
 // seguinte -- sem isso esse erro ficava mudo e reatribuir/dropar parecia
 // travado num loop sem explicação (histórico "nunca sincroniza sozinho").
-async function bestEffortSyncBeforeAction(orderId: string): Promise<Error | null> {
+export async function bestEffortSyncBeforeAction(orderId: string): Promise<Error | null> {
   try {
     await syncOrderMatches(orderId)
     return null
@@ -129,6 +129,7 @@ const ADMIN_OVERRIDE_STATUS_MESSAGES: Record<string, string> = {
 }
 
 export async function adminOverrideOrderStatus(params: { orderId: string; newStatus: OrderStatus; reason?: string }) {
+  await bestEffortSyncBeforeAction(params.orderId)
   return callRpc('admin_override_order_status', {
     p_order_id: params.orderId, p_new_status: params.newStatus, p_reason: params.reason,
   }, ADMIN_OVERRIDE_STATUS_MESSAGES)
@@ -193,6 +194,7 @@ const PENDING_REVIEW_MESSAGES: Record<string, string> = {
   // Só admin_assign_pending_review_order devolve este -- pedido já foi
   // pego por outro booster entre a lista carregar e o admin confirmar.
   order_has_active_booster: 'Este pedido já tem um booster atribuído -- atualize a página.',
+  refund_pending: 'Há um reembolso pendente neste pedido -- conclua ou cancele o reembolso antes de liberá-lo.',
 }
 
 export async function adminSetPendingReviewLock(params: { orderId: string; locked: boolean }) {
@@ -225,6 +227,8 @@ const FLAG_UNDER_REVIEW_MESSAGES: Record<string, string> = {
 }
 
 export async function adminFlagOrderUnderReview(params: { orderId: string; reason: string }) {
+  // Partidas ainda nao sincronizadas ficariam de fora: em analise o sync para e, ao liberar, a janela anda para frente (M-2).
+  await bestEffortSyncBeforeAction(params.orderId)
   return callRpc('admin_flag_order_under_review', {
     p_order_id: params.orderId, p_reason: params.reason,
   }, FLAG_UNDER_REVIEW_MESSAGES)
@@ -309,6 +313,7 @@ export async function requestCustomerOrderDrop(params: { orderId: string; reason
 export async function revealOrderCredentials(orderId: string) {
   return callRpc('get_order_credentials', { p_order_id: orderId }, {
     rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.',
+    order_not_in_progress: 'Este pedido não está em andamento. O login só é liberado enquanto o pedido estiver em andamento.',
   }) as Promise<{ success: boolean; error?: string; access_token?: string; expires_at?: string }>
 }
 

@@ -259,6 +259,8 @@ export async function syncOrderMatches(
 
   const recorded: Array<{ external_match_id: string; result: 'win' | 'loss' | 'remake'; champion: string | null }> = []
   const duoCheckedIds = new Set<string>()
+  // Corte por 429/status inválido: não marca last_match_synced_at (o cron tenta de novo) e não diz synced:true.
+  let isSyncComplete = true
   // Booster(s) que de fato receberam alguma partida CONTABILIZÁVEL nesta
   // chamada -- pode ser mais de um (ou nenhum "atual") se o pedido foi
   // reatribuído e o sync só rodou depois: record_order_match/
@@ -302,7 +304,7 @@ export async function syncOrderMatches(
   for (const matchId of newMatchIds) {
     const bodyResult = await fetchMatchBody(matchId, RIOT_API_KEY, REGIONAL_ROUTE)
     if (!bodyResult.ok) {
-      if (bodyResult.reason === 'rate_limited') break
+      if (bodyResult.reason === 'rate_limited') { isSyncComplete = false; break }
       console.error('Riot match-v5 detail error', matchId, bodyResult.status)
       continue
     }
@@ -346,7 +348,7 @@ export async function syncOrderMatches(
         // Pedido pode ter saído de in_progress/paused durante a
         // sincronização (ex: booster marcou concluído em outra aba) --
         // para sem corromper o que já foi contabilizado até aqui.
-        if (result?.error === 'invalid_status') break
+        if (result?.error === 'invalid_status') { isSyncComplete = false; break }
       } else if (result.inserted) {
         recorded.push({
           external_match_id: clientDetail.detail.externalMatchId,
@@ -395,7 +397,7 @@ export async function syncOrderMatches(
 
       const bodyResult = await fetchMatchBody(matchId, RIOT_API_KEY, REGIONAL_ROUTE)
       if (!bodyResult.ok) {
-        if (bodyResult.reason === 'rate_limited') break
+        if (bodyResult.reason === 'rate_limited') { isSyncComplete = false; break }
         console.error('Riot match-v5 detail error (duo backfill)', matchId, bodyResult.status)
         continue
       }
@@ -463,8 +465,10 @@ export async function syncOrderMatches(
     }
   }
 
-  const { error: markSyncError } = await serviceClient.rpc('mark_order_match_sync', { p_order_id: orderId })
-  if (markSyncError) console.error('mark_order_match_sync failed', orderId, markSyncError.message)
+  if (isSyncComplete) {
+    const { error: markSyncError } = await serviceClient.rpc('mark_order_match_sync', { p_order_id: orderId })
+    if (markSyncError) console.error('mark_order_match_sync failed', orderId, markSyncError.message)
+  }
 
   // Um recálculo por booster que de fato recebeu alguma partida nesta
   // chamada, não por order.assigned_booster_id -- depois de um reassign, um
@@ -476,6 +480,6 @@ export async function syncOrderMatches(
 
   return {
     status: 200,
-    body: { synced: true, new_matches: recorded.length, matches: recorded },
+    body: { synced: isSyncComplete, new_matches: recorded.length, matches: recorded },
   }
 }

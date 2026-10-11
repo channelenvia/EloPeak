@@ -17,37 +17,49 @@ com o Riot Client sozinho, o processo de UI (renderer) só recebe status.
    WebView embutido, nunca lê o fragmento da URL.
 2. Sessão fica salva localmente, cifrada via `safeStorage` do Electron
    (DPAPI no Windows) — não precisa logar de novo a cada abertura.
-3. Booster cola o token copiado do painel e clica em "Entrar no jogo".
-4. O app chama as Edge Functions já existentes no backend
-   (`resolve-order-credentials` e `resolve-duo-account-credentials` — tenta
-   as duas, pois o token é opaco e pode ser de uma conta do próprio cliente
-   ou de uma conta Duo) para trocar o token por login/senha.
-5. O app abre o Riot Client — via [Deceive](https://github.com/molenzwiebel/Deceive)
-   (vendorizado em `vendor/deceive/`, `lol` como jogo alvo) quando disponível, pra
-   já entrar com a presença de chat como offline sem perder chat/partida; se o
-   binário não estiver presente, cai para o `--launch-product=league_of_legends`
-   direto —, espera o `lockfile` local aparecer e envia as credenciais para a API
-   REST local do próprio Riot Client (mesmo mecanismo que a tela de login dele usa
-   internamente).
+3. Booster cola o token copiado do painel e clica em "Autenticar". O app
+   valida o formato antes de qualquer chamada (remove espaços/quebras de linha;
+   rejeita vazio, curto, fora do base64 ou acima de 8 KB, com mensagem clara; o
+   token nunca é logado).
+4. Ordem fixa e verificada etapa a etapa (qualquer falha para o fluxo com erro
+   explícito, antes de gastar o token quando possível):
+   1. **Deceive íntegro**: `vendor/Deceive.exe` precisa existir e bater com o
+      SHA-256 de `src/main/integrity.ts`. Ausente/corrompido = erro, **nunca**
+      abre o Riot Client direto.
+   2. **Riot Client instalado** e **League fechado** (`League of Legends.exe` /
+      `LeagueClient.exe`): com o jogo aberto o login para aqui, sem consumir o token.
+   3. **Credenciais**: o app chama `resolve-order-credentials` e
+      `resolve-duo-account-credentials` (o token é opaco; tenta as duas) para
+      trocar o token (uso único) por login/senha. Erros mapeados em
+      `src/main/functionErrors.ts` (token inválido/expirado, pedido não está em
+      andamento, sessão expirada, limite de tentativas).
+   4. **Deceive -> Riot Client -> League**: só agora o app executa o Deceive com o
+      argumento fixo `lol` (nada vindo do token/credencial); é ele que abre o Riot
+      Client. Se o Riot Client já estava aberto sem Deceive, é reiniciado via
+      Deceive. O app espera o `lockfile`, preenche o login (PowerShell, credenciais
+      por stdin, nunca em argumento/arquivo), confirma pela API local e dispara o
+      "Jogar" do League.
+5. O botão **Cancelar** interrompe o preenchimento e as esperas. Fechar o app
+   encerra o PowerShell do login; Deceive/Riot Client/League já abertos ficam de
+   pé (fechá-los derrubaria a sessão/partida do booster).
 6. Se qualquer etapa falhar, o app mostra o erro e o booster tenta de novo —
    não há cópia manual de usuário/senha (nunca fica exposto, nem no clipboard).
+   O Riot Client não é aberto na inicialização do launcher, só depois do token válido.
 
 ## ⚠️ Avisos importantes
 
-- **Automação do Riot Client** (passo 5): usa a API REST local do processo
+- **Automação do Riot Client** (passo 4): usa a API REST local do processo
   `RiotClientServices.exe`, **não documentada oficialmente pela Riot** —
   implementada com base em engenharia reversa amplamente replicada por
   ferramentas open source de troca de conta. Pode parar de funcionar se a
   Riot mudar o client. Isolado em `src/main/riotClient.ts`. Se a Riot exigir
   verificação adicional (captcha, e-mail, 2FA), o booster completa isso na
   própria janela do Riot Client — o app não tenta contornar.
-- **Deceive** (passo 5): cria um ícone na bandeja do sistema (comportamento
+- **Deceive** (passo 4): cria um ícone na bandeja do sistema (comportamento
   dele, não configurável por fora) e, no primeiro uso em cada máquina, pode
   mandar uma mensagem de boas-vindas no chat — não bloqueia o fluxo. Não
-  testado ainda ponta a ponta contra um Riot Client/League real; se o login
-  automático falhar só quando o Deceive está presente, comparar com
-  `resolveDeceiveExecutable()` retornando `null` (fallback sem Deceive) pra
-  isolar se o problema é dele ou do resto do fluxo.
+  testado ainda ponta a ponta contra um Riot Client/League real. Não existe mais
+  fallback sem Deceive: se ele falhar, o login falha com erro explícito.
 - **Redirect URL do OAuth**: `http://127.0.0.1:*/callback` precisa estar
   liberado em Authentication → URL Configuration → Redirect URLs no projeto
   Supabase (produção). Se o login com Discord falhar com erro de "redirect
@@ -79,7 +91,7 @@ npm start
 npm run package
 ```
 
-Gera instalador NSIS e versão portátil em `launcher/release/`. **Requer
+Gera somente o instalador NSIS em `launcher/release/`. **Requer
 Modo Desenvolvedor do Windows ativado** (Configurações → Privacidade e
 segurança → Para desenvolvedores) — o electron-builder precisa extrair um
 pacote de ferramentas que contém symlinks, e isso falha sem essa permissão.
@@ -142,10 +154,10 @@ rcedit-x64.exe "dist/win-unpacked/Booster Launcher.exe" --set-icon "build/icon.i
   encerram o login; o PKCE garante que um `code` de terceiros não troca por
   sessão. O `debug.log` só existe com `--dev` e nunca grava URL/`?code=`.
 - Deceive: o `Deceive.exe` só executa se o SHA-256 bater com
-  `src/main/integrity.ts` (senão abre o Riot Client direto). Ver
+  `src/main/integrity.ts` (senão o login falha; nunca abre o Riot Client direto). Ver
   `vendor/deceive/NOTICE.md` para atualizar.
 - O Riot Client nunca é derrubado com o League aberto (o login pede para
-  fechar o jogo antes). O preenchimento (PowerShell) morre por timeout de
+  fechar o jogo antes, antes de gastar o token). O preenchimento (PowerShell) morre por timeout de
   60 s ou ao fechar o app e apaga o que foi digitado se falhar no meio.
 - `rejectUnauthorized: false` é usado só para a chamada HTTPS a
   `127.0.0.1` (API local do Riot Client, certificado autoassinado por
@@ -167,13 +179,22 @@ gratuito do Supabase limita arquivos a 50 MB) e o manifesto é o arquivo
 1. Aumente `version` em `launcher/package.json`, rode `npm run package` e pegue o instalador em `release/`.
 2. No repositório de releases: crie a release com a tag `v0.2.0` e anexe `Booster-Launcher-Setup-0.2.0.exe`
    (GitHub → Releases → *Draft a new release*; ou `gh release create v0.2.0 <arquivo> -R channelenvia/EloPeak-Launcher`).
-3. Só depois, atualize `update.json` na `main` (mesmo formato abaixo):
+3. Calcule o SHA-256 do instalador (`shasum -a 256 release/Booster-Launcher-Setup-0.2.0.exe`) e só depois atualize
+   `update.json` na `main` com ele (campo `sha256` **obrigatório**: sem ele o aviso não aparece; o app mostra o
+   hash no banner para o booster conferir o download; mesmo formato abaixo):
 
 ```json
-{ "version": "0.2.0", "url": "https://github.com/channelenvia/EloPeak-Launcher/releases/download/v0.2.0/Booster-Launcher-Setup-0.2.0.exe", "notes": "o que mudou" }
+{ "version": "0.2.0", "url": "https://github.com/channelenvia/EloPeak-Launcher/releases/download/v0.2.0/Booster-Launcher-Setup-0.2.0.exe", "sha256": "<64 hex do instalador>", "notes": "o que mudou" }
 ```
 
 (o `raw.githubusercontent.com` guarda cache por ~5 min; o aviso pode demorar esse tempo a aparecer).
+
+O aviso só aparece quando a versão do manifesto é **maior** que a do app por
+semver (`0.1.10 > 0.1.2`, prefixo `v` aceito) e o manifesto é válido (com `sha256` de 64 hex), com `url`
+de instalador da mesma versão (`/download/v<version>/`); pré-release remoto não é
+oferecido a quem roda versão final; erro de rede/manifesto inválido = nada. O
+banner usa `.hidden { display: none !important }` (sem isso `.update-banner {
+display: flex }` o deixava sempre visível).
 
 Quem tem versão menor vê o aviso "Nova versão disponível" com o botão
 **Baixar** (abre o link no navegador). Regras de segurança: manifesto e `url`
@@ -187,7 +208,7 @@ o que os boosters instalam**: ative 2FA nas contas com acesso de escrita.
 
 ## Testes e verificação
 
-- Lógica pura (callback do OAuth, mensagens de erro, versão, hash do Deceive)
+- Lógica pura (callback do OAuth, mensagens de erro, versão, formato do token, hash do Deceive)
   tem testes em `../shared/launcher*.test.ts` (rodam no `npm test` da raiz).
 - `npm run typecheck` e `npm run build` rodam na CI (job `launcher`).
 - Login automático ponta a ponta (PowerShell, Riot Client, Deceive) só pode

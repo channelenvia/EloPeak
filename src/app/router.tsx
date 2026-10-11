@@ -162,7 +162,6 @@ export const router = createBrowserRouter([
           { path: '/admin/payments',     element: <SuspensePage><AdminPaymentsPage /></SuspensePage> },
           { path: '/admin/payouts',      element: <SuspensePage><AdminPayoutsPage /></SuspensePage> },
           { path: '/admin/refunds',      element: <SuspensePage><AdminRefundsPage /></SuspensePage> },
-          { path: '/admin/reviews',      element: <Navigate to="/admin" replace /> },
           { path: '/admin/audit',        element: <SuspensePage><AdminAuditLogPage /></SuspensePage> },
           { path: '/admin/reviews',      element: <SuspensePage><AdminReviewsPage /></SuspensePage> },
           // Catálogo de serviços/preços passou a ser gerido só pelo sistema (fórmulas

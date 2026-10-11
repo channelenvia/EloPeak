@@ -207,6 +207,8 @@ export interface Order {
   boost_mode: BoostMode
   server: string
   current_rank: Rank | null
+  // Rank inicial do stint (origem do progresso); current_rank é o rank ao vivo do sync. null = usar current_rank.
+  stint_start_rank?: Rank | null
   target_rank: Rank | null
   // Clash: tier fixo escolhido (não um rank+divisão) e dia agendado — null
   // para qualquer outro service_type.

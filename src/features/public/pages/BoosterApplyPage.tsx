@@ -1,4 +1,5 @@
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogoMark, PageLoader } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
@@ -6,16 +7,36 @@ import { BoosterApplicationForm } from '@/features/booster/components/BoosterApp
 import { PendingScreen, RejectedScreen, SuspendedScreen, RemovedScreen, BoosterStatusErrorScreen } from '@/features/booster/components/BoosterStatusScreens'
 import { requestBoosterRole, useBoosterStatus } from '@/api/boosters'
 import { queryKeys } from '@/api/core/queryKeys'
+import { getOwnProfile } from '@/api/auth'
 
 export function BoosterApplyPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { profile } = useAuthStore()
+  const setProfile = useAuthStore((s) => s.setProfile)
+  const [roleRefreshFailed, setRoleRefreshFailed] = useState(false)
   const isBoosterIntent = searchParams.get('booster') === '1'
   const isAlreadyBooster = profile?.role === 'booster'
   const { data: access, isLoading: statusLoading } = useBoosterStatus(profile?.id)
   const state = statusLoading || !access ? 'loading' : access.state
+
+  // Aprovado: a role no store ainda e 'customer' (so muda no banco). Reler o perfil antes de entrar em /booster,
+  // senao RequireAuth redireciona para /dashboard com "sem acesso" (M-25).
+  const profileId = profile?.id
+  const profileRole = profile?.role
+  useEffect(() => {
+    if (state !== 'approved' || !profileId || profileRole === 'booster') return
+    let cancelled = false
+    void getOwnProfile(profileId)
+      .then((fresh) => {
+        if (cancelled) return
+        if (fresh?.role === 'booster') setProfile(fresh)
+        else setRoleRefreshFailed(true)
+      })
+      .catch(() => { if (!cancelled) setRoleRefreshFailed(true) })
+    return () => { cancelled = true }
+  }, [state, profileId, profileRole, setProfile])
 
   if (!isBoosterIntent) return <Navigate to="/" replace />
   if (!profile) return null
@@ -25,7 +46,11 @@ export function BoosterApplyPage() {
   // candidato recém-aplicado continua com role='customer' durante toda a
   // análise. Checar só `isAlreadyBooster` aqui deixava pending/rejected sem
   // tela nenhuma pra quem ainda não foi aprovado.
-  if (state === 'approved') return <Navigate to="/booster" replace />
+  if (state === 'approved') {
+    if (profile.role === 'booster') return <Navigate to="/booster" replace />
+    // Aprovado mas a role nao chegou como booster (rede/RLS/atraso): nunca loader infinito.
+    return roleRefreshFailed ? <BoosterStatusErrorScreen /> : <PageLoader />
+  }
 
   async function startBoosterApplication() {
     if (!profile) return false

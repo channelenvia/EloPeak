@@ -50,13 +50,18 @@ export async function listAdminReviewCases(): Promise<AdminReviewCase[]> {
 }
 
 export async function listAdminDropRequests(limit = 100): Promise<OrderDropRequest[]> {
-  const { data, error } = await supabase
-    .from('order_drop_requests')
-    .select('*, order:orders(drop_count, service_type, customer_id)')
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw normalizeApiError(error)
-  return (data ?? []) as unknown as OrderDropRequest[]
+  // Pendentes primeiro e sem cortar pelo limite: um pedido antigo ainda pendente nao pode sumir da fila (M-21).
+  const select = '*, order:orders(drop_count, service_type, customer_id)'
+  const [pending, resolved] = await Promise.all([
+    supabase.from('order_drop_requests').select(select).eq('status', 'pending')
+      .order('created_at', { ascending: false }).limit(500),
+    supabase.from('order_drop_requests').select(select).neq('status', 'pending')
+      .order('created_at', { ascending: false }).limit(limit),
+  ])
+  if (pending.error) throw normalizeApiError(pending.error)
+  if (resolved.error) throw normalizeApiError(resolved.error)
+  const rows = [...(pending.data ?? []), ...(resolved.data ?? [])] as unknown as OrderDropRequest[]
+  return rows.sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
 // Toda ação administrativa (drop, reassign, refund, override, ajuste de

@@ -53,6 +53,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
   const [fullName, setFullName]           = useState('')
   const [fullNameSaving, setFullNameSaving] = useState(false)
   const [fullNameSaved, setFullNameSaved]   = useState(false)
+  const [fullNameError, setFullNameError]   = useState<string | null>(null)
 
   // ── Booster: CPF ──
   const [cpf, setCpf]             = useState('')
@@ -121,10 +122,16 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
   async function handleSaveFullName() {
     if (!profile) return
     setFullNameSaving(true)
-    await boosterMutations.updateFullName.mutateAsync({ fullName: fullName.trim() || null })
-    setFullNameSaving(false)
-    setFullNameSaved(true)
-    setTimeout(() => setFullNameSaved(false), 3000)
+    setFullNameError(null)
+    try {
+      await boosterMutations.updateFullName.mutateAsync({ fullName: fullName.trim() || null })
+      setFullNameSaved(true)
+      setTimeout(() => setFullNameSaved(false), 3000)
+    } catch (err) {
+      setFullNameError(err instanceof Error ? err.message : 'Não foi possível salvar o nome completo.')
+    } finally {
+      setFullNameSaving(false)
+    }
   }
 
   async function handleSaveCpf() {
@@ -137,8 +144,8 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
       await boosterMutations.updateCpf.mutateAsync({ cpf: digits })
       setCpfSaved(true)
       setTimeout(() => setCpfSaved(false), 3000)
-    } catch {
-      setCpfError('Erro ao salvar')
+    } catch (err) {
+      setCpfError(err instanceof Error ? err.message : 'Erro ao salvar')
     } finally {
       setCpfSaving(false)
     }
@@ -275,6 +282,7 @@ export function UserProfilePanel({ open, onClose }: UserProfilePanelProps) {
                       </Button>
                     </div>
                     {fullNameSaved && <p className="text-xs text-success">Nome salvo!</p>}
+                    {fullNameError && <p className="text-xs text-danger">{fullNameError}</p>}
                   </div>
 
                   {/* CPF */}

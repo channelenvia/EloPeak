@@ -389,8 +389,8 @@ export function StepConfigure() {
                     selectedTier={targetRank?.tier ?? null}
                     selectedDivision={targetRank?.division ?? null}
                     onChange={(tier, division) => setTargetRank({ tier, division })}
-                    additionalLockedTiers={boostMode === 'duo' && queueType !== 'flex' ? ['master', 'grandmaster', 'challenger'] : []}
-                    additionalLockedTitle="Duo Boost não é aceito para Challenger como rank alvo na fila Solo/Duo"
+                    additionalLockedTiers={boostMode === 'duo' && queueType !== 'flex' ? RANK_TIER_ORDER.filter(isDuoBlockedAtTier) : []}
+                    additionalLockedTitle="Duo Boost não é aceito para Grão-Mestre/Challenger como rank alvo na fila Solo/Duo"
                   />
                 )}
                 {/* Corte ao vivo de GM/Challenger vem logo após o rank alvo

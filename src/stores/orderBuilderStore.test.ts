@@ -153,3 +153,30 @@ describe('orderBuilderStore — troca de modalidade limpa addons incompatíveis 
     expect(useOrderBuilderStore.getState().selectedExtraIds.size).toBe(0)
   })
 })
+
+describe('orderBuilderStore — duo -> solo forçado limpa as rotas do cliente (H-10)', () => {
+  beforeEach(() => useOrderBuilderStore.getState().reset())
+
+  it('rank Master+ força solo e zera customerLanes (invariante 4)', () => {
+    const s = useOrderBuilderStore.getState()
+    s.setService('elo_boost', 'elo_boost')
+    s.setBoostMode('duo')
+    s.setCustomerLanes(['top', 'jungle'])
+    expect(useOrderBuilderStore.getState().customerLanes).toEqual(['top', 'jungle'])
+
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'master', division: null })
+
+    const after = useOrderBuilderStore.getState()
+    expect(after.boostMode).toBe('solo')
+    expect(after.customerLanes).toEqual([])
+  })
+
+  it('sem troca de modo mantem as rotas', () => {
+    const s = useOrderBuilderStore.getState()
+    s.setService('elo_boost', 'elo_boost')
+    s.setBoostMode('duo')
+    s.setCustomerLanes(['top'])
+    useOrderBuilderStore.getState().setCurrentRank({ tier: 'gold', division: 'IV' })
+    expect(useOrderBuilderStore.getState().customerLanes).toEqual(['top'])
+  })
+})

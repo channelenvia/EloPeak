@@ -31,7 +31,7 @@ export function CompletedOrderCard({ order, isTop3 }: CompletedOrderCardProps) {
         <OrderCardHeader order={order} title={coachPackage?.title ?? getOrderServiceName(order)} trailing={<OrderStatusBadge order={order} viewerRole="booster" align="right" />} />
 
         <div className="flex-1">
-          <OrderCardDetails order={order} viewerRole="booster" />
+          <OrderCardDetails order={order} viewerRole="booster" coachPackage={coachPackage} />
         </div>
 
         <OrderCardFooter

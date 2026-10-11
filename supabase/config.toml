@@ -150,3 +150,23 @@ verify_jwt = false
 
 [functions.verify-order-rank]
 verify_jwt = false
+
+# Funcoes chamadas pelo cliente logado (JWT do usuario): verify_jwt = true explicito, igual ao que ja roda em producao,
+# para que um `functions deploy` nunca dependa do default da plataforma.
+[functions.accept-challenge]
+verify_jwt = true
+
+[functions.create-card-payment]
+verify_jwt = true
+
+[functions.expel-booster]
+verify_jwt = true
+
+[functions.resolve-duo-account-credentials]
+verify_jwt = true
+
+[functions.resolve-order-credentials]
+verify_jwt = true
+
+[functions.riot-league-cutoffs]
+verify_jwt = true

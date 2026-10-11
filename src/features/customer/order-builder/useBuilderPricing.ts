@@ -86,6 +86,7 @@ export function useBuilderPricing() {
           currentRank.tier,
           queueType,
           masterPlusCutoffs,
+          boostMode === 'duo' ? 'duo' : 'solo',
         )
         const masterPlusHours = estimateEloBoostHours({
           currentRank,

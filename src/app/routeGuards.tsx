@@ -4,6 +4,9 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLoader } from '@/components/ui/Spinner'
 import { hasAcceptedLegal } from '@/lib/legal'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
+import { signOut } from '@/lib/supabase'
 
 // Volta pro topo em toda navegação -- sem isso, ao trocar de página o scroll
 // ficava na mesma posição da tela anterior (comportamento padrão de qualquer
@@ -26,8 +29,22 @@ export function SuspensePage({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>
 }
 
+// Sessao ativa mas o perfil nao carregou (5xx/RLS transiente): retry ou sair, nunca loader eterno (H-6).
+export function ProfileLoadError() {
+  return (
+    <div className="flex flex-col items-center">
+      <EmptyState
+        title="Não foi possível carregar sua conta"
+        description="Houve uma falha de conexão ao carregar seu perfil. Tente novamente ou saia e entre de novo."
+        action={{ label: 'Tentar de novo', onClick: () => window.location.reload() }}
+      />
+      <Button variant="ghost" onClick={() => { void signOut() }}>Sair</Button>
+    </div>
+  )
+}
+
 export function RequireAuth({ role }: { role?: 'customer' | 'booster' | 'admin' }) {
-  const { isAuthenticated, profile, isLoading, isInitialized } = useAuthStore()
+  const { isAuthenticated, profile, profileError, isLoading, isInitialized } = useAuthStore()
   const location = useLocation()
 
   if (!isInitialized || isLoading) return <PageLoader />
@@ -35,7 +52,7 @@ export function RequireAuth({ role }: { role?: 'customer' | 'booster' | 'admin' 
     const redirect = encodeURIComponent(location.pathname + location.search)
     return <Navigate to={`/login?redirect=${redirect}`} replace />
   }
-  if (!profile) return <PageLoader />
+  if (!profile) return profileError ? <ProfileLoadError /> : <PageLoader />
 
   if (!hasAcceptedLegal(profile) && location.pathname !== '/login') {
     const redirect = encodeURIComponent(location.pathname + location.search)
