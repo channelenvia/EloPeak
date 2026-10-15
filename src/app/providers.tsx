@@ -1,8 +1,12 @@
 import { HelmetProvider } from 'react-helmet-async'
 import { LazyMotion, MotionConfig, domAnimation } from 'framer-motion'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+
+// Só em DEV, e nunca entra no bundle de produção (import dinâmico atrás da flag).
+const ReactQueryDevtools = import.meta.env.DEV
+  ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })))
+  : null
 // Bootstrap de sessão (getSession/onAuthStateChange) fica no provider raiz de
 // propósito, não é uma query cacheável de src/api/*.
 // eslint-disable-next-line no-restricted-imports
@@ -210,7 +214,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <AuthProvider>
               {children}
             </AuthProvider>
-            {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+            {ReactQueryDevtools && <Suspense><ReactQueryDevtools initialIsOpen={false} /></Suspense>}
           </QueryClientProvider>
         </LazyMotion>
       </MotionConfig>

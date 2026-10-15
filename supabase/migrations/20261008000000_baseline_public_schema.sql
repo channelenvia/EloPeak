@@ -1,14 +1,10 @@
--- Baseline do schema public (dump de producao em 2026-10-08).
+-- Baseline do schema public (dump de producao em 2026-10-15, apos as ondas W1-W10).
 -- Zera as default privileges do Supabase local para que so valham os GRANTs
 -- explicitos do dump (o dump so emite o que difere do padrao); as default
 -- privileges reais de producao sao reaplicadas no fim deste arquivo.
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON TABLES FROM "anon", "authenticated", "service_role";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON FUNCTIONS FROM "anon", "authenticated", "service_role";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON SEQUENCES FROM "anon", "authenticated", "service_role";
-
-
-
-
 
 
 
@@ -22,6 +18,7 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
 
 
 CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA "pg_catalog";
@@ -74,6 +71,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE SCHEMA IF NOT EXISTS "public";
+
+
+ALTER SCHEMA "public" OWNER TO "pg_database_owner";
+
+
+COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
@@ -226,6 +230,265 @@ CREATE TYPE "public"."user_role" AS ENUM (
 ALTER TYPE "public"."user_role" OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."_booster_share_pct"("p_user_id" "uuid", "p_service_type" "public"."service_type") RETURNS numeric
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select case
+    when p_service_type = 'coaching' then 0.70
+    when coalesce((select is_top3 from public.booster_profiles where user_id = p_user_id), false) then 0.60
+    else 0.55
+  end
+$$;
+
+
+ALTER FUNCTION "public"."_booster_share_pct"("p_user_id" "uuid", "p_service_type" "public"."service_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_clawback_order_commissions"("p_order_id" "uuid", "p_provider_status" "text", "p_mp_payment_id" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_credit record;
+begin
+  for v_credit in
+    select booster_id, coalesce(sum(amount), 0) as net
+    from public.booster_ledger_entries
+    where order_id = p_order_id and entry_type in ('commission_credit', 'commission_adjustment', 'refund_debit')
+    group by booster_id
+    having coalesce(sum(amount), 0) > 0
+  loop
+    perform 1 from public.booster_profiles where user_id = v_credit.booster_id for update;
+
+    insert into public.booster_ledger_entries(booster_id, order_id, entry_type, amount, description, metadata)
+    values (v_credit.booster_id, p_order_id, 'refund_debit', -v_credit.net,
+            case when p_provider_status = 'refunded'
+              then 'Estorno da comissao -- pedido reembolsado pelo Mercado Pago'
+              else 'Estorno da comissao -- chargeback recebido pelo Mercado Pago' end,
+            jsonb_build_object('mp_payment_id', p_mp_payment_id, 'provider_status', p_provider_status));
+
+    update public.booster_profiles set total_earnings = total_earnings - v_credit.net where user_id = v_credit.booster_id;
+
+    insert into public.notifications(user_id, type, title, body, data)
+    values (v_credit.booster_id, 'commission_clawed_back', 'Comissão estornada',
+            case when p_provider_status = 'refunded'
+              then 'O cliente foi reembolsado pelo Mercado Pago. A comissão de R$ ' || v_credit.net::text || ' foi estornada do seu saldo.'
+              else 'Houve um chargeback no Mercado Pago. A comissão de R$ ' || v_credit.net::text || ' foi estornada do seu saldo.' end,
+            jsonb_build_object('order_id', p_order_id, 'amount', v_credit.net));
+
+    insert into public.notifications(user_id, type, title, body, data)
+    select id, 'commission_clawed_back_admin', 'Estorno de comissão',
+           'Pedido ' || p_order_id::text || ' foi ' || (case when p_provider_status = 'refunded' then 'reembolsado' else 'contestado (chargeback)' end)
+             || '. R$ ' || v_credit.net::text || ' foram estornados do saldo do booster -- confirme se já houve saque desse valor.',
+           jsonb_build_object('order_id', p_order_id, 'booster_id', v_credit.booster_id, 'amount', v_credit.net)
+    from public.profiles where role = 'admin';
+  end loop;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."_clawback_order_commissions"("p_order_id" "uuid", "p_provider_status" "text", "p_mp_payment_id" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_complete_order_by_customer"("p_order_id" "uuid", "p_actor" "uuid", "p_reason" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_booster uuid;
+begin
+  update public.orders set status = 'completed', completed_at = now(), updated_at = now()
+   where id = p_order_id and status = 'awaiting_customer'
+   returning assigned_booster_id into v_booster;
+  if not found then
+    raise exception 'order_not_awaiting_customer';
+  end if;
+
+  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+  values (p_order_id, 'awaiting_customer', 'completed', p_actor, p_reason);
+
+  insert into public.notifications(user_id, type, title, body, data)
+  values (v_booster, 'order_completed', 'Pedido concluido!',
+          'O pedido foi concluido e seus ganhos foram liberados.',
+          jsonb_build_object('order_id', p_order_id));
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_complete_order_by_customer"("p_order_id" "uuid", "p_actor" "uuid", "p_reason" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_elo_step_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_step" integer) RETURNS numeric
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO 'public'
+    AS $$
+  select coalesce(
+    (select cents from public.elo_div_price_cents
+      where queue_type = p_queue and boost_mode = p_mode
+        and tier = (array['iron','bronze','silver','gold','platinum','emerald','diamond'])[least(floor((p_step - 1) / 4.0)::int, 6) + 1]),
+    (select cents from public.elo_div_price_cents where queue_type = p_queue and boost_mode = p_mode and tier = 'diamond'),
+    0)::numeric
+$$;
+
+
+ALTER FUNCTION "public"."_elo_step_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_step" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_order_progress_detail"("p_order_id" "uuid", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS TABLE("fraction" numeric, "unit_ratio" numeric)
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  o record;
+  v_latest record;
+  v_mode text;
+  v_from integer; v_to_full integer; v_to_std integer; v_l_step integer;
+  v_total numeric := 0; v_done numeric := 0; v_next numeric := 0;
+  v_mp numeric := 0; v_mp_done numeric := 0;
+  v_cutoff integer; v_orig integer; v_latest_pdl integer;
+begin
+  fraction := 0; unit_ratio := 0;
+  select service_type, boost_mode, queue_type, wins_purchased, wins_played, losses_played, match_sync_started_at,
+         coalesce(stint_start_rank, current_rank) as baseline_rank, target_rank, current_pdl, settled_value, amount_paid
+    into o from public.orders where id = p_order_id;
+  if not found then return next; return; end if;
+
+  if o.service_type in ('win_boost', 'md5') then
+    if coalesce(o.wins_purchased, 0) <= 0 then return next; return; end if;
+    fraction := least(1, greatest(0, coalesce(o.wins_played, 0) - coalesce(o.losses_played, 0))::numeric / o.wins_purchased);
+    unit_ratio := 1.0 / o.wins_purchased;
+    return next; return;
+  end if;
+
+  if o.service_type = 'clash' then
+    -- 3 partidas por Clash; so conta depois que o booster entrou.
+    -- Depois de um drop positivo o preco ja foi reduzido pelas partidas entregues: o denominador encolhe junto.
+    fraction := case when o.match_sync_started_at is null then 0
+                     else least(1, (coalesce(o.wins_played, 0) + coalesce(o.losses_played, 0))
+                                   / greatest(1, 3 - coalesce(round(3 * coalesce(o.settled_value, 0) / nullif(o.amount_paid, 0)), 0))::numeric) end;
+    return next; return;
+  end if;
+
+  if o.service_type = 'coaching' then
+    fraction := least(1, greatest(0, coalesce(p_coaching_pct, 0)) / 100.0);
+    return next; return;
+  end if;
+
+  if o.service_type <> 'elo_boost' or o.baseline_rank is null or o.target_rank is null then
+    return next; return;
+  end if;
+
+  select fetched_tier, fetched_division, fetched_lp into v_latest
+    from public.order_rank_verifications where order_id = p_order_id and created_at >= coalesce((select max(assigned_at) from public.order_booster_assignments where order_id = p_order_id and unassigned_at is null), '-infinity') order by created_at desc limit 1;
+  v_mode := coalesce(o.boost_mode, 'solo');
+
+  -- Master+ (jogando dentro de Master+): fracao continua por PDL.
+  if (o.baseline_rank->>'tier') in ('master', 'grandmaster', 'challenger') then
+    v_orig := coalesce(o.current_pdl, 0);
+    v_cutoff := coalesce(
+      (select cutoff_lp from public.riot_league_cutoffs where queue = o.queue_type and tier = o.target_rank->>'tier'),
+      case o.target_rank->>'tier' when 'grandmaster' then 1200 when 'challenger' then 2200 else 0 end);
+    v_latest_pdl := coalesce(v_latest.fetched_lp, v_orig);
+    fraction := case when v_cutoff <= v_orig then 1
+                     else least(1, greatest(0, (v_latest_pdl - v_orig)::numeric / (v_cutoff - v_orig))) end;
+    return next; return;
+  end if;
+
+  -- Elo padrao: degraus ponderados pelo preco real (nao linear) + LP dentro do degrau atual.
+  v_from := public.rank_step(o.baseline_rank->>'tier', o.baseline_rank->>'division');
+  v_to_full := public.rank_step(o.target_rank->>'tier', o.target_rank->>'division');
+  v_to_std := least(v_to_full, 28);
+  v_l_step := case when v_latest.fetched_tier is null then v_from
+                   else public.rank_step(v_latest.fetched_tier, v_latest.fetched_division) end;
+
+  select coalesce(sum(public._elo_step_cents(o.queue_type, v_mode, s)), 0),
+         coalesce(sum(public._elo_step_cents(o.queue_type, v_mode, s)) filter (where s <= v_l_step), 0)
+    into v_total, v_done
+    from generate_series(v_from + 1, v_to_std) s;
+
+  if v_l_step >= v_from and v_l_step < v_to_std and v_latest.fetched_lp is not null and v_latest.fetched_tier is not null then
+    v_done := v_done + public._elo_step_cents(o.queue_type, v_mode, greatest(v_l_step, v_from) + 1)
+                       * least(99, greatest(0, v_latest.fetched_lp)) / 100.0;
+  end if;
+
+  -- Alvo Grao-Mestre/Challenger a partir de Diamante-: trecho Master+ pesa pelo preco da tabela.
+  if v_to_full > 28 then
+    select coalesce(max(price), 0) * 100 into v_mp from public.master_plus_pricing
+      where current_tier = 'master' and target_tier = o.target_rank->>'tier'
+        and queue_type = o.queue_type and boost_mode = v_mode and pdl_from = 0;
+    if v_mp > 0 and v_latest.fetched_tier in ('master', 'grandmaster', 'challenger') then
+      v_cutoff := coalesce(
+        (select cutoff_lp from public.riot_league_cutoffs where queue = o.queue_type and tier = o.target_rank->>'tier'),
+        case o.target_rank->>'tier' when 'grandmaster' then 1200 else 2200 end);
+      v_mp_done := v_mp * least(1, greatest(0, coalesce(v_latest.fetched_lp, 0)::numeric / greatest(1, v_cutoff)));
+    end if;
+  end if;
+
+  if v_total + v_mp > 0 then
+    fraction := least(1, greatest(0, (v_done + v_mp_done) / (v_total + v_mp)));
+    -- Sem preco do trecho Master+ na tabela, nunca conta 100% antes de o alvo Master+ ser confirmado.
+    if v_to_full > 28 and v_mp = 0 then fraction := least(fraction, 0.99); end if;
+    v_next := public._elo_step_cents(o.queue_type, v_mode, least(greatest(v_l_step, v_from) + 1, greatest(v_to_std, v_from + 1)));
+    unit_ratio := v_next / (v_total + v_mp);
+  end if;
+  return next; return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_order_progress_detail"("p_order_id" "uuid", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_order_progress_fraction"("p_order_id" "uuid", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS numeric
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$ select fraction from public._order_progress_detail(p_order_id, p_coaching_pct) $$;
+
+
+ALTER FUNCTION "public"."_order_progress_fraction"("p_order_id" "uuid", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_order_settlement_numbers"("p_order_id" "uuid", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS "jsonb"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  o record;
+  v_paid numeric; v_refunded numeric; v_remaining numeric;
+  v_f numeric := 0; v_consumed numeric := 0; v_credit numeric := 0; v_share numeric := 0;
+begin
+  select id, status, customer_id, assigned_booster_id, service_type, total_price, amount_paid, settled_value, payment_status
+    into o from public.orders where id = p_order_id;
+  if not found then return null; end if;
+
+  v_paid := coalesce(o.amount_paid, 0);
+  select coalesce(sum(amount), 0) into v_refunded from public.refunds
+   where order_id = p_order_id and status in ('pending', 'succeeded');
+  v_remaining := greatest(0, v_paid - coalesce(o.settled_value, 0) - v_refunded);
+
+  if o.assigned_booster_id is not null
+     and o.status in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'under_review', 'disputed') then
+    v_f := coalesce(public._order_progress_fraction(p_order_id, p_coaching_pct), 0);
+    v_consumed := least(round(o.total_price * v_f, 2), v_remaining);
+    v_share := public._booster_share_pct(o.assigned_booster_id, o.service_type);
+    v_credit := round(v_consumed * v_share, 2);
+  end if;
+
+  return jsonb_build_object(
+    'order_id', o.id, 'status', o.status, 'paid', v_paid, 'already_refunded', v_refunded,
+    'settled_before', coalesce(o.settled_value, 0), 'remaining', v_remaining,
+    'progress_pct', round(v_f * 100, 2), 'gross_consumed', v_consumed,
+    'booster_id', o.assigned_booster_id, 'booster_share_pct', v_share, 'booster_credit', v_credit,
+    'refund_amount', v_remaining - v_consumed, 'platform_retained', v_consumed - v_credit
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_order_settlement_numbers"("p_order_id" "uuid", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."_release_pending_review_order"("p_order_id" "uuid", "p_actor_id" "uuid", "p_reason" "text") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -248,6 +511,13 @@ begin
 
   if v_order.assigned_booster_id is not null then
     v_restored_status := coalesce(v_order.under_review_from_status, 'assigned'::public.order_status);
+    -- H-1: flagar analise fecha o pedido de drop pendente (trigger); voltar a drop_requested deixaria o
+    -- pedido preso sem solicitacao para resolver. O booster segue e pode pedir de novo.
+    if v_restored_status = 'drop_requested' and not exists (
+      select 1 from public.order_drop_requests where order_id = p_order_id and status = 'pending'
+    ) then
+      v_restored_status := 'in_progress';
+    end if;
 
     update public.orders
     set status                    = v_restored_status,
@@ -285,6 +555,11 @@ begin
     return;
   end if;
 
+  -- M-1: reembolso pendente -> o pedido nao volta ao pool com preco integral.
+  if exists (select 1 from public.refunds where order_id = p_order_id and status = 'pending') then
+    return;
+  end if;
+
   v_exclusive_until := case
     when v_order.preferred_booster_id is not null and v_order.service_type <> 'coaching'
       then now() + interval '9 hours'
@@ -317,7 +592,111 @@ $$;
 ALTER FUNCTION "public"."_release_pending_review_order"("p_order_id" "uuid", "p_actor_id" "uuid", "p_reason" "text") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid") RETURNS "jsonb"
+CREATE OR REPLACE FUNCTION "public"."_settle_order"("p_order_id" "uuid", "p_outcome" "text", "p_reason" "text", "p_coaching_pct" numeric) RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  o record;
+  v_reason text := trim(p_reason);
+  n jsonb;
+  v_credit numeric; v_consumed numeric; v_refund numeric; v_booster uuid;
+  v_payment_id uuid; v_refund_id uuid;
+begin
+  if not public.is_admin() then
+    return jsonb_build_object('success', false, 'error', 'unauthorized');
+  end if;
+  if v_reason is null or length(v_reason) < 10 or length(v_reason) > 500 then
+    return jsonb_build_object('success', false, 'error', 'invalid_reason');
+  end if;
+  if not public.check_own_write_rate_limit('admin_settle_order', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+
+  select id, status, customer_id, assigned_booster_id, payment_status into o
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
+  if o.status <> 'under_review' then
+    return jsonb_build_object('success', false, 'error', 'order_not_under_review');
+  end if;
+  if o.payment_status <> 'paid' then
+    return jsonb_build_object('success', false, 'error', 'order_not_paid');
+  end if;
+
+  n := public._order_settlement_numbers(p_order_id, p_coaching_pct);
+  v_credit := (n->>'booster_credit')::numeric;
+  v_consumed := (n->>'gross_consumed')::numeric;
+  v_refund := (n->>'refund_amount')::numeric;
+  v_booster := o.assigned_booster_id;
+
+  if p_outcome = 'refund' and v_refund <= 0 then
+    return jsonb_build_object('success', false, 'error', 'nothing_to_refund');
+  end if;
+
+  if v_booster is not null then
+    if v_credit > 0 then
+      perform 1 from public.booster_profiles where user_id = v_booster for update;
+      update public.booster_profiles set total_earnings = total_earnings + v_credit where user_id = v_booster;
+      insert into public.booster_ledger_entries(booster_id, order_id, entry_type, amount, description, actor_id, actor_role, metadata)
+      values (v_booster, p_order_id, 'commission_credit', v_credit,
+              'Pagamento pelo progresso entregue (' || (n->>'progress_pct') || '%) no pedido ' || p_order_id::text || ' encerrado pelo admin',
+              auth.uid(), 'admin'::public.user_role, n);
+    end if;
+    insert into public.notifications(user_id, type, title, body, data)
+    values (v_booster, 'order_status_changed', 'Pedido encerrado',
+            'O pedido foi encerrado pela equipe.' ||
+              case when v_credit > 0 then ' R$ ' || v_credit::text || ' foram creditados pelo progresso entregue.' else '' end,
+            jsonb_build_object('order_id', p_order_id, 'amount', v_credit));
+    update public.order_booster_assignments set unassigned_at = now()
+     where order_id = p_order_id and unassigned_at is null;
+    update public.duo_accounts set reserved_by = null, reserved_order_id = null, reserved_at = null
+     where reserved_order_id = p_order_id;
+  end if;
+
+  update public.orders set
+    assigned_booster_id = null, preferred_booster_id = null, exclusive_until = null, duo_own_riot_id = null,
+    settled_value = settled_value + v_consumed,
+    status = case when p_outcome = 'cancel' then 'canceled'::public.order_status else status end,
+    updated_at = now()
+  where id = p_order_id;
+
+  if p_outcome = 'cancel' then
+    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+    values (p_order_id, 'under_review', 'canceled', auth.uid(), v_reason);
+  end if;
+
+  -- Cancelar ou reembolsar: o cliente sempre recebe de volta o pago ainda nao consumido.
+  if v_refund > 0 then
+    select id into v_payment_id from public.payments
+     where order_id = p_order_id and status in ('paid', 'partially_refunded') order by created_at desc limit 1 for update;
+    if v_payment_id is null then
+      raise exception 'payment_not_found';
+    end if;
+    insert into public.refunds(payment_id, order_id, mp_refund_id, amount, reason, initiated_by, status, is_manual)
+    values (v_payment_id, p_order_id, 'manual-' || gen_random_uuid()::text, v_refund, v_reason, auth.uid(), 'pending', true)
+    returning id into v_refund_id;
+  end if;
+
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'admin', 'order.settled_' || p_outcome, 'order', p_order_id::text,
+          jsonb_build_object('reason', v_reason, 'numbers', n, 'refund_id', v_refund_id));
+
+  insert into public.notifications(user_id, type, title, body, data)
+  values (o.customer_id, 'order_status_changed',
+          case when p_outcome = 'cancel' then 'Pedido cancelado' else 'Reembolso em processamento' end,
+          case when p_outcome = 'cancel' then 'Seu pedido foi cancelado pela nossa equipe.' else 'Seu reembolso foi aprovado.' end
+            || case when v_refund > 0 then ' R$ ' || v_refund::text || ' serão devolvidos a você.' else '' end,
+          jsonb_build_object('order_id', p_order_id, 'refund_amount', v_refund));
+
+  return jsonb_build_object('success', true, 'refund_id', v_refund_id) || n;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."_settle_order"("p_order_id" "uuid", "p_outcome" "text", "p_reason" "text", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid", "p_challenge_id" "uuid") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
@@ -333,15 +712,40 @@ begin
   if not public.check_own_write_rate_limit('accept_boost_order', 10, 60) then
     return jsonb_build_object('success', false, 'error', 'rate_limited');
   end if;
+  -- Termos vigentes aceitos (relogio e versao do servidor; antes do captcha para nao queimar o desafio).
+  if not exists (
+    select 1 from public.profiles
+    where id = p_booster_user_id
+      and terms_accepted_at is not null and privacy_accepted_at is not null
+      and legal_version = public.current_legal_version()
+  ) then
+    return jsonb_build_object('success', false, 'error', 'legal_not_accepted');
+  end if;
+
+  -- RN-12: so aceita com um desafio resolvido no servidor (uso unico, TTL curto, do mesmo booster e pedido).
+  update public.accept_challenges
+     set used_at = now()
+   where id = p_challenge_id and booster_id = p_booster_user_id and order_id = p_order_id
+     and solved_at is not null and used_at is null and expires_at > now();
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'captcha_required');
+  end if;
 
   perform pg_advisory_xact_lock(hashtextextended(p_booster_user_id::text, 0));
 
   select id, status, assigned_booster_id, boost_mode, preferred_booster_id, exclusive_until,
-         service_type, credentials_set, reassigned_by_admin
+         service_type, credentials_set, reassigned_by_admin, customer_id
   into v_order
   from public.orders where id = p_order_id for update;
 
   if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
+  -- H-3: ninguem aceita (nem avalia) o proprio pedido.
+  if v_order.customer_id = p_booster_user_id then
+    return jsonb_build_object('success', false, 'error', 'own_order');
+  end if;
+  if not public.is_approved_booster(p_booster_user_id) then
+    return jsonb_build_object('success', false, 'error', 'booster_not_approved');
+  end if;
   if v_order.status <> 'awaiting_assignment' or v_order.assigned_booster_id is not null then
     return jsonb_build_object('success', false, 'error', 'order_no_longer_available');
   end if;
@@ -424,8 +828,10 @@ begin
     return jsonb_build_object('success', false, 'error', v_check->>'reason', 'details', v_check);
   end if;
 
+  -- H-11: accept pelo pool (fora da exclusividade) consome slot; zera a isencao da reatribuicao.
   update public.orders
   set status = 'in_progress', assigned_booster_id = p_booster_user_id,
+      reassigned_by_admin = false,
       match_sync_started_at = coalesce(match_sync_started_at, now()), updated_at = now()
   where id = p_order_id;
 
@@ -442,7 +848,34 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid", "p_challenge_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_legal"("p_version" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare
+  v_now timestamptz := now();
+begin
+  if not public.check_own_write_rate_limit('accept_legal', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  if p_version is distinct from public.current_legal_version() then
+    return jsonb_build_object('success', false, 'error', 'invalid_legal_version');
+  end if;
+  update public.profiles
+     set terms_accepted_at = v_now, privacy_accepted_at = v_now, legal_version = p_version, updated_at = v_now
+   where id = auth.uid();
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'profile_not_found');
+  end if;
+  return jsonb_build_object('success', true, 'accepted_at', v_now, 'legal_version', p_version);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."accept_legal"("p_version" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."add_order_coaching_topic"("p_order_id" "uuid", "p_content" "text") RETURNS "jsonb"
@@ -513,11 +946,17 @@ begin
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
+  if p_booster_id = auth.uid() then
+    return jsonb_build_object('success', false, 'error', 'cannot_adjust_own_balance');
+  end if;
   if v_reason is null or length(v_reason) < 10 then
     return jsonb_build_object('success', false, 'error', 'invalid_reason');
   end if;
-  if p_amount is null or p_amount = 0 then
+  if p_amount is null or p_amount = 0 or abs(p_amount) > 10000 or p_amount <> round(p_amount, 2) then
     return jsonb_build_object('success', false, 'error', 'invalid_amount');
+  end if;
+  if not public.check_own_write_rate_limit('admin_adjust_booster_balance', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
   end if;
 
   perform 1 from public.booster_profiles where user_id = p_booster_id for update;
@@ -577,6 +1016,9 @@ begin
   if v_order.assigned_booster_id is not null then
     return jsonb_build_object('success', false, 'error', 'order_has_active_booster');
   end if;
+  if exists (select 1 from public.refunds where order_id = p_order_id and status = 'pending') then
+    return jsonb_build_object('success', false, 'error', 'refund_pending');
+  end if;
 
   select user_id, status into v_target
   from public.booster_profiles where user_id = p_target_booster_id;
@@ -629,6 +1071,9 @@ CREATE OR REPLACE FUNCTION "public"."admin_cancel_manual_refund"("p_refund_id" "
 declare
   v_refund public.refunds%rowtype;
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_cancel_manual_refund', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
@@ -659,6 +1104,15 @@ $$;
 ALTER FUNCTION "public"."admin_cancel_manual_refund"("p_refund_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."admin_cancel_paid_order"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS "jsonb"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$ select public._settle_order(p_order_id, 'cancel', p_reason, p_coaching_pct) $$;
+
+
+ALTER FUNCTION "public"."admin_cancel_paid_order"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."admin_cancel_pending_review_order"("p_order_id" "uuid", "p_reason" "text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -682,6 +1136,11 @@ begin
   end if;
   if v_order.status not in ('pending_review', 'under_review') then
     return jsonb_build_object('success', false, 'error', 'order_not_pending_review');
+  end if;
+  -- Pedido ja analisado (pago, com ou sem booster): cancelamento passa pela liquidacao, que paga o
+  -- booster pelo progresso e registra o que sobrou para reembolso.
+  if v_order.status = 'under_review' then
+    return public._settle_order(p_order_id, 'cancel', v_reason, null);
   end if;
 
   update public.orders
@@ -746,7 +1205,13 @@ CREATE OR REPLACE FUNCTION "public"."admin_confirm_manual_refund"("p_refund_id" 
 declare
   v_refund public.refunds%rowtype;
   v_order  record;
+  v_pay    record;
+  v_new_refunded numeric;
+  v_pay_status public.payment_status;
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_confirm_manual_refund', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
@@ -756,41 +1221,46 @@ begin
     return jsonb_build_object('success', false, 'error', 'refund_not_found');
   end if;
 
-  -- Mesma ordem de lock do webhook e da criação: pedido primeiro, depois o reembolso.
+  -- Mesma ordem de lock do webhook e da criacao: pedido, pagamento, reembolso.
   select id, status, customer_id into v_order from public.orders where id = v_refund.order_id for update;
+  select id, amount, coalesce(refunded_amount, 0) as refunded_amount into v_pay
+    from public.payments where id = v_refund.payment_id for update;
   select * into v_refund from public.refunds where id = p_refund_id for update;
 
   if v_refund.status <> 'pending' then
     return jsonb_build_object('success', false, 'error', 'refund_not_pending');
   end if;
+  v_new_refunded := v_pay.refunded_amount + v_refund.amount;
+  if v_new_refunded > v_pay.amount then
+    return jsonb_build_object('success', false, 'error', 'amount_exceeds_order_total');
+  end if;
 
   update public.refunds set status = 'succeeded' where id = v_refund.id;
 
-  update public.payments
-  set refunded_amount = coalesce(refunded_amount, 0) + v_refund.amount, updated_at = now()
-  where id = v_refund.payment_id;
+  v_pay_status := case when v_new_refunded >= v_pay.amount then 'refunded' else 'partially_refunded' end;
+  update public.payments set refunded_amount = v_new_refunded, status = v_pay_status, updated_at = now()
+   where id = v_pay.id;
 
   -- O webhook do Mercado Pago pode ter reembolsado o pedido no meio tempo.
-  if v_order.status <> 'refunded' then
-    update public.orders set status = 'refunded'::public.order_status, updated_at = now()
-    where id = v_order.id;
-
+  if v_order.status not in ('refunded', 'canceled') then
+    update public.orders set status = 'refunded'::public.order_status, payment_status = v_pay_status, updated_at = now()
+     where id = v_order.id;
     insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
     values (v_order.id, v_order.status, 'refunded'::public.order_status, auth.uid(),
-            'Reembolso manual confirmado: ' || v_refund.reason);
+            'Reembolso confirmado: ' || v_refund.reason);
+  else
+    update public.orders set payment_status = v_pay_status, updated_at = now() where id = v_order.id;
   end if;
 
   insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
   values (auth.uid(), 'admin', 'order.manual_refund_confirmed', 'order', v_order.id::text,
-          jsonb_build_object('refund_id', v_refund.id, 'amount', v_refund.amount));
+          jsonb_build_object('refund_id', v_refund.id, 'amount', v_refund.amount, 'payment_status', v_pay_status));
 
   if v_order.customer_id is not null then
     insert into public.notifications(user_id, type, title, body, data)
-    values (
-      v_order.customer_id, 'order_status_changed', 'Reembolso processado',
-      'R$ ' || v_refund.amount::text || ' foram reembolsados referentes ao seu pedido. Motivo: ' || v_refund.reason,
-      jsonb_build_object('order_id', v_order.id, 'amount', v_refund.amount)
-    );
+    values (v_order.customer_id, 'order_status_changed', 'Reembolso processado',
+            'R$ ' || v_refund.amount::text || ' foram reembolsados referentes ao seu pedido. Motivo: ' || v_refund.reason,
+            jsonb_build_object('order_id', v_order.id, 'amount', v_refund.amount));
   end if;
 
   return jsonb_build_object('success', true, 'refund_id', v_refund.id);
@@ -801,74 +1271,13 @@ $_$;
 ALTER FUNCTION "public"."admin_confirm_manual_refund"("p_refund_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_amount" numeric) RETURNS "jsonb"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS "jsonb"
+    LANGUAGE "sql" SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
-declare
-  v_order            record;
-  v_reason           text := trim(p_reason);
-  v_total_paid       numeric;
-  v_already_refunded numeric;
-  v_remaining        numeric;
-  v_payment_id       uuid;
-  v_refund_id        uuid;
-begin
-  if not public.is_admin() then
-    return jsonb_build_object('success', false, 'error', 'unauthorized');
-  end if;
-  if v_reason is null or length(v_reason) < 10 then
-    return jsonb_build_object('success', false, 'error', 'invalid_reason');
-  end if;
-  if p_amount is null or p_amount <= 0 then
-    return jsonb_build_object('success', false, 'error', 'invalid_amount');
-  end if;
-
-  select id, total_price, customer_id, payment_status
-  into v_order from public.orders where id = p_order_id for update;
-
-  if not found then
-    return jsonb_build_object('success', false, 'error', 'order_not_found');
-  end if;
-
-  select coalesce(sum(amount), 0) into v_total_paid
-  from public.payments where order_id = p_order_id and status not in ('pending', 'failed');
-
-  -- Marcações desfeitas/falhas não seguram o valor do pedido.
-  select coalesce(sum(amount), 0) into v_already_refunded
-  from public.refunds where order_id = p_order_id and status <> 'failed';
-
-  v_remaining := v_total_paid - v_already_refunded;
-
-  if v_remaining <= 0 then
-    return jsonb_build_object('success', false, 'error', 'already_refunded');
-  end if;
-  if p_amount > v_remaining then
-    return jsonb_build_object('success', false, 'error', 'amount_exceeds_order_total');
-  end if;
-
-  select id into v_payment_id
-  from public.payments where order_id = p_order_id order by created_at desc limit 1
-  for update;
-
-  if v_payment_id is null then
-    return jsonb_build_object('success', false, 'error', 'payment_not_found');
-  end if;
-
-  insert into public.refunds(payment_id, order_id, mp_refund_id, amount, reason, initiated_by, status, is_manual)
-  values (v_payment_id, p_order_id, 'manual-' || gen_random_uuid()::text, p_amount, v_reason, auth.uid(), 'pending', true)
-  returning id into v_refund_id;
-
-  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
-  values (auth.uid(), 'admin', 'order.manual_refund_marked', 'order', p_order_id::text,
-          jsonb_build_object('reason', v_reason, 'amount', p_amount, 'refund_id', v_refund_id));
-
-  return jsonb_build_object('success', true, 'refund_id', v_refund_id, 'remaining', v_remaining - p_amount);
-end;
-$$;
+    AS $$ select public._settle_order(p_order_id, 'refund', p_reason, p_coaching_pct) $$;
 
 
-ALTER FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_amount" numeric) OWNER TO "postgres";
+ALTER FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."admin_dashboard_stats"() RETURNS "jsonb"
@@ -887,14 +1296,19 @@ begin
     raise exception 'unauthorized';
   end if;
 
-  select coalesce(sum(amount), 0) into v_total_revenue
-  from public.payments where status = 'paid';
+  -- Receita = pago - reembolsos efetivados (fonte: payments/refunds).
+  select coalesce((select sum(amount) from public.payments
+                    where status in ('paid', 'partially_refunded', 'refunded', 'disputed')), 0)
+       - coalesce((select sum(amount) from public.refunds where status = 'succeeded'), 0)
+    into v_total_revenue;
 
-  select coalesce(sum(net_amount), 0) into v_total_payouts
-  from public.payout_records;
+  -- Repasses = ledger dos boosters (creditos - penalidades/estornos), fonte unica de saldo.
+  select coalesce(sum(amount), 0) into v_total_payouts
+  from public.booster_ledger_entries
+  where entry_type in ('commission_credit', 'commission_adjustment', 'drop_penalty', 'refund_debit', 'manual_admin_adjustment');
 
   select count(*) into v_active_orders
-  from public.orders where status in ('assigned', 'in_progress', 'paused');
+  from public.orders where status in ('awaiting_assignment', 'assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'under_review', 'disputed');
 
   select count(*) into v_pending_boosters
   from public.booster_profiles where status in ('pending', 'under_review');
@@ -909,9 +1323,9 @@ begin
 
   select coalesce(jsonb_agg(t), '[]'::jsonb) into v_daily_orders from (
     select gs::date as day, count(o.id) as count
-    from generate_series(current_date - interval '6 days', current_date, interval '1 day') gs
+    from generate_series((now() at time zone 'America/Sao_Paulo')::date - 6, (now() at time zone 'America/Sao_Paulo')::date, interval '1 day') gs
     left join public.orders o
-      on o.created_at::date = gs::date
+      on (o.created_at at time zone 'America/Sao_Paulo')::date = gs::date
       and o.status not in ('awaiting_payment', 'canceled')
     group by gs
     order by gs
@@ -1024,7 +1438,7 @@ begin
   if not found then
     return jsonb_build_object('success', false, 'error', 'order_not_found');
   end if;
-  if v_order.status not in ('pending_review', 'assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested') then
+  if v_order.status not in ('pending_review', 'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested') then
     return jsonb_build_object('success', false, 'error', 'order_not_active');
   end if;
 
@@ -1176,6 +1590,26 @@ $$;
 ALTER FUNCTION "public"."admin_list_review_cases"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."admin_list_reviews"("p_limit" integer DEFAULT 100) RETURNS TABLE("id" "uuid", "order_id" "uuid", "booster_id" "uuid", "rating" integer, "content" "text", "is_public" boolean, "is_moderated" boolean, "admin_note" "text", "created_at" timestamp with time zone)
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if not public.is_admin() then
+    raise exception 'unauthorized' using errcode = '42501';
+  end if;
+  return query
+    select r.id, r.order_id, r.booster_id, r.rating::integer, r.content, r.is_public, r.is_moderated, r.admin_note, r.created_at
+      from public.reviews r
+     order by r.created_at desc
+     limit least(greatest(coalesce(p_limit, 100), 1), 500);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_list_reviews"("p_limit" integer) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uuid", "p_proof_url" "text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1183,11 +1617,18 @@ CREATE OR REPLACE FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uui
 declare
   v_req record;
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_mark_payout_paid', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'forbidden');
   end if;
   if p_proof_url is null or length(trim(p_proof_url)) = 0 then
     return jsonb_build_object('success', false, 'error', 'proof_required');
+  end if;
+  if p_proof_url not like p_request_id::text || '/%'
+     or not exists (select 1 from storage.objects o where o.bucket_id = 'payout-proofs' and o.name = p_proof_url) then
+    return jsonb_build_object('success', false, 'error', 'invalid_proof');
   end if;
 
   select * into v_req from public.payout_requests where id = p_request_id for update;
@@ -1196,6 +1637,9 @@ begin
   end if;
   if v_req.status <> 'approved' then
     return jsonb_build_object('success', false, 'error', 'invalid_status');
+  end if;
+  if v_req.booster_id = auth.uid() then
+    return jsonb_build_object('success', false, 'error', 'cannot_review_own_request');
   end if;
 
   update public.payout_requests
@@ -1229,6 +1673,38 @@ $_$;
 ALTER FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uuid", "p_proof_url" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."admin_moderate_review"("p_review_id" "uuid", "p_is_public" boolean, "p_note" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_old record;
+begin
+  if not public.is_admin() then
+    return jsonb_build_object('success', false, 'error', 'unauthorized');
+  end if;
+  if not public.check_own_write_rate_limit('admin_moderate_review', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  select id, is_public, is_moderated, admin_note into v_old from public.reviews where id = p_review_id for update;
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'review_not_found');
+  end if;
+  update public.reviews
+     set is_public = p_is_public, is_moderated = true, admin_note = nullif(btrim(p_note), '')
+   where id = p_review_id;
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'admin', 'review.moderated', 'review', p_review_id::text,
+          jsonb_build_object('from', jsonb_build_object('is_public', v_old.is_public, 'note', v_old.admin_note),
+                             'to', jsonb_build_object('is_public', p_is_public, 'note', nullif(btrim(p_note), ''))));
+  return jsonb_build_object('success', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_moderate_review"("p_review_id" "uuid", "p_is_public" boolean, "p_note" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."admin_override_order_status"("p_order_id" "uuid", "p_new_status" "text", "p_reason" "text" DEFAULT 'Admin override'::"text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1236,38 +1712,78 @@ CREATE OR REPLACE FUNCTION "public"."admin_override_order_status"("p_order_id" "
 declare
   v_order record;
   v_actor record;
+  v_to public.order_status;
   v_reason text := trim(p_reason);
 begin
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
-
   if v_reason is null or length(v_reason) < 10 or length(v_reason) > 500 then
     return jsonb_build_object('success', false, 'error', 'invalid_reason');
   end if;
-
-  if p_new_status in ('awaiting_assignment', 'pending_review', 'under_review') then
+  if p_new_status is null or not exists (
+       select 1 from unnest(enum_range(null::public.order_status)) e where e::text = p_new_status) then
+    return jsonb_build_object('success', false, 'error', 'invalid_status');
+  end if;
+  v_to := p_new_status::public.order_status;
+  if v_to in ('awaiting_assignment', 'pending_review', 'under_review') then
     return jsonb_build_object('success', false, 'error', 'use_admin_drop_order_instead');
   end if;
 
-  select id, status into v_order from public.orders where id = p_order_id for update;
+  select id, status, assigned_booster_id, payment_status into v_order
+  from public.orders where id = p_order_id for update;
   if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
 
-  if v_order.status::text = p_new_status then
+  if v_order.status = v_to then
     return jsonb_build_object('success', false, 'error', 'no_status_change');
+  end if;
+  if v_order.status in ('completed', 'canceled', 'refunded') then
+    return jsonb_build_object('success', false, 'error', 'order_terminal');
+  end if;
+  if v_order.status in ('drop_requested', 'under_review') then
+    return jsonb_build_object('success', false, 'error', 'use_resolution_flow');
+  end if;
+  if v_to = 'refunded' then
+    return jsonb_build_object('success', false, 'error', 'use_refund_flow');
+  end if;
+
+  if v_to = 'canceled' then
+    if v_order.assigned_booster_id is not null then
+      return jsonb_build_object('success', false, 'error', 'use_cancel_in_progress_flow');
+    end if;
+  elsif v_to = 'completed' then
+    if v_order.status not in ('awaiting_customer', 'disputed') then
+      return jsonb_build_object('success', false, 'error', 'invalid_transition');
+    end if;
+    if v_order.assigned_booster_id is null then
+      return jsonb_build_object('success', false, 'error', 'no_booster_assigned');
+    end if;
+    if v_order.payment_status <> 'paid' then
+      return jsonb_build_object('success', false, 'error', 'order_not_paid');
+    end if;
+  elsif v_to in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'disputed') then
+    if v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'disputed') then
+      return jsonb_build_object('success', false, 'error', 'invalid_transition');
+    end if;
+    if v_order.assigned_booster_id is null then
+      return jsonb_build_object('success', false, 'error', 'no_booster_assigned');
+    end if;
+  else
+    return jsonb_build_object('success', false, 'error', 'invalid_transition');
   end if;
 
   select id, role into v_actor from public.profiles where id = auth.uid();
 
-  update public.orders set status = p_new_status::public.order_status, updated_at = now()
-  where  id = p_order_id;
+  update public.orders set status = v_to, updated_at = now(),
+         completed_at = case when v_to = 'completed' then now() else completed_at end
+   where id = p_order_id;
 
   insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, v_order.status, p_new_status::public.order_status, auth.uid(), v_reason);
+  values (p_order_id, v_order.status, v_to, auth.uid(), v_reason);
 
   insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
   values (v_actor.id, v_actor.role, 'order.status_override', 'order', p_order_id::text,
-          jsonb_build_object('from', v_order.status, 'to', p_new_status));
+          jsonb_build_object('from', v_order.status, 'to', v_to, 'reason', v_reason));
 
   return jsonb_build_object('success', true);
 end;
@@ -1295,7 +1811,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'invalid_reason');
   end if;
 
-  select id, status, assigned_booster_id, last_match_synced_at, customer_id, service_type
+  select id, status, assigned_booster_id, last_match_synced_at, customer_id, service_type, drop_count
   into v_order from public.orders where id = p_order_id for update;
 
   if not found then
@@ -1330,6 +1846,11 @@ begin
     return jsonb_build_object('success', false, 'error', 'target_booster_not_approved');
   end if;
 
+  -- 3o drop vai para analise manual: nao reatribui (antes o apply comitava e a funcao devolvia erro).
+  if not v_is_new_assignment and coalesce(v_order.drop_count, 0) >= 2 then
+    return jsonb_build_object('success', false, 'error', 'drop_limit_reached');
+  end if;
+
   if not v_is_new_assignment then
     v_result := public.apply_order_drop(
       p_order_id, v_order.status::text, auth.uid(), v_reason, 'admin'::public.drop_requester_role,
@@ -1343,10 +1864,16 @@ begin
     if coalesce((v_result->>'under_review')::boolean, false) then
       return jsonb_build_object('success', false, 'error', 'drop_limit_reached', 'details', v_result);
     end if;
+
+    -- H-12: o drop concluiu o pedido (progresso 100%): nao ha o que reatribuir.
+    if coalesce((v_result->>'completed')::boolean, false) then
+      return jsonb_build_object('success', true, 'completed', true, 'drop_result', v_result);
+    end if;
   end if;
 
   update public.orders
-  set preferred_booster_id = p_target_booster_id,
+  set status = case when v_order.service_type = 'coaching' and not v_is_new_assignment then 'awaiting_assignment'::public.order_status else status end,
+      preferred_booster_id = p_target_booster_id,
       -- Coaching é reserva permanente do dono do pacote (mesmo critério de
       -- _release_pending_review_order) -- nunca expira, mesmo reatribuído.
       exclusive_until      = case when v_order.service_type = 'coaching' then null else now() + interval '9 hours' end,
@@ -1354,6 +1881,12 @@ begin
       duo_own_riot_id      = null,
       updated_at           = now()
   where id = p_order_id;
+
+  -- Coaching dropado fica em analise (apply_order_drop); a reatribuicao devolve o pedido a fila do coach escolhido.
+  if v_order.service_type = 'coaching' and not v_is_new_assignment then
+    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+    values (p_order_id, 'under_review', 'awaiting_assignment', auth.uid(), 'Coaching reatribuido pelo admin: ' || coalesce(nullif(v_reason, ''), 'sem motivo'));
+  end if;
 
   insert into public.notifications(user_id, type, title, body, data)
   values (
@@ -1445,6 +1978,9 @@ declare
   v_req record;
   v_new public.payout_request_status;
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_review_payout_request', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'forbidden');
   end if;
@@ -1456,6 +1992,10 @@ begin
   select * into v_req from public.payout_requests where id = p_request_id for update;
   if v_req is null then
     return jsonb_build_object('success', false, 'error', 'not_found');
+  end if;
+  -- Dupla aprovacao: admin que tambem e booster nao aprova o proprio saque (rejeitar segue permitido: devolve a reserva).
+  if v_new <> 'rejected' and v_req.booster_id = auth.uid() then
+    return jsonb_build_object('success', false, 'error', 'cannot_review_own_request');
   end if;
 
   if v_new = 'rejected' then
@@ -1512,6 +2052,9 @@ CREATE OR REPLACE FUNCTION "public"."admin_set_order_chat_lock"("p_order_id" "uu
 declare
   v_user_id uuid := auth.uid();
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_set_order_chat_lock', 30, 60) then
+    return jsonb_build_object('success', false, 'code', 'rate_limited', 'message', 'Muitas tentativas. Aguarde um minuto.');
+  end if;
   if v_user_id is null then
     return jsonb_build_object('success', false, 'code', 'not_authenticated', 'message', 'Sessao nao autenticada.');
   end if;
@@ -1530,6 +2073,10 @@ begin
   if not found then
     return jsonb_build_object('success', false, 'code', 'order_not_found', 'message', 'Pedido nao encontrado.');
   end if;
+
+  -- M-16: order_status_events e a tabela publicada no realtime; um tick faz o chat reler can_send na hora.
+  insert into public.order_status_events(order_id, status)
+  select id, status from public.orders where id = p_order_id;
 
   insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
   values (
@@ -1556,11 +2103,14 @@ CREATE OR REPLACE FUNCTION "public"."admin_set_pending_review_lock"("p_order_id"
 declare
   v_order record;
 begin
+  if auth.uid() is not null and not public.check_own_write_rate_limit('admin_set_pending_review_lock', 30, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
 
-  select id, status into v_order from public.orders where id = p_order_id for update;
+  select id, status, assigned_booster_id into v_order from public.orders where id = p_order_id for update;
 
   if not found then
     return jsonb_build_object('success', false, 'error', 'order_not_found');
@@ -1574,6 +2124,9 @@ begin
     insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
     values (auth.uid(), 'admin', 'order.pending_review_locked', 'order', p_order_id::text, '{}'::jsonb);
   else
+    if v_order.assigned_booster_id is null and exists (select 1 from public.refunds where order_id = p_order_id and status = 'pending') then
+      return jsonb_build_object('success', false, 'error', 'refund_pending');
+    end if;
     perform public._release_pending_review_order(p_order_id, auth.uid(), 'Liberado manualmente pelo admin');
     insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
     values (auth.uid(), 'admin', 'order.pending_review_unlocked', 'order', p_order_id::text, '{}'::jsonb);
@@ -1605,26 +2158,19 @@ declare
   v_new_current_rank       jsonb;
   v_latest_rank            record;
   v_win_value_unit         numeric;
-  v_divisions_remaining    numeric;
   v_division_value_full    numeric;
-  v_division_value_share   numeric;
-  v_steps_crossed          integer;
   v_win_value_master_cents integer;
   v_win_value_master_full  numeric;
   v_win_value_master_share numeric;
-  v_cutoff_pdl             integer;
-  v_original_pdl           integer;
   v_latest_pdl             integer;
   v_new_current_pdl        integer;
-  v_pdl_remaining          numeric;
-  v_quarter_pdl            numeric;
-  v_booster_share          numeric;
-  v_quarter_value          numeric;
-  v_quarters_completed     integer;
-  v_completion_pct         numeric;
-  v_completion_frac        numeric;
+  v_f                      numeric;
+  v_unit_ratio             numeric;
+  v_consumed               numeric;
+  v_net                    integer;
+  v_complete               boolean := false;
 begin
-  select id, service_type, boost_mode, queue_type, total_price, current_rank, target_rank,
+  select id, service_type, boost_mode, queue_type, total_price, current_rank, stint_start_rank, target_rank,
          current_pdl, customer_id, assigned_booster_id, estimated_hours, wins_played,
          losses_played, wins_purchased, drop_count, status
   into v_order from public.orders where id = p_order_id for update;
@@ -1647,43 +2193,40 @@ begin
     else 0.55
   end;
 
-  v_is_positive := coalesce(v_order.wins_played, 0) >= coalesce(v_order.losses_played, 0);
+  v_is_positive := case
+    when v_order.service_type in ('win_boost', 'md5', 'elo_boost')
+      then coalesce(v_order.wins_played, 0) >= coalesce(v_order.losses_played, 0)
+    else true
+  end;
   v_over_limit  := v_order.drop_count >= 2;
   v_new_current_pdl := v_order.current_pdl;
 
   -- ── Limite de 2 drops: cancela em vez de reabrir, tudo manual daqui ────
   if v_over_limit then
+    -- 3o drop (so o admin chega aqui): o pedido vai para analise MANTENDO o booster e os contadores, para o admin
+    -- acertar manualmente (liquidacao): o booster recebe pelo progresso e o cliente recebe o restante.
     update public.orders set
-      status                = 'under_review',
-      assigned_booster_id   = null,
-      preferred_booster_id  = null,
-      exclusive_until       = null,
-      used_exclusive_slot   = false,
-      duo_own_riot_id       = null,
-      drop_count            = drop_count + 1,
-      last_dropped_at       = now(),
-      updated_at            = now()
+      status                    = 'under_review',
+      under_review_from_status  = v_order.status,
+      under_review_started_at   = now(),
+      admin_review_locked       = false,
+      review_release_at         = null,
+      drop_count                = drop_count + 1,
+      last_dropped_at           = now(),
+      updated_at                = now()
     where id = p_order_id;
-
-    update public.duo_accounts
-    set reserved_by = null, reserved_order_id = null, reserved_at = null
-    where reserved_order_id = p_order_id;
-
-    update public.order_booster_assignments
-    set unassigned_at = now()
-    where order_id = p_order_id and booster_id = v_order.assigned_booster_id and unassigned_at is null;
 
     insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
     values (
       p_order_id, p_from_status::public.order_status, 'under_review', p_actor_id,
-      'Limite de 2 drops atingido -- pedido cancelado; reembolso do cliente e saldo do booster pendentes de resolução manual. ' || p_reason
+      'Limite de 2 drops atingido -- pedido em analise manual; pagamento do booster e reembolso do cliente seguem o progresso. ' || p_reason
     );
 
     if v_order.customer_id is not null then
       insert into public.notifications(user_id, type, title, body, data)
       values (
         v_order.customer_id, 'order_status_changed', 'Pedido em análise',
-        'Seu pedido atingiu o limite de drops e está sendo analisado manualmente pela nossa equipe. Entraremos em contato pelo chat do pedido.',
+        'Seu pedido atingiu o limite de trocas de booster e está em análise manual da nossa equipe. O reembolso será calculado pelo progresso do pedido. Falamos com você pelo chat do pedido.',
         jsonb_build_object('order_id', p_order_id)
       );
     end if;
@@ -1691,12 +2234,21 @@ begin
     insert into public.notifications(user_id, type, title, body, data)
     values (
       v_order.assigned_booster_id, 'order_status_changed', 'Pedido em análise',
-      'Um pedido que você tinha foi cancelado após atingir o limite de drops e está em análise manual da equipe.',
+      'Um pedido seu atingiu o limite de drops e está em análise manual da equipe. Você será pago pelo progresso entregue.',
       jsonb_build_object('order_id', p_order_id)
     );
 
     return jsonb_build_object('success', true, 'under_review', true, 'drop_count', v_order.drop_count + 1);
   end if;
+
+  -- ── Progresso do booster atual (mesma definicao do cancelamento e das telas) ──
+  select fraction, unit_ratio into v_f, v_unit_ratio
+    from public._order_progress_detail(p_order_id, p_coaching_completion_pct);
+  v_f := coalesce(v_f, 0);
+  v_consumed := round(v_order.total_price * v_f, 2);
+  v_new_wins_purchased := v_order.wins_purchased;
+  v_new_estimated_hours := v_order.estimated_hours;
+  v_new_current_rank := v_order.current_rank;
 
   -- ── Win Boost / MD5 ──────────────────────────────────────────────────
   if v_order.service_type in ('win_boost', 'md5') then
@@ -1704,46 +2256,37 @@ begin
       when coalesce(v_order.wins_purchased, 0) > 0 then v_order.total_price / v_order.wins_purchased
       else 0
     end;
+    v_net := greatest(0, coalesce(v_order.wins_played, 0) - coalesce(v_order.losses_played, 0));
 
-    v_new_wins_purchased := greatest(0,
-      coalesce(v_order.wins_purchased, 0) - coalesce(v_order.wins_played, 0) + coalesce(v_order.losses_played, 0));
-
+    if v_is_positive then
+      -- Empate (ex.: 3V/3D) nao paga nada: so o saldo liquido de vitorias conta.
+      v_new_wins_purchased := greatest(0, coalesce(v_order.wins_purchased, 0) - v_net);
+      v_payout := round(v_consumed * v_share_pct, 2);
+    else
+      v_new_wins_purchased := greatest(0,
+        coalesce(v_order.wins_purchased, 0) - coalesce(v_order.wins_played, 0) + coalesce(v_order.losses_played, 0));
+      v_penalty := public.compute_drop_penalty(
+        p_requester_role, v_win_value_unit, round(v_win_value_unit * v_share_pct, 2), v_order.losses_played);
+    end if;
     v_new_total_price := round(v_win_value_unit * v_new_wins_purchased, 2);
     v_new_estimated_hours := case
       when v_order.estimated_hours is not null and coalesce(v_order.wins_purchased, 0) > 0
         then round(v_order.estimated_hours / v_order.wins_purchased * v_new_wins_purchased, 2)
       else v_order.estimated_hours
     end;
-    v_new_current_rank := v_order.current_rank;
 
-    if v_is_positive then
-      -- least() trava o payout no que foi contratado -- sem isso, partidas
-      -- sincronizadas depois do drop_requested (cron continua rodando nesse
-      -- status) pagavam por vitórias além de wins_purchased.
-      v_payout := round(v_win_value_unit * v_share_pct * least(coalesce(v_order.wins_played, 0), coalesce(v_order.wins_purchased, 0)), 2);
-    else
-      v_penalty := public.compute_drop_penalty(
-        p_requester_role, v_win_value_unit, round(v_win_value_unit * v_share_pct, 2), v_order.losses_played);
-    end if;
-
-  -- ── Elo/Duo Boost: current_rank/target_rank nulos são um estado de dados
-  -- inválido pra esse service_type (nunca deveriam estar assim num pedido
-  -- ativo) -- sem essa guarda, rank_step(null, ...) propaga NULL até
-  -- total_price silenciosamente. Falha alto e claro em vez disso.
-  elsif v_order.service_type = 'elo_boost' and (v_order.current_rank is null or v_order.target_rank is null) then
+  -- ── Elo/Duo Boost: rank atual/alvo nulos e um estado invalido ─────────────
+  elsif v_order.service_type = 'elo_boost' and (coalesce(v_order.stint_start_rank, v_order.current_rank) is null or v_order.target_rank is null) then
     return jsonb_build_object('success', false, 'error', 'missing_rank_data');
 
-  -- ── Elo/Duo Boost -- Mestre+ (current tier já em master/gm/challenger) ─
+  -- ── Elo/Duo Boost -- Mestre+ ─────────────────────────────────────────────
   elsif v_order.service_type = 'elo_boost'
-    and (v_order.current_rank->>'tier') in ('master', 'grandmaster', 'challenger') then
-
-    v_new_wins_purchased := v_order.wins_purchased;
-    v_new_estimated_hours := v_order.estimated_hours;
+    and (coalesce(v_order.stint_start_rank, v_order.current_rank)->>'tier') in ('master', 'grandmaster', 'challenger') then
 
     select fetched_tier, fetched_division, fetched_lp
     into v_latest_rank
     from public.order_rank_verifications
-    where order_id = p_order_id order by created_at desc limit 1;
+    where order_id = p_order_id and created_at >= coalesce((select max(assigned_at) from public.order_booster_assignments where order_id = p_order_id and unassigned_at is null), '-infinity') order by created_at desc limit 1;
 
     v_latest_pdl := coalesce(v_latest_rank.fetched_lp, v_order.current_pdl, 0);
     v_new_current_pdl := v_latest_pdl;
@@ -1753,130 +2296,82 @@ begin
       else v_order.current_rank
     end;
 
-    v_win_value_master_cents := public.win_price_cents(
-      v_order.queue_type,
-      v_order.boost_mode,
-      coalesce(v_latest_rank.fetched_tier, v_order.current_rank->>'tier')
-    );
-    v_win_value_master_full  := v_win_value_master_cents / 100.0;
-    -- Comissão fixa de 45% só neste ramo (negativo, quando o cliente pede) --
-    -- diferente do share_pct dinâmico (55/60 top3) usado em todo o resto.
-    v_win_value_master_share := round(v_win_value_master_full * 0.55, 2);
-
     if v_is_positive then
-      v_cutoff_pdl := coalesce(
-        (select cutoff_lp from public.riot_league_cutoffs
-          where queue = v_order.queue_type and tier = v_order.target_rank->>'tier'),
-        case v_order.target_rank->>'tier'
-          when 'grandmaster' then 1200
-          when 'challenger' then 2200
-          else 0
-        end
-      );
-      v_original_pdl := coalesce(v_order.current_pdl, 0);
-
-      v_pdl_remaining := greatest(0, v_cutoff_pdl - v_original_pdl);
-      v_quarter_pdl    := v_pdl_remaining / 4.0;
-      v_booster_share  := round(v_order.total_price * v_share_pct, 2);
-      v_quarter_value  := round(v_booster_share / 4.0, 2);
-
-      v_quarters_completed := case
-        when v_quarter_pdl <= 0 then 4
-        else least(4, floor(greatest(0, v_latest_pdl - v_original_pdl) / v_quarter_pdl)::integer)
-      end;
-
-      v_payout := v_quarter_value * v_quarters_completed;
-      -- total_price é o bruto pago pelo cliente. Remove a fração bruta
-      -- concluída; subtrair v_payout aplicava a comissão uma segunda vez ao
-      -- próximo booster.
-      v_new_total_price := greatest(0, round(
-        v_order.total_price * (1 - v_quarters_completed / 4.0), 2
-      ));
+      v_payout := round(v_consumed * v_share_pct, 2);
+      v_new_total_price := greatest(0, round(v_order.total_price - v_consumed, 2));
     else
+      v_win_value_master_cents := public.win_price_cents(
+        v_order.queue_type, v_order.boost_mode,
+        coalesce(v_latest_rank.fetched_tier, v_order.current_rank->>'tier'));
+      v_win_value_master_full := v_win_value_master_cents / 100.0;
       v_penalty := public.compute_drop_penalty(
-        p_requester_role, v_win_value_master_full, v_win_value_master_share, v_order.losses_played);
-      v_new_total_price := round(v_order.total_price + v_penalty, 2);
+        p_requester_role, v_win_value_master_full, round(v_win_value_master_full * v_share_pct, 2), v_order.losses_played);
+      -- O progresso (se houve) sai do preco; a penalidade vai inteira para o proximo booster.
+      v_new_total_price := round(v_order.total_price - v_consumed + v_penalty, 2);
     end if;
 
-  -- ── Elo/Duo Boost -- padrão (abaixo de Mestre) ──────────────────────────
+  -- ── Elo/Duo Boost -- padrao (abaixo de Mestre) ──────────────────────────
   elsif v_order.service_type = 'elo_boost' then
-    v_new_wins_purchased := v_order.wins_purchased;
-    v_new_estimated_hours := v_order.estimated_hours;
-
-    v_divisions_remaining := greatest(0,
-      public.rank_step(v_order.target_rank->>'tier', v_order.target_rank->>'division')
-      - public.rank_step(v_order.current_rank->>'tier', v_order.current_rank->>'division'));
-
-    v_division_value_full  := case when v_divisions_remaining > 0 then v_order.total_price / v_divisions_remaining else 0 end;
-    v_division_value_share := round(v_division_value_full * v_share_pct, 2);
-
-    select fetched_tier, fetched_division into v_latest_rank
+    select fetched_tier, fetched_division, fetched_lp into v_latest_rank
       from public.order_rank_verifications
-      where order_id = p_order_id order by created_at desc limit 1;
-
+      where order_id = p_order_id and created_at >= coalesce((select max(assigned_at) from public.order_booster_assignments where order_id = p_order_id and unassigned_at is null), '-infinity') order by created_at desc limit 1;
     if v_latest_rank.fetched_tier is not null then
       v_new_current_rank := jsonb_build_object('tier', v_latest_rank.fetched_tier, 'division', v_latest_rank.fetched_division);
-      -- least() trava em v_divisions_remaining -- sem isso, uma conta que
-      -- sobe além do rank alvo contratado (partidas sincronizadas depois do
-      -- drop_requested) pagava por divisões nunca vendidas neste pedido.
-      v_steps_crossed := least(v_divisions_remaining::integer, greatest(0,
-        public.rank_step(v_latest_rank.fetched_tier, v_latest_rank.fetched_division)
-        - public.rank_step(v_order.current_rank->>'tier', v_order.current_rank->>'division')));
-    else
-      v_new_current_rank := v_order.current_rank;
-      v_steps_crossed := 0;
+      -- M-13: chegou a Master+ no fluxo padrao -- o proximo booster nao pode recontar o PDL ja entregue.
+      if v_latest_rank.fetched_tier in ('master', 'grandmaster', 'challenger') then
+        v_new_current_pdl := coalesce(v_latest_rank.fetched_lp, v_new_current_pdl);
+      end if;
     end if;
 
     if v_is_positive then
-      v_payout := round(v_division_value_share * v_steps_crossed, 2);
-      -- O preço do pedido é bruto, portanto também precisa ser reduzido
-      -- pelo valor bruto das divisões concluídas.
-      v_new_total_price := greatest(0, round(
-        v_order.total_price - (v_division_value_full * v_steps_crossed), 2
-      ));
+      v_payout := round(v_consumed * v_share_pct, 2);
+      v_new_total_price := greatest(0, round(v_order.total_price - v_consumed, 2));
     else
+      -- Cada derrota custa 1/4 do valor do degrau em disputa (peso real do degrau, nao a media).
+      v_division_value_full := round(v_order.total_price * coalesce(v_unit_ratio, 0), 2);
       v_penalty := public.compute_drop_penalty(
-        p_requester_role,
-        round(v_division_value_full / 4.0, 2),
-        round(v_division_value_share / 4.0, 2),
-        v_order.losses_played);
-      v_new_total_price := round(v_order.total_price + v_penalty, 2);
+        p_requester_role, round(v_division_value_full / 4.0, 2),
+        round(v_division_value_full * v_share_pct / 4.0, 2), v_order.losses_played);
+      v_new_total_price := round(v_order.total_price - v_consumed + v_penalty, 2);
     end if;
 
-  -- ── Demais tipos (coaching, placement_matches, clash): sem fórmula
-  -- específica no plano -- mantém o cálculo proporcional genérico de
-  -- antes (completion_pct * share_pct), sem penalidade negativa. Coaching
-  -- usa v_share_pct = 0.70 (fixo, ver acima); placement_matches/clash
-  -- continuam em 0.55/0.60 por is_top3, sem taxa própria definida.
-  --
-  -- Coaching aceita um % de conclusão informado manualmente pelo admin
-  -- (p_coaching_completion_pct) em vez do automático (sempre 0, sem métrica
-  -- de sessões entregues) -- clash/placement_matches continuam 100%
-  -- automáticos (ignoram o parâmetro, mesmo que informado por engano).
+  -- ── Clash, coaching e placement: so existe drop positivo (progresso x preco) ──
   else
-    if v_order.service_type = 'coaching' and p_coaching_completion_pct is not null then
-      v_completion_pct := greatest(0, least(100, p_coaching_completion_pct));
-    else
-      v_completion_pct := public.order_drop_completion_pct(p_order_id);
-    end if;
-    v_completion_frac := v_completion_pct / 100.0;
-    v_new_total_price := round(v_order.total_price * (1 - v_completion_frac), 2);
+    v_new_total_price := round(v_order.total_price - v_consumed, 2);
     v_new_estimated_hours := case
-      when v_order.estimated_hours is not null then round(v_order.estimated_hours * (1 - v_completion_frac), 2)
+      when v_order.estimated_hours is not null then round(v_order.estimated_hours * (1 - v_f), 2)
       else null
     end;
-    v_new_wins_purchased := v_order.wins_purchased;
-    v_new_current_rank := v_order.current_rank;
-    v_payout := round(v_order.total_price * v_share_pct * v_completion_frac, 2);
+    v_payout := round(v_consumed * v_share_pct, 2);
+  end if;
+
+  -- Nada mais a entregar: conclui em vez de reabrir um pedido de preco zero.
+  -- O trigger de conclusao paga o booster sobre o preco vigente (sem somar v_payout).
+  v_complete := v_is_positive and v_new_total_price <= 0 and v_order.total_price > 0;
+
+  if v_complete then
+    update public.orders set status = 'completed', completed_at = now(), updated_at = now(),
+           settled_value = settled_value + v_consumed
+    where id = p_order_id;
+    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+    values (p_order_id, p_from_status::public.order_status, 'completed', p_actor_id,
+            'Objetivo ja entregue ao solicitar o drop -- pedido concluido. ' || p_reason);
+    insert into public.notifications(user_id, type, title, body, data)
+    values (v_order.customer_id, 'order_completed', 'Pedido concluido',
+            'O objetivo do seu pedido ja tinha sido entregue e ele foi concluido.',
+            jsonb_build_object('order_id', p_order_id));
+    return jsonb_build_object('success', true, 'completed', true, 'payout_amount', 0, 'penalty_amount', 0,
+                              'new_total_price', v_order.total_price, 'is_positive', true);
   end if;
 
   -- ── Aplica o resultado ao pedido ────────────────────────────────────
   update public.orders set
-    status                 = 'awaiting_assignment',
+    status                 = case when v_order.service_type = 'coaching' then 'under_review'::public.order_status else 'awaiting_assignment'::public.order_status end,
     assigned_booster_id    = null,
     preferred_booster_id   = null,
     exclusive_until        = null,
     used_exclusive_slot    = false,
+    reassigned_by_admin    = false,
     duo_own_riot_id        = null,
     total_price            = v_new_total_price,
     base_price             = v_new_total_price,
@@ -1889,10 +2384,12 @@ begin
     wins_played            = 0,
     losses_played          = 0,
     current_rank           = v_new_current_rank,
+    stint_start_rank       = v_new_current_rank,
     current_pdl            = v_new_current_pdl,
     rank_before_last_drop  = v_order.current_rank,
     drop_count             = drop_count + 1,
     last_dropped_at        = now(),
+    settled_value          = settled_value + v_consumed,
     updated_at             = now()
   where id = p_order_id;
 
@@ -1907,7 +2404,18 @@ begin
   where reserved_order_id = p_order_id;
 
   insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, p_from_status::public.order_status, 'awaiting_assignment', p_actor_id, p_reason);
+  values (p_order_id, p_from_status::public.order_status,
+          case when v_order.service_type = 'coaching' then 'under_review'::public.order_status else 'awaiting_assignment'::public.order_status end,
+          p_actor_id, p_reason);
+
+  -- Coaching nao volta ao pool (so o coach dono do pacote enxerga): o admin escolhe o novo coach.
+  if v_order.service_type = 'coaching' then
+    insert into public.notifications(user_id, type, title, body, data)
+    select id, 'coaching_needs_new_coach', 'Coaching sem coach',
+           'O coach largou o pedido ' || p_order_id::text || '. Escolha um novo coach em Atribuir booster.',
+           jsonb_build_object('order_id', p_order_id)
+    from public.profiles where role = 'admin';
+  end if;
 
   if v_payout > 0 then
     update public.booster_profiles set total_earnings = total_earnings + v_payout
@@ -1965,7 +2473,8 @@ begin
     'payout_amount', v_payout,
     'penalty_amount', v_penalty,
     'new_total_price', v_new_total_price,
-    'is_positive', v_is_positive
+    'is_positive', v_is_positive,
+    'progress_fraction', v_f
   );
 end;
 $_$;
@@ -1980,18 +2489,30 @@ CREATE OR REPLACE FUNCTION "public"."approve_booster"("p_booster_id" "uuid", "p_
     AS $$
 declare
   v_actor record;
-  v_booster_user_id uuid;
+  v_booster record;
   v_status public.booster_status;
 begin
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
-
   if p_new_status not in ('pending', 'under_review', 'approved', 'rejected', 'suspended') then
     return jsonb_build_object('success', false, 'error', 'invalid_status');
   end if;
-
   v_status := p_new_status::public.booster_status;
+
+  select id, user_id, status into v_booster
+  from public.booster_profiles where id = p_booster_id for update;
+  if not found then return jsonb_build_object('success', false, 'error', 'booster_not_found'); end if;
+
+  if v_booster.status = 'removed' then
+    return jsonb_build_object('success', false, 'error', 'booster_removed');
+  end if;
+  if v_booster.status = v_status then
+    return jsonb_build_object('success', true);
+  end if;
+  if v_status <> 'approved' and public.booster_has_open_orders(v_booster.user_id) then
+    return jsonb_build_object('success', false, 'error', 'active_orders_exist');
+  end if;
 
   select id, role into v_actor from public.profiles where id = auth.uid();
 
@@ -2000,19 +2521,17 @@ begin
          verified_at     = case when v_status = 'approved' then now() else null end,
          suspended_until = case when v_status = 'suspended' then now() + interval '24 hours' else null end,
          updated_at      = now()
-  where  id = p_booster_id
-  returning user_id into v_booster_user_id;
-
-  if not found then return jsonb_build_object('success', false, 'error', 'booster_not_found'); end if;
+  where  id = p_booster_id;
 
   update public.profiles
   set role = case when v_status = 'approved' then 'booster'::public.user_role else 'customer'::public.user_role end,
       updated_at = now()
-  where id = v_booster_user_id
+  where id = v_booster.user_id
     and role <> 'admin';
 
-  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id)
-  values (v_actor.id, v_actor.role, 'booster.' || v_status::text, 'booster_profile', p_booster_id::text);
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (v_actor.id, v_actor.role, 'booster.' || v_status::text, 'booster_profile', p_booster_id::text,
+          jsonb_build_object('from', v_booster.status, 'to', v_status));
 
   return jsonb_build_object('success', true);
 end;
@@ -2020,6 +2539,66 @@ $$;
 
 
 ALTER FUNCTION "public"."approve_booster"("p_booster_id" "uuid", "p_new_status" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."auto_complete_awaiting_customer_orders"() RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_order record;
+  v_count integer := 0;
+begin
+  for v_order in
+    select o.id, o.customer_id
+    from public.orders o
+    where o.status = 'awaiting_customer'
+      and o.service_type <> 'coaching'
+      and o.assigned_booster_id is not null
+      and o.payment_status = 'paid'
+      and coalesce((select max(h.created_at) from public.order_status_history h
+                    where h.order_id = o.id and h.to_status = 'awaiting_customer'), o.updated_at)
+          <= now() - interval '12 hours'
+    for update of o skip locked
+  loop
+    begin
+      perform public._complete_order_by_customer(v_order.id, v_order.customer_id,
+        'Conclusão automática: o cliente não respondeu em 12 h');
+      insert into public.notifications(user_id, type, title, body, data)
+      values (v_order.customer_id, 'order_auto_completed', 'Pedido concluído automaticamente',
+              'Passaram 12 h sem resposta, então o pedido foi marcado como concluído.',
+              jsonb_build_object('order_id', v_order.id));
+      v_count := v_count + 1;
+    exception when others then
+      -- um pedido problematico nao pode travar o lote inteiro
+      raise warning 'auto_complete_awaiting_customer_orders: pedido % falhou: %', v_order.id, sqlerrm;
+    end;
+  end loop;
+
+  -- coaching parado em awaiting_customer ha 12 h+: avisa os admins uma vez por pedido
+  insert into public.notifications(user_id, type, title, body, data)
+  select p.id, 'coaching_awaiting_customer_stale', 'Coaching aguardando o cliente há mais de 12 h',
+         'Pedido ' || o.id::text || ' de coaching não conclui sozinho. Fale com o cliente/coach e conclua ou abra disputa.',
+         jsonb_build_object('order_id', o.id)
+  from public.orders o
+  cross join public.profiles p
+  where p.role = 'admin'
+    and o.status = 'awaiting_customer'
+    and o.service_type = 'coaching'
+    and o.assigned_booster_id is not null
+    and o.payment_status = 'paid'
+    and coalesce((select max(h.created_at) from public.order_status_history h
+                  where h.order_id = o.id and h.to_status = 'awaiting_customer'), o.updated_at)
+        <= now() - interval '12 hours'
+    and not exists (select 1 from public.notifications n
+                    where n.type = 'coaching_awaiting_customer_stale' and n.user_id = p.id and (n.data->>'order_id')::uuid = o.id);
+
+  return v_count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."auto_complete_awaiting_customer_orders"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."booster_active_slot_counts"("p_booster_user_id" "uuid") RETURNS TABLE("solo_count" integer, "duo_count" integer, "total_count" integer)
@@ -2038,7 +2617,7 @@ begin
       count(*)::integer
     from public.orders
     where assigned_booster_id = p_booster_user_id
-      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer')
+      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'under_review', 'disputed')
       and not used_exclusive_slot
       and service_type <> 'coaching'
       and not reassigned_by_admin;
@@ -2071,7 +2650,7 @@ CREATE OR REPLACE FUNCTION "public"."booster_available_balance"("p_booster_id" "
     SET "search_path" TO 'public'
     AS $$
   select case
-    when auth.uid() = p_booster_id or public.is_admin()
+    when auth.uid() = p_booster_id or public.is_admin() or coalesce(auth.role(), 'service_role') = 'service_role'
       then coalesce((select sum(amount) from public.booster_ledger_entries where booster_id = p_booster_id), 0)
     else null
   end;
@@ -2113,7 +2692,7 @@ begin
   return exists (
     select 1 from public.orders
     where assigned_booster_id = p_booster_user_id
-      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer')
+      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'under_review', 'disputed')
       and used_exclusive_slot
   );
 end;
@@ -2123,14 +2702,40 @@ $$;
 ALTER FUNCTION "public"."booster_has_active_exclusive_slot"("p_booster_user_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."booster_has_open_orders"("p_user_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1 from public.orders
+    where assigned_booster_id = p_user_id
+      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested', 'under_review', 'disputed')
+  ) or exists (
+    select 1 from public.orders
+    where status = 'awaiting_assignment' and preferred_booster_id = p_user_id
+      and (service_type = 'coaching' or exclusive_until > now())
+  );
+$$;
+
+
+ALTER FUNCTION "public"."booster_has_open_orders"("p_user_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."booster_heartbeat"() RETURNS "void"
-    LANGUAGE "sql" SECURITY DEFINER
+    LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions'
     AS $$
+begin
+  if not public.check_own_write_rate_limit('booster_heartbeat', 30, 60) then
+    return;
+  end if;
+  -- H-32: so grava se passou 30 s (cada UPDATE vira evento de Realtime).
   update public.booster_profiles
      set last_active_at = now()
    where user_id = auth.uid()
-     and status = 'approved';
+     and status = 'approved'
+     and (last_active_at is null or last_active_at < now() - interval '30 seconds');
+end;
 $$;
 
 
@@ -2185,6 +2790,11 @@ declare
   v_total_count     integer;
   v_exclusive_used  boolean;
 begin
+  -- L-2: sem oraculo "UUID e booster aprovado" (aprovado ja dava 'forbidden' via booster_active_slot_counts): so si mesmo/admin/interno.
+  if auth.uid() is not null and auth.uid() <> p_booster_user_id and not public.is_admin() then
+    raise exception 'forbidden';
+  end if;
+
   select is_top3 into v_is_top3
   from public.booster_profiles
   where user_id = p_booster_user_id and status = 'approved';
@@ -2235,6 +2845,34 @@ $$;
 ALTER FUNCTION "public"."can_booster_accept_order"("p_booster_user_id" "uuid", "p_boost_mode" "text", "p_service_type" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."can_read_order_message"("p_order_id" "uuid", "p_created_at" timestamp with time zone) RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from public.orders o
+    where o.id = p_order_id
+      and o.assigned_booster_id is not null
+      and (
+        o.customer_id = (select auth.uid())
+        or (
+          o.assigned_booster_id = (select auth.uid())
+          and p_created_at >= coalesce((
+            select max(a.assigned_at)
+            from public.order_booster_assignments a
+            where a.order_id = o.id and a.booster_id = (select auth.uid()) and a.unassigned_at is null
+          ), '-infinity'::timestamptz)
+        )
+        or public.is_admin()
+      )
+  );
+$$;
+
+
+ALTER FUNCTION "public"."can_read_order_message"("p_order_id" "uuid", "p_created_at" timestamp with time zone) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."cancel_payout_request"("p_request_id" "uuid") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -2242,6 +2880,9 @@ CREATE OR REPLACE FUNCTION "public"."cancel_payout_request"("p_request_id" "uuid
 declare
   v_req record;
 begin
+  if not public.check_own_write_rate_limit('cancel_payout_request', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select * into v_req from public.payout_requests where id = p_request_id for update;
   if v_req is null or v_req.booster_id <> auth.uid() then
     return jsonb_build_object('success', false, 'error', 'not_found');
@@ -2339,6 +2980,9 @@ CREATE OR REPLACE FUNCTION "public"."clear_duo_own_riot_id"("p_order_id" "uuid")
 declare
   v_order record;
 begin
+  if not public.check_own_write_rate_limit('clear_duo_own_riot_id', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select id, assigned_booster_id into v_order
   from public.orders where id = p_order_id for update;
 
@@ -2440,11 +3084,7 @@ ALTER FUNCTION "public"."complete_verified_order"("p_order_id" "uuid", "p_fetche
 
 CREATE OR REPLACE FUNCTION "public"."compute_drop_penalty"("p_requester_role" "public"."drop_requester_role", "p_full_value" numeric, "p_share_value" numeric, "p_losses_played" integer) RETURNS numeric
     LANGUAGE "sql" IMMUTABLE
-    AS $$
-  select round(
-    (case when p_requester_role = 'booster' then p_full_value else p_share_value end)
-    * coalesce(p_losses_played, 0), 2);
-$$;
+    AS $$ select round(p_full_value * coalesce(p_losses_played, 0), 2) $$;
 
 
 ALTER FUNCTION "public"."compute_drop_penalty"("p_requester_role" "public"."drop_requester_role", "p_full_value" numeric, "p_share_value" numeric, "p_losses_played" integer) OWNER TO "postgres";
@@ -2457,6 +3097,9 @@ CREATE OR REPLACE FUNCTION "public"."confirm_order_completion"("p_order_id" "uui
 declare
   v_order record;
 begin
+  if not public.check_own_write_rate_limit('confirm_order_completion', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select id, status, customer_id, assigned_booster_id into v_order
   from public.orders where id = p_order_id for update;
 
@@ -2469,20 +3112,11 @@ begin
   if v_order.status <> 'awaiting_customer' then
     return jsonb_build_object('success', false, 'error', 'invalid_status');
   end if;
-
-  update public.orders set status = 'completed', completed_at = now(), updated_at = now()
-  where id = p_order_id;
-
-  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  values (p_order_id, 'awaiting_customer', 'completed', auth.uid(), 'Cliente confirmou a conclusão');
-
-  if v_order.assigned_booster_id is not null then
-    insert into public.notifications(user_id, type, title, body, data)
-    values (v_order.assigned_booster_id, 'order_completed', 'Cliente confirmou a conclusão!',
-            'O cliente confirmou a entrega e seus ganhos foram liberados.',
-            jsonb_build_object('order_id', p_order_id));
+  if v_order.assigned_booster_id is null then
+    return jsonb_build_object('success', false, 'error', 'no_booster_assigned');
   end if;
 
+  perform public._complete_order_by_customer(p_order_id, auth.uid(), 'Cliente confirmou a conclusão');
   return jsonb_build_object('success', true);
 end;
 $$;
@@ -2531,6 +3165,15 @@ $_$;
 ALTER FUNCTION "public"."consume_edge_rate_limit"("p_scope" "text", "p_subject" "text", "p_limit" integer, "p_window_seconds" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."current_legal_version"() RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO 'public'
+    AS $$ select '2026-09-06'::text $$;
+
+
+ALTER FUNCTION "public"."current_legal_version"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."current_user_role"() RETURNS "public"."user_role"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions'
@@ -2540,6 +3183,16 @@ $$;
 
 
 ALTER FUNCTION "public"."current_user_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$ select auth.uid() is not null and exists (
+  select 1 from public.orders where assigned_booster_id = p_booster_id and customer_id = auth.uid()) $$;
+
+
+ALTER FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."dedupe_provider_refund_after_manual"() RETURNS "trigger"
@@ -2588,7 +3241,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
 
-  select reserved_by into v_reserved_by from public.duo_accounts where id = p_account_id;
+  select reserved_by into v_reserved_by from public.duo_accounts where id = p_account_id for update;
   if not found then
     return jsonb_build_object('success', false, 'error', 'account_not_found');
   end if;
@@ -2607,6 +3260,54 @@ $$;
 
 
 ALTER FUNCTION "public"."delete_duo_account"("p_account_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dispute_order_completion"("p_order_id" "uuid", "p_reason" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_order record;
+  v_reason text := trim(p_reason);
+begin
+  if not public.check_own_write_rate_limit('dispute_order_completion', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  if v_reason is null or length(v_reason) < 10 or length(v_reason) > 500 then
+    return jsonb_build_object('success', false, 'error', 'invalid_reason');
+  end if;
+  select id, status, customer_id, assigned_booster_id into v_order
+  from public.orders where id = p_order_id for update;
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'order_not_found');
+  end if;
+  if auth.uid() is distinct from v_order.customer_id then
+    return jsonb_build_object('success', false, 'error', 'unauthorized');
+  end if;
+  if v_order.status <> 'awaiting_customer' or v_order.assigned_booster_id is null then
+    return jsonb_build_object('success', false, 'error', 'invalid_status');
+  end if;
+
+  update public.orders set status = 'disputed', updated_at = now() where id = p_order_id;
+  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+  values (p_order_id, 'awaiting_customer', 'disputed', auth.uid(), v_reason);
+
+  insert into public.notifications(user_id, type, title, body, data)
+  select id, 'order_disputed', 'Entrega contestada',
+         'O cliente contestou a entrega do pedido. Verifique o chat do pedido.',
+         jsonb_build_object('order_id', p_order_id)
+  from public.profiles where role = 'admin';
+  insert into public.notifications(user_id, type, title, body, data)
+  values (v_order.assigned_booster_id, 'order_disputed', 'Entrega contestada',
+          'O cliente contestou a entrega. Um administrador vai analisar.',
+          jsonb_build_object('order_id', p_order_id));
+
+  return jsonb_build_object('success', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dispute_order_completion"("p_order_id" "uuid", "p_reason" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."duo_account_rank_is_valid"("p_rank" "jsonb") RETURNS boolean
@@ -2631,6 +3332,9 @@ declare
   v_username   text;
   v_discord_id text;
 begin
+  if not public.check_own_write_rate_limit('ensure_profile_exists', 30, 60) then
+    raise exception 'rate_limited';
+  end if;
   if auth.uid() is null then raise exception 'not authenticated'; end if;
 
   select provider_id into v_discord_id
@@ -2679,7 +3383,8 @@ CREATE OR REPLACE FUNCTION "public"."expel_booster"("p_booster_id" "uuid", "p_re
 declare
   v_actor         record;
   v_booster       record;
-  v_active_orders integer;
+  v_balance       numeric;
+  v_pending       integer;
 begin
   if p_reason is null or length(trim(p_reason)) < 10 then
     return jsonb_build_object('success', false, 'error', 'invalid_reason');
@@ -2693,12 +3398,7 @@ begin
   end if;
 
   if v_booster.status <> 'removed' then
-    select count(*) into v_active_orders
-    from public.orders
-    where assigned_booster_id = v_booster.user_id
-      and status in ('assigned', 'in_progress', 'paused', 'awaiting_customer', 'drop_requested');
-
-    if v_active_orders > 0 then
+    if public.booster_has_open_orders(v_booster.user_id) then
       return jsonb_build_object('success', false, 'error', 'active_orders_exist');
     end if;
   end if;
@@ -2717,11 +3417,21 @@ begin
   where id = v_booster.user_id
     and role <> 'admin';
 
+  -- Saldo e saques pendentes ficam para o admin decidir (nao somem em silencio).
+  v_balance := public.booster_available_balance(v_booster.user_id);
+  select count(*)::int into v_pending
+  from public.payout_requests
+  where booster_id = v_booster.user_id and status in ('requested', 'under_review', 'approved');
+
+  -- Encerra as sessoes: o ban do GoTrue nao revoga os refresh tokens ja emitidos.
+  delete from auth.sessions where user_id = v_booster.user_id;
+
   insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
   values (v_actor.id, v_actor.role, 'booster.removed', 'booster_profile', p_booster_id::text,
-          jsonb_build_object('reason', trim(p_reason)));
+          jsonb_build_object('reason', trim(p_reason), 'balance', v_balance, 'pending_payout_requests', v_pending));
 
-  return jsonb_build_object('success', true, 'user_id', v_booster.user_id);
+  return jsonb_build_object('success', true, 'user_id', v_booster.user_id,
+                            'balance', v_balance, 'pending_payout_requests', v_pending);
 end;
 $$;
 
@@ -2768,6 +3478,7 @@ CREATE OR REPLACE FUNCTION "public"."expire_stale_pix_orders"() RETURNS "void"
     SET "search_path" TO 'public'
     AS $$
 begin
+  -- PIX gerado e nao pago em 35 min.
   with expired as (
     update public.orders o
     set status = 'canceled', updated_at = now()
@@ -2783,17 +3494,44 @@ begin
           and p.created_at < now() - interval '35 minutes'
       )
     returning o.id, o.customer_id
+  ), failed as (
+    update public.payments p set status = 'failed', updated_at = now()
+    where p.order_id in (select id from expired) and p.status = 'pending'
   )
   insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-  select
-    id, 'awaiting_payment', 'canceled', customer_id,
-    'PIX expirado sem confirmação de pagamento'
+  select id, 'awaiting_payment', 'canceled', customer_id, 'PIX expirado sem confirmação de pagamento'
   from expired;
+
+  -- H-11: pedido salvo e nunca pago (sem cobranca) expira em 24 h e libera os tetos de pedidos pendentes.
+  with abandoned as (
+    update public.orders o
+    set status = 'canceled', updated_at = now()
+    where o.status = 'awaiting_payment'
+      and o.created_at < now() - interval '24 hours'
+      and not exists (select 1 from public.payments p where p.order_id = o.id and p.status in ('pending', 'paid'))
+    returning o.id, o.customer_id
+  )
+  insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+  select id, 'awaiting_payment', 'canceled', customer_id, 'Pedido não pago expirou após 24 horas'
+  from abandoned;
 end;
 $$;
 
 
 ALTER FUNCTION "public"."expire_stale_pix_orders"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_accept_challenge_image_data"("p_challenge_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select jsonb_build_object('champion_id', champion_id, 'seed', image_seed)
+  from public.accept_challenges
+  where id = p_challenge_id and used_at is null and solved_at is null and expires_at > now() and attempts < 3
+$$;
+
+
+ALTER FUNCTION "public"."get_accept_challenge_image_data"("p_challenge_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_customer_order_state"("p_order_id" "uuid" DEFAULT NULL::"uuid") RETURNS "jsonb"
@@ -2811,7 +3549,7 @@ begin
   end if;
 
   if p_order_id is null then
-    select id, status, payment_status, service_type, boost_mode, credentials_set
+    select id, status, payment_status, service_type, boost_mode, credentials_set, assigned_booster_id
     into v_order
     from public.orders
     where customer_id = v_customer_id
@@ -2823,7 +3561,7 @@ begin
       return jsonb_build_object('success', true, 'order_id', null);
     end if;
   else
-    select id, status, payment_status, service_type, boost_mode, credentials_set
+    select id, status, payment_status, service_type, boost_mode, credentials_set, assigned_booster_id
     into v_order
     from public.orders
     where id = p_order_id
@@ -2840,7 +3578,7 @@ begin
   );
   v_is_active_paid := v_order.payment_status = 'paid'::public.payment_status
     and v_order.status in (
-      'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'awaiting_customer'
+      'awaiting_assignment', 'assigned', 'in_progress', 'paused', 'awaiting_customer', 'disputed'
     );
 
   return jsonb_build_object(
@@ -2854,7 +3592,7 @@ begin
     'requires_credentials', v_requires_credentials,
     'credentials_set', v_order.credentials_set,
     'can_submit_credentials', v_is_active_paid and v_requires_credentials,
-    'can_confirm_completion', v_order.status = 'awaiting_customer'
+    'can_confirm_completion', v_order.status = 'awaiting_customer' and v_order.assigned_booster_id is not null
   );
 end;
 $$;
@@ -2892,6 +3630,14 @@ begin
   end if;
   if v_account.reserved_by is distinct from auth.uid() then
     return jsonb_build_object('success', false, 'error', 'not_reserved_by_you');
+  end if;
+  if not exists (
+    select 1 from public.orders o
+    where o.id = v_account.reserved_order_id
+      and o.assigned_booster_id = auth.uid()
+      and o.status = 'in_progress'::public.order_status
+  ) then
+    return jsonb_build_object('success', false, 'error', 'order_not_in_progress');
   end if;
   if v_account.encrypted_credentials is null then
     return jsonb_build_object('success', false, 'error', 'no_credentials');
@@ -3078,6 +3824,8 @@ declare
   v_role public.user_role;
   v_order public.orders%rowtype;
   v_messages jsonb := '[]'::jsonb;
+  v_window_start timestamptz := '-infinity';
+  v_last_read timestamptz;
 begin
   if v_user_id is null then
     return jsonb_build_object('success', false, 'code', 'not_authenticated', 'message', 'Sessao nao autenticada.');
@@ -3098,6 +3846,14 @@ begin
     return jsonb_build_object('success', false, 'code', 'order_not_found', 'message', 'Pedido nao encontrado.');
   end if;
 
+  -- Booster novo nao le o historico do anterior: a janela comeca na atribuicao atual (admin e cliente veem tudo).
+  if v_role <> 'admin'::public.user_role and v_order.customer_id <> v_user_id then
+    select coalesce(max(a.assigned_at), '-infinity') into v_window_start
+    from public.order_booster_assignments a
+    where a.order_id = p_order_id and a.booster_id = v_user_id and a.unassigned_at is null;
+  end if;
+  select r.last_read_at into v_last_read from public.order_chat_reads r where r.order_id = p_order_id and r.user_id = v_user_id;
+
   if v_order.assigned_booster_id is not null then
     select coalesce(jsonb_agg(row_data order by row_data->>'created_at'), '[]'::jsonb)
     into v_messages
@@ -3115,12 +3871,13 @@ begin
         'sender_avatar_url', p.avatar_url,
         'content', m.content,
         'created_at', m.created_at,
-        'is_read', m.is_read
+        'is_read', (m.sender_id = v_user_id or (v_last_read is not null and m.created_at <= v_last_read))
       ) as row_data
       from (
         select om.*
         from public.order_messages om
         where om.order_id = p_order_id
+          and om.created_at >= v_window_start
         order by om.created_at desc
         limit 300
       ) m
@@ -3138,7 +3895,8 @@ begin
     'chat_locked_at', v_order.chat_locked_at,
     'can_send',
       v_order.assigned_booster_id is not null
-      and (v_role = 'admin'::public.user_role or not v_order.chat_locked),
+      and (v_role = 'admin'::public.user_role
+           or (not v_order.chat_locked and v_order.status not in ('canceled', 'refunded'))),
     'messages', v_messages
   );
 end;
@@ -3247,8 +4005,11 @@ begin
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
 
-  if v_order.payment_status is distinct from 'paid'::public.payment_status
-     or v_order.status not in ('awaiting_assignment', 'assigned', 'in_progress', 'paused', 'awaiting_customer') then
+  -- Token de login so existe para pedido em andamento (nenhum outro status).
+  if v_order.status is distinct from 'in_progress'::public.order_status then
+    return jsonb_build_object('success', false, 'error', 'order_not_in_progress');
+  end if;
+  if v_order.payment_status is distinct from 'paid'::public.payment_status then
     return jsonb_build_object('success', false, 'error', 'order_not_paid_or_active');
   end if;
 
@@ -3545,21 +4306,11 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     SET "search_path" TO 'public'
     AS $_$
 declare
-  v_role       public.user_role;
   v_email      text;
   v_username   text;
   v_discord_id text;
 begin
-  v_role := case
-    when new.raw_user_meta_data->>'role' = 'booster' then 'booster'::public.user_role
-    else 'customer'::public.user_role
-  end;
-
-  v_email := coalesce(
-    new.email,
-    new.raw_user_meta_data->>'email',
-    new.id::text || '@oauth.local'
-  );
+  v_email := coalesce(new.email, new.raw_user_meta_data->>'email', new.id::text || '@oauth.local');
 
   v_username := coalesce(
     new.raw_user_meta_data->>'username',
@@ -3576,21 +4327,14 @@ begin
     v_username := left(v_username, 22) || '_' || left(new.id::text, 7);
   end if;
 
-  v_discord_id := coalesce(
-    new.raw_user_meta_data->>'provider_id',
-    new.raw_user_meta_data->>'sub'
-  );
+  v_discord_id := coalesce(new.raw_user_meta_data->>'provider_id', new.raw_user_meta_data->>'sub');
 
   insert into public.profiles(id, email, role, username, discord_id)
-  values (new.id, v_email, v_role, v_username, v_discord_id)
+  values (new.id, v_email, 'customer', v_username, v_discord_id)
   on conflict (id) do update
     set discord_id = coalesce(excluded.discord_id, profiles.discord_id);
 
-  if v_role = 'customer' then
-    insert into public.customer_profiles(user_id)
-    values (new.id)
-    on conflict (user_id) do nothing;
-  end if;
+  insert into public.customer_profiles(user_id) values (new.id) on conflict (user_id) do nothing;
 
   return new;
 end;
@@ -3598,6 +4342,50 @@ $_$;
 
 
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."hold_declared_rank_order"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.status = 'pending_review'
+     and old.status is distinct from 'pending_review'
+     and new.rank_source = 'client_declared'
+     and new.assigned_booster_id is null then
+    new.admin_review_locked := true;
+    insert into public.notifications(user_id, type, title, body, data)
+    select id, 'order_declared_rank_review', 'Pedido com elo declarado aguardando conferência',
+           'Pedido ' || new.id::text || ' foi pago com elo informado pelo cliente (a Riot não tem o rank). Confira a verificação do sistema e libere manualmente.',
+           jsonb_build_object('order_id', new.id)
+    from public.profiles where role = 'admin';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."hold_declared_rank_order"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."invalidate_login_tokens_on_order_change"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+begin
+  if new.status is distinct from old.status
+     or new.assigned_booster_id is distinct from old.assigned_booster_id then
+    new.access_token_id := null;
+    update public.duo_accounts
+    set access_token_id = null, updated_at = now()
+    where reserved_order_id = new.id and access_token_id is not null;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."invalidate_login_tokens_on_order_change"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
@@ -3639,6 +4427,77 @@ $$;
 
 
 ALTER FUNCTION "public"."is_approved_booster"("p_booster_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$ select exists (select 1 from public.booster_profiles where user_id = p_user_id and status = 'approved') $$;
+
+
+ALTER FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_payout_window_day"("p_at" timestamp with time zone DEFAULT "now"()) RETURNS boolean
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO 'public'
+    AS $$
+  select d.day = 15
+      or d.day = extract(day from (date_trunc('month', d.local_date) + interval '1 month - 1 day'))::int
+  from (select (p_at at time zone 'America/Sao_Paulo')::date as local_date,
+               extract(day from (p_at at time zone 'America/Sao_Paulo'))::int as day) d
+$$;
+
+
+ALTER FUNCTION "public"."is_payout_window_day"("p_at" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_valid_cpf"("p_cpf" "text") RETURNS boolean
+    LANGUAGE "plpgsql" IMMUTABLE
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  d int[];
+  s int;
+  i int;
+  k int;
+begin
+  if p_cpf is null or p_cpf !~ '^[0-9]{11}$' or p_cpf ~ '^([0-9])\1{10}$' then return false; end if;
+  for i in 1..11 loop d[i] := substr(p_cpf, i, 1)::int; end loop;
+  for k in 9..10 loop
+    s := 0;
+    for i in 1..k loop s := s + d[i] * (k + 2 - i); end loop;
+    if ((s * 10) % 11) % 10 <> d[k + 1] then return false; end if;
+  end loop;
+  return true;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."is_valid_cpf"("p_cpf" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."issue_accept_challenge"("p_booster_id" "uuid", "p_order_id" "uuid", "p_champion_id" "text", "p_answer_norm" "text", "p_seed" integer) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  if not exists (select 1 from public.orders where id = p_order_id and status = 'awaiting_assignment') then
+    raise exception 'order_unavailable';
+  end if;
+  update public.accept_challenges set used_at = now()
+   where booster_id = p_booster_id and order_id = p_order_id and used_at is null;
+  insert into public.accept_challenges(booster_id, order_id, champion_id, answer_norm, image_seed, expires_at)
+  values (p_booster_id, p_order_id, p_champion_id, p_answer_norm, p_seed, now() + interval '3 minutes')
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."issue_accept_challenge"("p_booster_id" "uuid", "p_order_id" "uuid", "p_champion_id" "text", "p_answer_norm" "text", "p_seed" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."list_customer_inactivity_reminder_targets"() RETURNS TABLE("customer_id" "uuid", "discord_id" "text", "last_order_at" timestamp with time zone)
@@ -3751,6 +4610,9 @@ declare
   v_role public.user_role;
   v_order public.orders%rowtype;
 begin
+  if not public.check_own_write_rate_limit('mark_order_chat_read', 60, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if v_user_id is null then
     return jsonb_build_object('success', false, 'code', 'not_authenticated', 'message', 'Sessao nao autenticada.');
   end if;
@@ -3770,11 +4632,9 @@ begin
     return jsonb_build_object('success', false, 'code', 'order_not_found', 'message', 'Pedido nao encontrado.');
   end if;
 
-  update public.order_messages
-  set is_read = true
-  where order_id = p_order_id
-    and sender_id <> v_user_id
-    and is_read = false;
+  insert into public.order_chat_reads(order_id, user_id, last_read_at)
+  values (p_order_id, v_user_id, now())
+  on conflict (order_id, user_id) do update set last_read_at = excluded.last_read_at;
 
   return jsonb_build_object('success', true);
 end;
@@ -4038,19 +4898,22 @@ ALTER FUNCTION "public"."notify_order_status_changed"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."onboard_booster"("p_display_name" "text", "p_bio" "text", "p_peak_rank" "jsonb", "p_opgg_link" "text" DEFAULT NULL::"text", "p_hours_per_day_min" integer DEFAULT NULL::integer, "p_hours_per_day_max" integer DEFAULT NULL::integer, "p_full_name" "text" DEFAULT NULL::"text", "p_cpf" "text" DEFAULT NULL::"text", "p_available_days" "text"[] DEFAULT NULL::"text"[]) RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
+    AS $_$
 declare
   v_role      public.user_role;
   v_email     text;
   v_bio       text := nullif(btrim(p_bio), '');
   v_opgg      text := nullif(btrim(p_opgg_link), '');
   v_full_name text := nullif(btrim(p_full_name), '');
-  v_cpf_digits text := regexp_replace(coalesce(p_cpf, ''), '\D', '', 'g');
+  v_cpf_digits text := regexp_replace(coalesce(p_cpf, ''), '[^0-9]', '', 'g');
   v_tier      text := p_peak_rank->>'tier';
   v_booster_id uuid;
   v_is_new_application boolean;
 begin
-  v_is_new_application := not exists(select 1 from public.booster_profiles where user_id = auth.uid());
+  if not public.check_own_write_rate_limit('onboard_booster', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  v_is_new_application := not exists(select 1 from public.booster_profiles where user_id = auth.uid() and status <> 'rejected');
 
   select role into v_role from public.profiles where id = auth.uid();
   if v_role is null or v_role not in ('customer', 'booster') then
@@ -4060,8 +4923,14 @@ begin
   if nullif(btrim(p_display_name), '') is null then
     return jsonb_build_object('success', false, 'error', 'display_name_required');
   end if;
+  if char_length(btrim(p_display_name)) > 32 or btrim(p_display_name) !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]+$' then
+    return jsonb_build_object('success', false, 'error', 'display_name_invalid');
+  end if;
   if v_bio is null then
     return jsonb_build_object('success', false, 'error', 'bio_required');
+  end if;
+  if char_length(v_bio) > 256 then
+    return jsonb_build_object('success', false, 'error', 'bio_too_long');
   end if;
   if v_tier not in ('grandmaster', 'challenger') then
     return jsonb_build_object('success', false, 'error', 'invalid_peak_rank');
@@ -4077,7 +4946,7 @@ begin
   if v_full_name is null then
     return jsonb_build_object('success', false, 'error', 'full_name_required');
   end if;
-  if char_length(v_cpf_digits) <> 11 then
+  if not public.is_valid_cpf(v_cpf_digits) then
     return jsonb_build_object('success', false, 'error', 'invalid_cpf');
   end if;
   if p_available_days is null or array_length(p_available_days, 1) is null
@@ -4087,29 +4956,42 @@ begin
 
   select email into v_email from auth.users where id = auth.uid();
 
-  insert into public.booster_profiles(
-    user_id, display_name, bio, status,
-    peak_rank, opgg_link, hours_per_day_min, hours_per_day_max,
-    full_name, email, cpf, available_days
-  )
-  values (
-    auth.uid(), btrim(p_display_name), v_bio, 'pending',
-    p_peak_rank, v_opgg, p_hours_per_day_min, p_hours_per_day_max,
-    v_full_name, v_email, v_cpf_digits, p_available_days
-  )
-  on conflict (user_id) do update set
-    display_name      = excluded.display_name,
-    bio               = excluded.bio,
-    peak_rank         = excluded.peak_rank,
-    opgg_link         = excluded.opgg_link,
-    hours_per_day_min = excluded.hours_per_day_min,
-    hours_per_day_max = excluded.hours_per_day_max,
-    full_name         = excluded.full_name,
-    email             = excluded.email,
-    cpf               = excluded.cpf,
-    available_days    = excluded.available_days,
-    updated_at        = now()
-  returning id into v_booster_id;
+  begin
+    insert into public.booster_profiles(
+      user_id, display_name, bio, status,
+      peak_rank, opgg_link, hours_per_day_min, hours_per_day_max,
+      full_name, email, cpf, available_days
+    )
+    values (
+      auth.uid(), btrim(p_display_name), v_bio, 'pending',
+      p_peak_rank, v_opgg, p_hours_per_day_min, p_hours_per_day_max,
+      v_full_name, v_email, v_cpf_digits, p_available_days
+    )
+    on conflict (user_id) do update set
+      display_name      = excluded.display_name,
+      bio               = excluded.bio,
+      peak_rank         = excluded.peak_rank,
+      opgg_link         = excluded.opgg_link,
+      hours_per_day_min = excluded.hours_per_day_min,
+      hours_per_day_max = excluded.hours_per_day_max,
+      full_name         = excluded.full_name,
+      email             = excluded.email,
+      cpf               = excluded.cpf,
+      available_days    = excluded.available_days,
+      status            = case when booster_profiles.status = 'rejected' then 'pending' else booster_profiles.status end,
+      updated_at        = now()
+    where booster_profiles.status in ('pending', 'rejected')
+    returning id into v_booster_id;
+  exception when unique_violation then
+    if sqlerrm like '%display_name%' then
+      return jsonb_build_object('success', false, 'error', 'display_name_taken');
+    end if;
+    return jsonb_build_object('success', false, 'error', 'cpf_taken');
+  end;
+
+  if v_booster_id is null then
+    return jsonb_build_object('success', false, 'error', 'application_not_editable');
+  end if;
 
   if v_is_new_application then
     insert into public.notifications(user_id, type, title, body, data)
@@ -4132,7 +5014,7 @@ begin
 
   return jsonb_build_object('success', true);
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION "public"."onboard_booster"("p_display_name" "text", "p_bio" "text", "p_peak_rank" "jsonb", "p_opgg_link" "text", "p_hours_per_day_min" integer, "p_hours_per_day_max" integer, "p_full_name" "text", "p_cpf" "text", "p_available_days" "text"[]) OWNER TO "postgres";
@@ -4149,7 +5031,7 @@ declare
   v_to_step   integer;
   v_cur_step  integer;
 begin
-  select service_type, wins_played, wins_purchased, current_rank, target_rank, pdl_bracket
+  select service_type, wins_played, wins_purchased, coalesce(stint_start_rank, current_rank) as current_rank, target_rank, pdl_bracket
   into v_order from public.orders where id = p_order_id;
 
   if not found then return 0; end if;
@@ -4196,6 +5078,24 @@ $$;
 ALTER FUNCTION "public"."order_drop_completion_pct"("p_order_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."order_progress_fraction"("p_order_id" "uuid") RETURNS numeric
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.orders o
+                 where o.id = p_order_id
+                   and (public.is_admin() or o.customer_id = auth.uid() or o.assigned_booster_id = auth.uid())) then
+    return null;
+  end if;
+  return public._order_progress_fraction(p_order_id);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."order_progress_fraction"("p_order_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."order_requires_access_token"("p_service_type" "public"."service_type", "p_boost_mode" "text") RETURNS boolean
     LANGUAGE "sql" IMMUTABLE
     SET "search_path" TO 'public'
@@ -4206,6 +5106,53 @@ $$;
 
 
 ALTER FUNCTION "public"."order_requires_access_token"("p_service_type" "public"."service_type", "p_boost_mode" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."order_settlement_preview"("p_order_id" "uuid", "p_coaching_pct" numeric DEFAULT NULL::numeric) RETURNS "jsonb"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.orders o
+                 where o.id = p_order_id
+                   and (public.is_admin() or o.customer_id = auth.uid() or o.assigned_booster_id = auth.uid())) then
+    return jsonb_build_object('success', false, 'error', 'order_not_found');
+  end if;
+  return jsonb_build_object('success', true) || public._order_settlement_numbers(p_order_id, p_coaching_pct);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."order_settlement_preview"("p_order_id" "uuid", "p_coaching_pct" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."order_tab_counts"("p_owner" "text" DEFAULT NULL::"text", "p_owner_id" "uuid" DEFAULT NULL::"uuid", "p_admin" boolean DEFAULT false) RETURNS "jsonb"
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO 'public'
+    AS $$
+  select jsonb_build_object(
+    'in_progress', count(*) filter (where o.status = any (
+      case when p_admin
+        then array['pending_review','paid','awaiting_assignment','assigned','in_progress','paused','drop_requested','awaiting_customer']
+        else array['paid','awaiting_assignment','assigned','in_progress','paused','drop_requested','awaiting_customer']
+      end::public.order_status[])),
+    'em_analise', count(*) filter (where o.status = any (
+      array['awaiting_payment','under_review','disputed','refunded']::public.order_status[])),
+    'completed', count(*) filter (where o.status = 'completed'),
+    'all',       count(*) filter (where o.status <> 'draft'),
+    'canceled',  count(*) filter (where o.status = 'canceled')
+  )
+  from public.orders o
+  where o.status <> 'draft'
+    and (
+      p_owner is null
+      or (p_owner = 'customer' and o.customer_id = p_owner_id)
+      or (p_owner = 'booster' and o.assigned_booster_id = p_owner_id)
+    );
+$$;
+
+
+ALTER FUNCTION "public"."order_tab_counts"("p_owner" "text", "p_owner_id" "uuid", "p_admin" boolean) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."payout_request_order_breakdown"("p_request_id" "uuid") RETURNS TABLE("order_id" "uuid", "service_type" "public"."service_type", "gross_amount" numeric, "commission_rate" numeric, "booster_commission" numeric, "amount_included" numeric)
@@ -4263,11 +5210,11 @@ ALTER FUNCTION "public"."payout_request_order_breakdown"("p_request_id" "uuid") 
 
 
 CREATE OR REPLACE FUNCTION "public"."prevent_non_admin_booster_privileged_column_change"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+    LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
     AS $$
 begin
-  if public.is_admin() or session_user <> current_user then
+  if current_user not in ('authenticated', 'anon') or public.is_admin() then
     return new;
   end if;
 
@@ -4275,12 +5222,15 @@ begin
      or new.total_earnings is distinct from old.total_earnings
      or new.rating is distinct from old.rating
      or new.rating_count is distinct from old.rating_count
-     or new.blocked_until is distinct from old.blocked_until
      or new.suspended_until is distinct from old.suspended_until
      or new.verified_at is distinct from old.verified_at
      or new.total_completed is distinct from old.total_completed
+     or new.cpf is distinct from old.cpf
+     or new.full_name is distinct from old.full_name
+     or new.email is distinct from old.email
+     or new.peak_rank is distinct from old.peak_rank
   then
-    raise exception 'only admins can change privileged booster_profiles columns';
+    raise exception 'only admins can change privileged booster_profiles columns' using errcode = '42501';
   end if;
 
   return new;
@@ -4296,7 +5246,8 @@ CREATE OR REPLACE FUNCTION "public"."prevent_non_admin_booster_status_change"() 
     SET "search_path" TO 'public', 'extensions'
     AS $$
 begin
-  if not public.is_admin() and new.status is distinct from old.status then
+  if new.status is distinct from old.status and not public.is_admin() and auth.uid() is not null
+     and not (old.status = 'rejected' and new.status = 'pending' and old.user_id = auth.uid()) then
     raise exception 'only admins can change booster application status';
   end if;
   return new;
@@ -4317,7 +5268,6 @@ declare
   v_payment_status public.payment_status;
   v_to_status public.order_status;
   v_requires_credentials boolean;
-  v_booster_credit record;
 begin
   if p_provider_status not in ('approved','pending','in_process','authorized','rejected','cancelled','refunded','charged_back') then
     return jsonb_build_object('success', true, 'ignored', true);
@@ -4365,13 +5315,35 @@ begin
   end;
 
   update public.payments set
-    status = v_payment_status,
+    status = case
+      when v_payment.status in ('paid', 'refunded', 'partially_refunded', 'disputed')
+           and v_payment_status in ('pending', 'failed') then v_payment.status
+      -- L-5: webhook 'approved' tardio nao desfaz um reembolso (total ou parcial) ja registrado.
+      when v_payment.status in ('refunded', 'partially_refunded') and v_payment_status = 'paid' then v_payment.status
+      else v_payment_status
+    end,
     webhook_event_id = p_event_id,
     refunded_amount = case when p_provider_status = 'refunded' then amount else refunded_amount end,
     updated_at = now()
   where id = v_payment.id;
 
-  if p_provider_status = 'approved' and v_order.status = 'awaiting_payment' then
+  if p_provider_status = 'approved' and v_payment.status not in ('refunded', 'partially_refunded', 'disputed') and v_order.status = 'canceled'
+     and v_order.assigned_booster_id is null and v_order.payment_status is distinct from 'paid' then
+    -- Pagamento aprovado depois de o pedido ser cancelado (PIX expirado/cancelado pelo cliente): o cliente
+    -- pagou, entao o pedido volta ao fluxo normal em vez de ficar cancelado e pago.
+    update public.orders set status = 'awaiting_payment', updated_at = now() where id = p_order_id;
+    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
+    values (p_order_id, 'canceled', 'awaiting_payment', v_order.customer_id,
+            'Pagamento aprovado apos o cancelamento -- pedido reaberto');
+    insert into public.notifications(user_id, type, title, body, data)
+    select id, 'payment_approved_after_cancellation', 'Pagamento aprovado em pedido cancelado',
+           'Pedido ' || p_order_id::text || ' foi cancelado, mas o pagamento foi aprovado depois. O pedido foi reaberto.',
+           jsonb_build_object('order_id', p_order_id)
+    from public.profiles where role = 'admin';
+    v_order.status := 'awaiting_payment';
+  end if;
+
+  if p_provider_status = 'approved' and v_payment.status not in ('refunded', 'partially_refunded', 'disputed') and v_order.status = 'awaiting_payment' then
     v_requires_credentials := public.order_requires_access_token(v_order.service_type, v_order.boost_mode);
     v_to_status := case
       when v_requires_credentials then 'awaiting_customer'::public.order_status
@@ -4482,53 +5454,14 @@ begin
       insert into public.refunds(payment_id, order_id, mp_refund_id, amount, reason, initiated_by, status)
       values (
         v_payment.id, p_order_id, coalesce(p_refund_id, p_mp_payment_id || '-refund'),
-        v_order.total_price, 'Reembolso processado pelo Mercado Pago', v_order.customer_id, 'completed'
+        v_payment.amount, 'Reembolso processado pelo Mercado Pago', v_order.customer_id, 'succeeded'
       )
       on conflict (mp_refund_id) do nothing;
     end if;
 
-    if v_order.status = 'completed' then
-      for v_booster_credit in
-        select booster_id, coalesce(sum(amount), 0) as credited
-        from public.booster_ledger_entries
-        where order_id = p_order_id and entry_type = 'commission_credit'
-        group by booster_id
-        having coalesce(sum(amount), 0) > 0
-      loop
-        perform 1 from public.booster_profiles where user_id = v_booster_credit.booster_id for update;
-
-        insert into public.booster_ledger_entries(
-          booster_id, order_id, entry_type, amount, description, metadata
-        ) values (
-          v_booster_credit.booster_id, p_order_id, 'refund_debit', -v_booster_credit.credited,
-          case when p_provider_status = 'refunded'
-            then 'Estorno da comissão -- pedido reembolsado pelo Mercado Pago após conclusão'
-            else 'Estorno da comissão -- chargeback recebido pelo Mercado Pago após conclusão'
-          end,
-          jsonb_build_object('mp_payment_id', p_mp_payment_id, 'provider_status', p_provider_status)
-        );
-
-        insert into public.notifications(user_id, type, title, body, data)
-        values (
-          v_booster_credit.booster_id,
-          'commission_clawed_back',
-          'Comissão estornada',
-          case when p_provider_status = 'refunded'
-            then 'O cliente foi reembolsado pelo Mercado Pago após a conclusão do pedido. A comissão de R$ ' || v_booster_credit.credited::text || ' foi estornada do seu saldo.'
-            else 'Houve um chargeback no Mercado Pago após a conclusão do pedido. A comissão de R$ ' || v_booster_credit.credited::text || ' foi estornada do seu saldo.'
-          end,
-          jsonb_build_object('order_id', p_order_id, 'amount', v_booster_credit.credited)
-        );
-
-        insert into public.notifications(user_id, type, title, body, data)
-        select id, 'commission_clawed_back_admin',
-          'Estorno de comissão após pedido concluído',
-          'Pedido ' || p_order_id::text || ' foi ' || (case when p_provider_status = 'refunded' then 'reembolsado' else 'contestado (chargeback)' end)
-            || ' depois de já concluído. R$ ' || v_booster_credit.credited::text || ' foram estornados do saldo do booster -- confirme diretamente com ele se já houve saque desse valor.',
-          jsonb_build_object('order_id', p_order_id, 'booster_id', v_booster_credit.booster_id, 'amount', v_booster_credit.credited)
-        from public.profiles where role = 'admin';
-      end loop;
-    end if;
+    perform public._clawback_order_commissions(p_order_id, p_provider_status, p_mp_payment_id);
+    update public.order_booster_assignments set unassigned_at = now()
+     where order_id = p_order_id and unassigned_at is null;
   end if;
 
   return jsonb_build_object('success', true);
@@ -4537,6 +5470,22 @@ $_$;
 
 
 ALTER FUNCTION "public"."process_mp_payment_event"("p_order_id" "uuid", "p_mp_payment_id" "text", "p_provider_status" "text", "p_amount" numeric, "p_currency" "text", "p_event_id" "text", "p_refund_id" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prune_old_data"() RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  delete from cron.job_run_details where end_time < now() - interval '7 days';
+  delete from public.booster_profile_events where created_at < now() - interval '90 days';
+  delete from public.notifications where is_read and created_at < now() - interval '60 days';
+  delete from public.edge_rate_limits where window_started_at < now() - interval '1 day';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prune_old_data"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."rank_bucket_of"("p_tier" "text") RETURNS "text"
@@ -4572,17 +5521,22 @@ $$;
 ALTER FUNCTION "public"."rank_step"("p_tier" "text", "p_division" "text") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric) RETURNS "jsonb"
+CREATE OR REPLACE FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric, "p_method_type" "text" DEFAULT 'credit_card'::"text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 declare
   v_result jsonb;
 begin
+  if p_method_type not in ('credit_card', 'debit_card') then
+    raise exception 'invalid payment method type';
+  end if;
+
   v_result := public.record_pix_payment(p_order_id, p_customer_id, p_mp_payment_id, p_amount);
 
   update public.payments
-  set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('method', 'card')
+  set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('method', 'card'),
+      payment_method_type = p_method_type
   where order_id = p_order_id and mp_payment_id = p_mp_payment_id;
 
   return v_result;
@@ -4590,7 +5544,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric) OWNER TO "postgres";
+ALTER FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric, "p_method_type" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."record_duo_match"("p_order_id" "uuid", "p_external_match_id" "text", "p_result" "text", "p_champion" "text", "p_kills" integer, "p_deaths" integer, "p_assists" integer, "p_queue_id" integer, "p_duration_seconds" integer, "p_played_at" timestamp with time zone, "p_minions_killed" integer, "p_neutral_minions_killed" integer, "p_is_mvp" boolean, "p_vision_score" integer) RETURNS "jsonb"
@@ -4615,11 +5569,19 @@ begin
   if v_order.boost_mode <> 'duo' then
     return jsonb_build_object('success', false, 'error', 'not_duo_order');
   end if;
-  if v_order.status not in ('in_progress', 'paused') then
+  if v_order.status not in ('in_progress', 'paused', 'drop_requested') then
     return jsonb_build_object('success', false, 'error', 'invalid_status', 'inserted', false);
   end if;
 
-  v_booster_id := coalesce(public.booster_assigned_at(p_order_id, p_played_at), v_order.assigned_booster_id);
+  v_booster_id := public.booster_assigned_at(p_order_id, p_played_at);
+  if v_booster_id is null then
+    -- M-3: partida fora de qualquer janela de atribuicao nao pertence ao booster atual.
+    -- O fallback so vale para pedido legado sem NENHUMA linha de atribuicao.
+    if exists (select 1 from public.order_booster_assignments where order_id = p_order_id) then
+      return jsonb_build_object('success', true, 'inserted', false, 'skipped_reason', 'outside_assignment_window');
+    end if;
+    v_booster_id := v_order.assigned_booster_id;
+  end if;
   if v_booster_id is null then
     return jsonb_build_object('success', true, 'inserted', false, 'skipped_reason', 'no_booster_assigned');
   end if;
@@ -4664,7 +5626,7 @@ begin
   if not found then
     return jsonb_build_object('success', false, 'error', 'order_not_found');
   end if;
-  if v_order.status not in ('in_progress', 'paused') then
+  if v_order.status not in ('in_progress', 'paused', 'drop_requested') then
     return jsonb_build_object('success', false, 'error', 'invalid_status', 'inserted', false);
   end if;
 
@@ -4672,7 +5634,15 @@ begin
     return jsonb_build_object('success', true, 'inserted', false, 'skipped_reason', 'duo_not_participated');
   end if;
 
-  v_booster_id := coalesce(public.booster_assigned_at(p_order_id, p_played_at), v_order.assigned_booster_id);
+  v_booster_id := public.booster_assigned_at(p_order_id, p_played_at);
+  if v_booster_id is null then
+    -- M-3: partida fora de qualquer janela de atribuicao nao pertence ao booster atual.
+    -- O fallback so vale para pedido legado sem NENHUMA linha de atribuicao.
+    if exists (select 1 from public.order_booster_assignments where order_id = p_order_id) then
+      return jsonb_build_object('success', true, 'inserted', false, 'skipped_reason', 'outside_assignment_window');
+    end if;
+    v_booster_id := v_order.assigned_booster_id;
+  end if;
 
   insert into public.order_matches(
     order_id, booster_id, external_match_id, result, champion, kills, deaths, assists,
@@ -4717,6 +5687,7 @@ declare
 begin
   select * into v_order from public.orders where id = p_order_id for update;
   if not found or v_order.customer_id <> p_customer_id then raise exception 'order mismatch'; end if;
+  if v_order.status <> 'awaiting_payment' then raise exception 'order not payable'; end if;
   if round(v_order.total_price, 2) <> round(p_amount, 2) or p_amount <= 0 then raise exception 'amount mismatch'; end if;
   if v_order.mp_payment_id is not null and v_order.mp_payment_id <> p_mp_payment_id then raise exception 'payment mismatch'; end if;
 
@@ -5104,6 +6075,9 @@ declare
   v_order record;
   v_account_id uuid;
 begin
+  if not public.check_own_write_rate_limit('release_duo_account_reservation', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if auth.uid() is null then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
@@ -5268,6 +6242,8 @@ begin
   if v_order.status = 'in_progress' and v_order.service_type <> 'coaching' and v_order.last_match_synced_at is null then
     return jsonb_build_object('success', false, 'error', 'sync_required_before_drop');
   end if;
+
+  -- 3o drop e so do admin (admin_drop_order): ele acerta booster e cliente manualmente pelo progresso.
   if coalesce(v_order.drop_count, 0) >= 2 then
     return jsonb_build_object('success', false, 'error', 'drop_limit_reached');
   end if;
@@ -5346,6 +6322,8 @@ begin
   if v_order.status = 'in_progress' and v_order.service_type <> 'coaching' and v_order.last_match_synced_at is null then
     return jsonb_build_object('success', false, 'error', 'sync_required_before_drop');
   end if;
+
+  -- 3o drop e so do admin (admin_drop_order): ele acerta booster e cliente manualmente pelo progresso.
   if coalesce(v_order.drop_count, 0) >= 2 then
     return jsonb_build_object('success', false, 'error', 'drop_limit_reached');
   end if;
@@ -5393,8 +6371,10 @@ declare
   v_available numeric;
   v_request_id uuid;
   v_min_amount constant numeric := 50.00;
-  v_withdrawal_day int;
 begin
+  if not public.check_own_write_rate_limit('request_payout', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if auth.uid() is null then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
@@ -5405,8 +6385,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'below_minimum_amount', 'minimum', v_min_amount);
   end if;
 
-  v_withdrawal_day := extract(day from (now() at time zone 'America/Sao_Paulo'));
-  if v_withdrawal_day not in (15, 30) then
+  if not public.is_payout_window_day() then
     return jsonb_build_object('success', false, 'error', 'withdrawal_window_closed');
   end if;
 
@@ -5419,6 +6398,9 @@ begin
   end if;
 
   v_available := public.booster_available_balance(auth.uid());
+  if v_available < 0 then
+    return jsonb_build_object('success', false, 'error', 'negative_balance', 'available', v_available);
+  end if;
   if p_amount > v_available then
     return jsonb_build_object('success', false, 'error', 'insufficient_balance', 'available', v_available);
   end if;
@@ -5464,6 +6446,9 @@ declare
   v_previous_account_id uuid;
   v_reserved_id uuid;
 begin
+  if not public.check_own_write_rate_limit('reserve_duo_account', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if auth.uid() is null then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
@@ -5493,33 +6478,41 @@ begin
     return jsonb_build_object('success', false, 'error', 'cannot_switch_after_matches_played');
   end if;
 
-  if v_previous_account_id is not null then
+  begin
+    if v_previous_account_id is not null then
+      update public.duo_accounts
+      set reserved_by = null, reserved_order_id = null, reserved_at = null,
+          last_released_by = auth.uid(), last_released_at = now()
+      where id = v_previous_account_id;
+
+      update public.duo_account_reservations
+      set released_at = now(), released_by = auth.uid()
+      where account_id = v_previous_account_id and released_at is null;
+
+      insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+      values (auth.uid(), 'booster'::public.user_role, 'duo_account.switched', 'order', p_order_id,
+              jsonb_build_object('from_account_id', v_previous_account_id, 'to_account_id', p_account_id,
+                                  'order_status_at_switch', v_order.status));
+    end if;
+
     update public.duo_accounts
-    set reserved_by = null, reserved_order_id = null, reserved_at = null,
-        last_released_by = auth.uid(), last_released_at = now()
-    where id = v_previous_account_id;
+    set reserved_by = auth.uid(), reserved_order_id = p_order_id, reserved_at = now()
+    where id = p_account_id
+      and reserved_by is null
+      and is_active = true
+      and public.duo_account_rank_is_valid(current_rank)
+    returning id into v_reserved_id;
 
-    update public.duo_account_reservations
-    set released_at = now(), released_by = auth.uid()
-    where account_id = v_previous_account_id and released_at is null;
-
-    insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
-    values (auth.uid(), 'booster'::public.user_role, 'duo_account.switched', 'order', p_order_id,
-            jsonb_build_object('from_account_id', v_previous_account_id, 'to_account_id', p_account_id,
-                                'order_status_at_switch', v_order.status));
-  end if;
-
-  update public.duo_accounts
-  set reserved_by = auth.uid(), reserved_order_id = p_order_id, reserved_at = now()
-  where id = p_account_id
-    and reserved_by is null
-    and is_active = true
-    and public.duo_account_rank_is_valid(current_rank)
-  returning id into v_reserved_id;
-
-  if v_reserved_id is null then
-    return jsonb_build_object('success', false, 'error', 'account_unavailable');
-  end if;
+    -- A nova conta indisponivel desfaz a liberacao da antiga (subtransacao): nada muda.
+    if v_reserved_id is null then
+      raise exception 'account_unavailable' using errcode = 'P0001';
+    end if;
+  exception when sqlstate 'P0001' then
+    if sqlerrm = 'account_unavailable' then
+      return jsonb_build_object('success', false, 'error', 'account_unavailable');
+    end if;
+    raise;
+  end;
 
   insert into public.duo_account_reservations(account_id, order_id, booster_id)
   values (p_account_id, p_order_id, auth.uid());
@@ -5680,6 +6673,15 @@ begin
     return jsonb_build_object('success', false, 'error', 'reservation_no_longer_valid');
   end if;
 
+  if not exists (
+    select 1 from public.orders o
+    where o.id = v_account.reserved_order_id
+      and o.assigned_booster_id = p_booster_user_id
+      and o.status = 'in_progress'::public.order_status
+  ) then
+    return jsonb_build_object('success', false, 'error', 'order_not_in_progress');
+  end if;
+
   -- Uso único: precisa ser exatamente o token_id ATIVO (não um já superado
   -- por uma emissão mais nova), nunca consumido antes, e ainda dentro da
   -- janela -- qualquer uma dessas condições falhando invalida.
@@ -5787,8 +6789,10 @@ begin
     return jsonb_build_object('success', false, 'error', 'booster_not_authorized');
   end if;
 
-  if v_order.payment_status is distinct from 'paid'::public.payment_status
-     or v_order.status not in ('assigned', 'in_progress', 'paused', 'awaiting_customer') then
+  if v_order.status is distinct from 'in_progress'::public.order_status then
+    return jsonb_build_object('success', false, 'error', 'order_not_in_progress');
+  end if;
+  if v_order.payment_status is distinct from 'paid'::public.payment_status then
     return jsonb_build_object('success', false, 'error', 'order_not_active');
   end if;
 
@@ -5960,6 +6964,10 @@ begin
     return jsonb_build_object('success', false, 'code', 'chat_unavailable', 'message', 'O chat sera liberado quando um booster for atribuido.');
   end if;
 
+  if v_order.status in ('canceled', 'refunded') and v_role <> 'admin'::public.user_role then
+    return jsonb_build_object('success', false, 'code', 'chat_closed', 'message', 'O chat deste pedido foi encerrado.');
+  end if;
+
   if v_order.chat_locked and v_role <> 'admin'::public.user_role then
     return jsonb_build_object('success', false, 'code', 'chat_locked', 'message', 'O chat foi bloqueado pela administracao.');
   end if;
@@ -5976,7 +6984,7 @@ begin
   -- atribuído ou algum admin) e nunca o próprio remetente -- o payload vem do
   -- cliente, sem essa reconferência um usuário podia alegar ter mencionado
   -- qualquer uuid e gerar notificação/DM falsa pra alguém fora do pedido.
-  select coalesce(array_agg(distinct t), '{}')
+  select coalesce((array_agg(distinct t))[1:3], '{}')
   into v_valid_mentions
   from unnest(coalesce(p_mentioned_user_ids, '{}')) as t
   where t <> v_user_id
@@ -5984,30 +6992,27 @@ begin
       t = v_order.customer_id
       or t = v_order.assigned_booster_id
       or exists (select 1 from public.profiles where id = t and role = 'admin'::public.user_role)
-    );
+    );  -- no maximo 3 mencoes por mensagem
 
   insert into public.order_messages(order_id, sender_id, sender_role, content, is_read, mentioned_user_ids)
   values (p_order_id, v_user_id, v_role, v_content, false, v_valid_mentions)
   returning id into v_message_id;
 
   foreach v_mentioned_id in array v_valid_mentions loop
+    -- Sem repetir a mesma mencao (usuario, pedido) em 5 min e sem copiar o texto da mensagem.
+    continue when exists (
+      select 1 from public.notifications n
+      where n.user_id = v_mentioned_id and n.type = 'chat_mention'
+        and (n.data->>'order_id')::uuid = p_order_id and n.created_at > now() - interval '5 minutes');
+
     insert into public.notifications(user_id, type, title, body, data)
     values (
       v_mentioned_id, 'chat_mention', 'Você foi mencionado',
-      v_content,
+      'Você foi mencionado no chat de um pedido.',
       jsonb_build_object('order_id', p_order_id, 'message_id', v_message_id)
     );
 
-    perform net.http_post(
-      url := 'https://yrynfqjxqblrbxxiobty.supabase.co/functions/v1/discord-chat-mention',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'supabase_functions_anon_key'),
-        'x-webhook-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'discord_webhook_secret')
-      ),
-      body := jsonb_build_object('user_id', v_mentioned_id, 'order_id', p_order_id, 'body', v_content),
-      timeout_milliseconds := 10000
-    );
+    -- M-15: a DM sai pelo trigger trg_notify_discord_chat_mention (INSERT em notifications); chamar a edge aqui duplicava.
   end loop;
 
   return jsonb_build_object('success', true, 'message_id', v_message_id);
@@ -6026,11 +7031,18 @@ begin
   if not public.is_admin() then
     return jsonb_build_object('success', false, 'error', 'unauthorized');
   end if;
+  if length(coalesce(p_note, '')) > 2000 then
+    return jsonb_build_object('success', false, 'error', 'note_too_long');
+  end if;
 
   insert into public.booster_admin_notes(booster_id, note, updated_at, updated_by)
   values (p_booster_id, coalesce(p_note, ''), now(), auth.uid())
   on conflict (booster_id) do update
     set note = excluded.note, updated_at = now(), updated_by = auth.uid();
+
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'admin'::public.user_role, 'booster.admin_note_set', 'booster_profile', p_booster_id::text,
+          jsonb_build_object('length', length(coalesce(p_note, ''))));
 
   return jsonb_build_object('success', true);
 end;
@@ -6079,6 +7091,9 @@ declare
   v_order record;
   v_trimmed text;
 begin
+  if not public.check_own_write_rate_limit('set_duo_own_riot_id', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select id, status, boost_mode, assigned_booster_id into v_order
   from public.orders where id = p_order_id for update;
 
@@ -6139,6 +7154,9 @@ declare
   v_role public.user_role;
   v_order public.orders%rowtype;
 begin
+  if not public.check_own_write_rate_limit('set_order_coaching_topic_done', 20, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if v_user_id is null then
     return jsonb_build_object('success', false, 'code', 'not_authenticated', 'message', 'Sessao nao autenticada.');
   end if;
@@ -6283,6 +7301,32 @@ $$;
 ALTER FUNCTION "public"."set_order_credentials"("p_order_id" "uuid", "p_login" "text", "p_password" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."trg_fn_alert_negative_balance"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_balance numeric;
+begin
+  if new.amount >= 0 then return new; end if;
+  select coalesce(sum(amount), 0) into v_balance from public.booster_ledger_entries where booster_id = new.booster_id;
+  if v_balance < 0 and not exists (
+       select 1 from public.notifications n
+       where n.type = 'booster_negative_balance' and not n.is_read and (n.data->>'booster_id')::uuid = new.booster_id) then
+    insert into public.notifications(user_id, type, title, body, data)
+    select id, 'booster_negative_balance', 'Booster com saldo negativo',
+           'Um booster ficou com saldo negativo (R$ ' || v_balance::text || ') por penalidade ou estorno. Saque bloqueado até regularizar.',
+           jsonb_build_object('booster_id', new.booster_id, 'balance', v_balance)
+    from public.profiles where role = 'admin';
+  end if;
+  return new;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."trg_fn_alert_negative_balance"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."trg_fn_booster_active_on_accept"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions'
@@ -6328,7 +7372,18 @@ CREATE OR REPLACE FUNCTION "public"."trg_fn_cap_active_clash_orders"() RETURNS "
 declare
   v_existing boolean;
 begin
-  if new.service_type = 'clash' then
+  -- Em UPDATE so vale quando o pedido passa a ser um Clash ativo (reativar/trocar dono/tipo).
+  -- H-5: o teto vale quando o pedido PASSA a ser um Clash ativo. Pedido que ja era ativo (ex.: awaiting_payment ->
+  -- awaiting_assignment ao aprovar o pagamento) nao e rechecado, e a reabertura por pagamento aprovado depois do
+  -- cancelamento (canceled -> awaiting_payment) nunca e barrada: o dinheiro ja foi capturado.
+  if tg_op = 'UPDATE' and old.service_type = 'clash' and old.customer_id is not distinct from new.customer_id and (
+       old.status not in ('completed', 'canceled', 'refunded')
+       or (old.status = 'canceled' and new.status = 'awaiting_payment')
+     ) then
+    return new;
+  end if;
+
+  if new.service_type = 'clash' and new.status not in ('completed', 'canceled', 'refunded') then
     perform pg_advisory_xact_lock(hashtextextended(new.customer_id::text, 2));
 
     select exists (
@@ -6336,6 +7391,7 @@ begin
       where customer_id = new.customer_id
         and service_type = 'clash'
         and status not in ('completed', 'canceled', 'refunded')
+        and id <> new.id
     ) into v_existing;
 
     if v_existing then
@@ -6358,11 +7414,20 @@ CREATE OR REPLACE FUNCTION "public"."trg_fn_cap_coach_packages"() RETURNS "trigg
 declare
   v_count integer;
 begin
+  -- Fila por booster: duas criacoes simultaneas nao passam juntas pelo teto de 3.
+  perform pg_advisory_xact_lock(hashtextextended('booster_services:' || new.booster_id::text, 0));
+
+  -- UPDATE so conta quando o pacote passa a ocupar uma vaga (reativar da lixeira). Trocar service_type de pacote ja
+  -- ativo nao muda o total, que e por booster e nao por tipo (H-13).
+  if tg_op = 'UPDATE' and (new.deleted_at is not null or old.deleted_at is null) then
+    return new;
+  end if;
+
   select count(*) into v_count
   from public.booster_services
   where booster_id = new.booster_id
-    and service_type = new.service_type
-    and deleted_at is null;
+    and deleted_at is null
+    and id <> new.id;
 
   if v_count >= 3 then
     raise exception 'booster_service_limit_reached' using errcode = 'P0001';
@@ -6405,6 +7470,43 @@ $$;
 
 
 ALTER FUNCTION "public"."trg_fn_cap_pending_orders"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fn_close_duo_reservation_on_release"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if old.reserved_order_id is not null and new.reserved_order_id is distinct from old.reserved_order_id then
+    update public.duo_account_reservations
+       set released_at = now(), released_by = coalesce(auth.uid(), released_by)
+     where account_id = old.id and order_id = old.reserved_order_id and released_at is null;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fn_close_duo_reservation_on_release"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fn_close_pending_drop_requests"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if old.status = 'drop_requested' and new.status <> 'drop_requested' then
+    update public.order_drop_requests
+       set status = 'rejected', resolved_at = now(),
+           admin_note = coalesce(admin_note, 'Encerrado automaticamente: o pedido saiu de drop_requested')
+     where order_id = new.id and status = 'pending';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fn_close_pending_drop_requests"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trg_fn_enforce_booster_display_name_cooldown"() RETURNS "trigger"
@@ -6638,7 +7740,7 @@ begin
      and OLD.payment_status is distinct from 'paid'::public.payment_status then
     update public.customer_profiles
       set total_orders = total_orders + 1,
-          total_spent  = total_spent + NEW.total_price
+          total_spent  = total_spent + coalesce(NEW.amount_paid, NEW.total_price)
       where user_id = NEW.customer_id;
   end if;
 
@@ -6651,7 +7753,7 @@ begin
      and OLD.status not in ('draft', 'awaiting_payment', 'canceled', 'refunded') then
     update public.customer_profiles
       set total_orders = greatest(0, total_orders - 1),
-          total_spent  = greatest(0, total_spent - NEW.total_price)
+          total_spent  = greatest(0, total_spent - coalesce(NEW.amount_paid, NEW.total_price))
       where user_id = NEW.customer_id;
   end if;
 
@@ -6661,6 +7763,25 @@ $$;
 
 
 ALTER FUNCTION "public"."trg_fn_order_paid_customer_stats"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fn_orders_completed_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.status = 'completed' and old.status is distinct from 'completed' and new.assigned_booster_id is null then
+    raise exception 'completed order requires an assigned booster' using errcode = '23514';
+  end if;
+  if old.status = 'completed' and new.status not in ('completed', 'refunded', 'disputed') then
+    raise exception 'completed order cannot be reopened' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fn_orders_completed_guard"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() RETURNS "trigger"
@@ -6680,6 +7801,22 @@ $$;
 
 
 ALTER FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fn_reset_exclusive_announce"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.exclusive_until is not null and new.exclusive_until is distinct from old.exclusive_until then
+    new.exclusive_expired_announced_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fn_reset_exclusive_announce"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."trg_fn_reviews_refresh_booster_rating"() RETURNS "trigger"
@@ -6711,6 +7848,23 @@ $$;
 ALTER FUNCTION "public"."trg_fn_reviews_refresh_booster_rating"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."trg_fn_sync_order_amount_paid"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  update public.orders o set amount_paid = (
+    select coalesce(sum(p.amount), 0) from public.payments p
+    where p.order_id = new.order_id and p.status in ('paid', 'refunded', 'partially_refunded', 'disputed')
+  ) where o.id = new.order_id;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fn_sync_order_amount_paid"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."update_booster_applications_updated_at"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public', 'extensions'
@@ -6728,7 +7882,7 @@ ALTER FUNCTION "public"."update_booster_applications_updated_at"() OWNER TO "pos
 CREATE OR REPLACE FUNCTION "public"."update_booster_professional_profile"("p_display_name" "text", "p_bio" "text", "p_peak_tier" "text", "p_opgg_link" "text", "p_opgg_link_visible" boolean, "p_available_days" "text"[], "p_hours_per_day_min" integer, "p_hours_per_day_max" integer) RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
+    AS $_$
 declare
   v_display_name text := nullif(btrim(p_display_name), '');
   v_bio          text := nullif(btrim(p_bio), '');
@@ -6736,6 +7890,9 @@ declare
   v_current      record;
   v_days_remaining integer;
 begin
+  if not public.check_own_write_rate_limit('update_booster_professional_profile', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select display_name, display_name_changed_at into v_current
   from public.booster_profiles where user_id = auth.uid();
 
@@ -6766,6 +7923,10 @@ begin
   end if;
 
   if v_display_name is distinct from v_current.display_name then
+    -- M-19: o nome entra em embeds do Discord; so valida quando muda (nome legado pode ser reenviado).
+    if char_length(v_display_name) > 32 or v_display_name !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]+$' then
+      return jsonb_build_object('success', false, 'error', 'display_name_invalid');
+    end if;
     if exists (
       select 1 from public.booster_profiles
       where lower(display_name) = lower(v_display_name) and user_id <> auth.uid()
@@ -6793,7 +7954,7 @@ begin
 
   return jsonb_build_object('success', true);
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION "public"."update_booster_professional_profile"("p_display_name" "text", "p_bio" "text", "p_peak_tier" "text", "p_opgg_link" "text", "p_opgg_link_visible" boolean, "p_available_days" "text"[], "p_hours_per_day_min" integer, "p_hours_per_day_max" integer) OWNER TO "postgres";
@@ -6820,6 +7981,9 @@ CREATE OR REPLACE FUNCTION "public"."update_duo_account_rank"("p_account_id" "uu
 declare
   v_account record;
 begin
+  if not public.check_own_write_rate_limit('update_duo_account_rank', 10, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   if not public.duo_account_rank_is_valid(jsonb_build_object('tier', p_tier, 'division', p_division)) then
     return jsonb_build_object('success', false, 'error', 'invalid_rank');
   end if;
@@ -6873,21 +8037,58 @@ $$;
 ALTER FUNCTION "public"."update_duo_accounts_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."update_my_cpf"("p_cpf" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare
+  v_cpf text := regexp_replace(coalesce(p_cpf, ''), '[^0-9]', '', 'g');
+  v_old text;
+begin
+  if not public.check_own_write_rate_limit('update_my_cpf', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  if not public.is_valid_cpf(v_cpf) then
+    return jsonb_build_object('success', false, 'error', 'invalid_cpf');
+  end if;
+  select cpf into v_old from public.booster_profiles where user_id = auth.uid() for update;
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'not_a_booster');
+  end if;
+  update public.booster_profiles set cpf = v_cpf, updated_at = now() where user_id = auth.uid();
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'booster'::public.user_role, 'booster_profile.cpf_changed', 'booster_profile', auth.uid()::text,
+          jsonb_build_object('changed', v_old is distinct from v_cpf));
+  return jsonb_build_object('success', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."update_my_cpf"("p_cpf" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."update_my_display_name"("p_display_name" "text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
+    AS $_$
 declare
   v_display_name text := nullif(btrim(p_display_name), '');
   v_current_name text;
   v_days_remaining integer;
 begin
+  if not public.check_own_write_rate_limit('update_my_display_name', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
   select display_name into v_current_name from public.booster_profiles where user_id = auth.uid();
   if not found then
     return jsonb_build_object('success', false, 'error', 'not_a_booster');
   end if;
   if v_display_name is null then
     return jsonb_build_object('success', false, 'error', 'display_name_required');
+  end if;
+  if v_display_name is distinct from v_current_name
+     and (char_length(v_display_name) > 32 or v_display_name !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]+$') then
+    return jsonb_build_object('success', false, 'error', 'display_name_invalid');
   end if;
 
   if v_display_name is distinct from v_current_name then
@@ -6908,10 +8109,37 @@ begin
 
   return jsonb_build_object('success', true);
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION "public"."update_my_display_name"("p_display_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_my_full_name"("p_full_name" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+declare
+  v_name text := nullif(btrim(p_full_name), '');
+begin
+  if not public.check_own_write_rate_limit('update_my_full_name', 5, 60) then
+    return jsonb_build_object('success', false, 'error', 'rate_limited');
+  end if;
+  if v_name is null or char_length(v_name) > 120 then
+    return jsonb_build_object('success', false, 'error', 'full_name_required');
+  end if;
+  update public.booster_profiles set full_name = v_name, updated_at = now() where user_id = auth.uid();
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'not_a_booster');
+  end if;
+  insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'booster'::public.user_role, 'booster_profile.full_name_changed', 'booster_profile', auth.uid()::text, '{}'::jsonb);
+  return jsonb_build_object('success', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."update_my_full_name"("p_full_name" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_order_current_rank"("p_order_id" "uuid", "p_tier" "text", "p_division" "text", "p_lp" integer) RETURNS "jsonb"
@@ -6920,7 +8148,8 @@ CREATE OR REPLACE FUNCTION "public"."update_order_current_rank"("p_order_id" "uu
     AS $$
 begin
   update public.orders
-  set current_rank = jsonb_build_object('tier', p_tier, 'division', p_division, 'lp', p_lp)
+  set stint_start_rank = coalesce(stint_start_rank, current_rank),
+      current_rank = jsonb_build_object('tier', p_tier, 'division', p_division, 'lp', p_lp)
   where id = p_order_id;
 
   if not found then return jsonb_build_object('success', false, 'error', 'order_not_found'); end if;
@@ -6964,6 +8193,10 @@ declare
   v_unlock_local timestamp;
   v_unlock_at timestamptz;
 begin
+  if p_new_status is null or not exists (
+       select 1 from unnest(enum_range(null::public.order_status)) e where e::text = p_new_status) then
+    return jsonb_build_object('success', false, 'error', 'invalid_status');
+  end if;
   v_to_status := p_new_status::public.order_status;
 
   select id, status, assigned_booster_id, service_type, wins_purchased, wins_played,
@@ -6973,26 +8206,6 @@ begin
 
   if not found then
     return jsonb_build_object('success', false, 'error', 'order_not_found');
-  end if;
-
-  if public.is_admin() then
-    if v_to_status in ('awaiting_assignment', 'pending_review', 'under_review') then
-      return jsonb_build_object('success', false, 'error', 'use_admin_drop_order_instead');
-    end if;
-
-    select id, role into v_actor from public.profiles where id = auth.uid();
-
-    update public.orders set status = v_to_status, updated_at = now()
-    where id = p_order_id;
-
-    insert into public.order_status_history(order_id, from_status, to_status, changed_by, reason)
-    values (p_order_id, v_order.status, v_to_status, auth.uid(), coalesce(p_reason, 'Admin status update'));
-
-    insert into public.audit_logs(actor_id, actor_role, action, entity_type, entity_id, diff)
-    values (v_actor.id, v_actor.role, 'order.status_override', 'order', p_order_id::text,
-            jsonb_build_object('from', v_order.status, 'to', v_to_status));
-
-    return jsonb_build_object('success', true);
   end if;
 
   if auth.uid() is distinct from v_order.assigned_booster_id then
@@ -7073,6 +8286,41 @@ $$;
 ALTER FUNCTION "public"."update_order_status"("p_order_id" "uuid", "p_new_status" "text", "p_reason" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."verify_accept_challenge"("p_challenge_id" "uuid", "p_booster_id" "uuid", "p_answer_norm" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  c public.accept_challenges%rowtype;
+begin
+  select * into c from public.accept_challenges where id = p_challenge_id for update;
+  if not found or c.booster_id <> p_booster_id then
+    return jsonb_build_object('success', false, 'error', 'challenge_not_found');
+  end if;
+  if c.used_at is not null or c.expires_at <= now() or c.solved_at is not null then
+    return jsonb_build_object('success', false, 'error', 'challenge_expired');
+  end if;
+  if c.attempts >= 3 then
+    return jsonb_build_object('success', false, 'error', 'too_many_attempts');
+  end if;
+
+  if p_answer_norm is not null and p_answer_norm <> '' and p_answer_norm = c.answer_norm then
+    update public.accept_challenges set solved_at = now(), attempts = attempts + 1,
+           expires_at = least(expires_at, now() + interval '2 minutes') where id = c.id;
+    return jsonb_build_object('success', true);
+  end if;
+
+  update public.accept_challenges set attempts = attempts + 1,
+         used_at = case when attempts + 1 >= 3 then now() else used_at end
+   where id = c.id;
+  return jsonb_build_object('success', false, 'error', 'wrong_answer', 'attempts_left', greatest(0, 2 - c.attempts));
+end;
+$$;
+
+
+ALTER FUNCTION "public"."verify_accept_challenge"("p_challenge_id" "uuid", "p_booster_id" "uuid", "p_answer_norm" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."win_price_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_tier" "text") RETURNS integer
     LANGUAGE "sql" STABLE
     SET "search_path" TO 'public'
@@ -7090,6 +8338,24 @@ ALTER FUNCTION "public"."win_price_cents"("p_queue" "public"."queue_type", "p_mo
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."accept_challenges" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "booster_id" "uuid" NOT NULL,
+    "order_id" "uuid" NOT NULL,
+    "champion_id" "text" NOT NULL,
+    "answer_norm" "text" NOT NULL,
+    "image_seed" integer NOT NULL,
+    "attempts" smallint DEFAULT 0 NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
+    "solved_at" timestamp with time zone,
+    "used_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."accept_challenges" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."audit_logs" (
@@ -7218,6 +8484,11 @@ CREATE TABLE IF NOT EXISTS "public"."orders" (
     "under_review_started_at" timestamp with time zone,
     "awaiting_assignment_announced_at" timestamp with time zone,
     "awaiting_assignment_announce_attempted_at" timestamp with time zone,
+    "amount_paid" numeric(10,2),
+    "settled_value" numeric(10,2) DEFAULT 0 NOT NULL,
+    "last_match_sync_attempt_at" timestamp with time zone,
+    "rank_source" "text" DEFAULT 'riot'::"text" NOT NULL,
+    "stint_start_rank" "jsonb",
     CONSTRAINT "orders_avg_pdl_gain_check" CHECK ((("avg_pdl_gain" IS NULL) OR ("avg_pdl_gain" > (0)::numeric))),
     CONSTRAINT "orders_avg_pdl_loss_check" CHECK ((("avg_pdl_loss" IS NULL) OR ("avg_pdl_loss" > (0)::numeric))),
     CONSTRAINT "orders_boost_mode_check" CHECK (("boost_mode" = ANY (ARRAY['solo'::"text", 'duo'::"text"]))),
@@ -7230,6 +8501,7 @@ CREATE TABLE IF NOT EXISTS "public"."orders" (
     CONSTRAINT "orders_pdl_bracket_check" CHECK ((("pdl_bracket" IS NULL) OR ("pdl_bracket" = ANY (ARRAY['0_49'::"text", '50_89'::"text", '90_119'::"text", '120_plus'::"text"])))),
     CONSTRAINT "orders_price_sum" CHECK (("total_price" = "round"((("base_price" + "extras_price") - "discount_price"), 2))),
     CONSTRAINT "orders_prices_nonnegative" CHECK ((("base_price" >= (0)::numeric) AND ("extras_price" >= (0)::numeric) AND ("discount_price" >= (0)::numeric) AND ("total_price" >= (0)::numeric))),
+    CONSTRAINT "orders_rank_source_check" CHECK (("rank_source" = ANY (ARRAY['riot'::"text", 'client_declared'::"text"]))),
     CONSTRAINT "orders_win_package_check" CHECK (("win_package" = ANY (ARRAY[1, 3, 5])))
 );
 
@@ -7313,11 +8585,9 @@ CREATE OR REPLACE VIEW "public"."available_boost_orders" WITH ("security_barrier
     "customer_lanes",
     "booster_service_id",
     "reassigned_by_admin",
-    "riot_id",
-    "assigned_booster_id",
-    "match_sync_started_at"
+    "rank_source"
    FROM "public"."orders"
-  WHERE (("status" = 'awaiting_assignment'::"public"."order_status") AND ("assigned_booster_id" IS NULL) AND "public"."is_approved_booster"() AND ((NOT "public"."order_requires_access_token"("service_type", "boost_mode")) OR ("credentials_set" = true)) AND
+  WHERE (("status" = 'awaiting_assignment'::"public"."order_status") AND ("assigned_booster_id" IS NULL) AND ("customer_id" <> "auth"."uid"()) AND "public"."is_approved_booster"() AND ((NOT "public"."order_requires_access_token"("service_type", "boost_mode")) OR ("credentials_set" = true)) AND
         CASE
             WHEN ("service_type" = 'coaching'::"public"."service_type") THEN ("preferred_booster_id" = "auth"."uid"())
             ELSE (("preferred_booster_id" IS NULL) OR ("exclusive_until" IS NULL) OR ("exclusive_until" <= "now"()) OR ("preferred_booster_id" = "auth"."uid"()))
@@ -7508,7 +8778,8 @@ CREATE TABLE IF NOT EXISTS "public"."booster_profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "display_name_changed_at" timestamp with time zone,
     "suspended_until" timestamp with time zone,
-    "opgg_link_visible" boolean DEFAULT true NOT NULL
+    "opgg_link_visible" boolean DEFAULT true NOT NULL,
+    CONSTRAINT "booster_profiles_bio_len_check" CHECK ((("bio" IS NULL) OR ("char_length"("bio") <= 256)))
 );
 
 
@@ -7670,6 +8941,19 @@ CREATE TABLE IF NOT EXISTS "public"."edge_rate_limits" (
 ALTER TABLE "public"."edge_rate_limits" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."elo_div_price_cents" (
+    "queue_type" "public"."queue_type" NOT NULL,
+    "boost_mode" "text" NOT NULL,
+    "tier" "text" NOT NULL,
+    "cents" integer NOT NULL,
+    CONSTRAINT "elo_div_price_cents_boost_mode_check" CHECK (("boost_mode" = ANY (ARRAY['solo'::"text", 'duo'::"text"]))),
+    CONSTRAINT "elo_div_price_cents_cents_check" CHECK (("cents" > 0))
+);
+
+
+ALTER TABLE "public"."elo_div_price_cents" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."games" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "slug" "text" NOT NULL,
@@ -7733,6 +9017,16 @@ CREATE TABLE IF NOT EXISTS "public"."order_booster_assignments" (
 
 
 ALTER TABLE "public"."order_booster_assignments" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."order_chat_reads" (
+    "order_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "last_read_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."order_chat_reads" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."order_coaching_topics" (
@@ -7807,6 +9101,18 @@ COMMENT ON COLUMN "public"."order_messages"."mentioned_user_ids" IS 'Participant
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."order_rank_assessments" (
+    "order_id" "uuid" NOT NULL,
+    "status" "text" NOT NULL,
+    "summary" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "order_rank_assessments_status_check" CHECK (("status" = ANY (ARRAY['consistent'::"text", 'suspicious'::"text", 'inconclusive'::"text"])))
+);
+
+
+ALTER TABLE "public"."order_rank_assessments" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."order_rank_verifications" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "order_id" "uuid" NOT NULL,
@@ -7855,11 +9161,23 @@ CREATE TABLE IF NOT EXISTS "public"."order_status_history" (
     "to_status" "public"."order_status" NOT NULL,
     "changed_by" "uuid" NOT NULL,
     "reason" "text",
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "seq" bigint NOT NULL
 );
 
 
 ALTER TABLE "public"."order_status_history" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."order_status_history" ALTER COLUMN "seq" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."order_status_history_seq_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."payments" (
@@ -7990,7 +9308,8 @@ CREATE TABLE IF NOT EXISTS "public"."refunds" (
     "status" "text" DEFAULT 'pending'::"text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "is_manual" boolean DEFAULT false NOT NULL,
-    CONSTRAINT "refunds_amount_positive" CHECK (("amount" > (0)::numeric))
+    CONSTRAINT "refunds_amount_positive" CHECK (("amount" > (0)::numeric)),
+    CONSTRAINT "refunds_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'succeeded'::"text", 'failed'::"text"])))
 );
 
 
@@ -8031,6 +9350,16 @@ ALTER TABLE "public"."riot_league_cutoffs" OWNER TO "postgres";
 
 COMMENT ON TABLE "public"."riot_league_cutoffs" IS 'Cache do corte de PDL (menor leaguePoints) das ligas Grão-Mestre/Challenger na Riot, por fila. Escrito só pela edge function riot-league-cutoffs (service role); lido pelo frontend (StepConfigure, detalhes de pedido) e por orderPricing.ts (estimativa de prazo do Master+).';
 
+
+
+CREATE TABLE IF NOT EXISTS "public"."riot_lookup_cache" (
+    "cache_key" "text" NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE "public"."riot_lookup_cache" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."service_extras" (
@@ -8084,6 +9413,11 @@ ALTER TABLE "public"."win_price_cents_catalog" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."win_price_cents_catalog" IS 'Espelho de WIN_PRICE_CENTS (shared/pricing.ts) -- valor de 1 Vitória Avulsa por fila/modo/tier, em centavos. Usado pelas fórmulas de drop/reatribuição do Mestre+. Sincronizado por shared/winPriceCentsSeed.test.ts.';
+
+
+
+ALTER TABLE ONLY "public"."accept_challenges"
+    ADD CONSTRAINT "accept_challenges_pkey" PRIMARY KEY ("id");
 
 
 
@@ -8142,6 +9476,11 @@ ALTER TABLE ONLY "public"."booster_profile_events"
 
 
 
+ALTER TABLE "public"."booster_profiles"
+    ADD CONSTRAINT "booster_profiles_cpf_format" CHECK ((("cpf" IS NULL) OR ("cpf" ~ '^[0-9]{11}$'::"text"))) NOT VALID;
+
+
+
 ALTER TABLE ONLY "public"."booster_profiles"
     ADD CONSTRAINT "booster_profiles_pkey" PRIMARY KEY ("id");
 
@@ -8187,6 +9526,11 @@ ALTER TABLE ONLY "public"."edge_rate_limits"
 
 
 
+ALTER TABLE ONLY "public"."elo_div_price_cents"
+    ADD CONSTRAINT "elo_div_price_cents_pkey" PRIMARY KEY ("queue_type", "boost_mode", "tier");
+
+
+
 ALTER TABLE ONLY "public"."games"
     ADD CONSTRAINT "games_pkey" PRIMARY KEY ("id");
 
@@ -8217,6 +9561,11 @@ ALTER TABLE ONLY "public"."order_booster_assignments"
 
 
 
+ALTER TABLE ONLY "public"."order_chat_reads"
+    ADD CONSTRAINT "order_chat_reads_pkey" PRIMARY KEY ("order_id", "user_id");
+
+
+
 ALTER TABLE ONLY "public"."order_coaching_topics"
     ADD CONSTRAINT "order_coaching_topics_pkey" PRIMARY KEY ("id");
 
@@ -8244,6 +9593,11 @@ ALTER TABLE ONLY "public"."order_matches"
 
 ALTER TABLE ONLY "public"."order_messages"
     ADD CONSTRAINT "order_messages_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."order_rank_assessments"
+    ADD CONSTRAINT "order_rank_assessments_pkey" PRIMARY KEY ("order_id");
 
 
 
@@ -8337,6 +9691,11 @@ ALTER TABLE ONLY "public"."riot_league_cutoffs"
 
 
 
+ALTER TABLE ONLY "public"."riot_lookup_cache"
+    ADD CONSTRAINT "riot_lookup_cache_pkey" PRIMARY KEY ("cache_key");
+
+
+
 ALTER TABLE ONLY "public"."service_extras"
     ADD CONSTRAINT "service_extras_pkey" PRIMARY KEY ("id");
 
@@ -8354,6 +9713,10 @@ ALTER TABLE ONLY "public"."services"
 
 ALTER TABLE ONLY "public"."win_price_cents_catalog"
     ADD CONSTRAINT "win_price_cents_catalog_pkey" PRIMARY KEY ("queue_type", "boost_mode", "tier");
+
+
+
+CREATE INDEX "accept_challenges_booster_idx" ON "public"."accept_challenges" USING "btree" ("booster_id", "created_at" DESC);
 
 
 
@@ -8393,11 +9756,19 @@ CREATE INDEX "booster_ledger_entries_payout_request_idx" ON "public"."booster_le
 
 
 
+CREATE INDEX "booster_order_events_order_idx" ON "public"."booster_order_events" USING "btree" ("order_id");
+
+
+
 CREATE INDEX "booster_performance_segments_booster_idx" ON "public"."booster_performance_segments" USING "btree" ("booster_id");
 
 
 
 CREATE INDEX "booster_performance_segments_lookup_idx" ON "public"."booster_performance_segments" USING "btree" ("service_type", "rank_bucket", "performance_score" DESC);
+
+
+
+CREATE UNIQUE INDEX "booster_profiles_cpf_active_key" ON "public"."booster_profiles" USING "btree" ("cpf") WHERE (("status" <> 'removed'::"public"."booster_status") AND ("cpf" IS NOT NULL));
 
 
 
@@ -8429,7 +9800,15 @@ CREATE INDEX "duo_account_reservations_account_idx" ON "public"."duo_account_res
 
 
 
+CREATE INDEX "duo_account_reservations_booster_idx" ON "public"."duo_account_reservations" USING "btree" ("booster_id");
+
+
+
 CREATE UNIQUE INDEX "duo_account_reservations_one_open_idx" ON "public"."duo_account_reservations" USING "btree" ("account_id") WHERE ("released_at" IS NULL);
+
+
+
+CREATE INDEX "duo_account_reservations_order_idx" ON "public"."duo_account_reservations" USING "btree" ("order_id");
 
 
 
@@ -8465,7 +9844,11 @@ CREATE INDEX "notifications_unread_idx" ON "public"."notifications" USING "btree
 
 
 
-CREATE INDEX "notifications_user_idx" ON "public"."notifications" USING "btree" ("user_id");
+CREATE INDEX "notifications_user_created_idx" ON "public"."notifications" USING "btree" ("user_id", "created_at" DESC);
+
+
+
+CREATE INDEX "order_booster_assignments_booster_idx" ON "public"."order_booster_assignments" USING "btree" ("booster_id");
 
 
 
@@ -8501,7 +9884,7 @@ CREATE INDEX "order_matches_order_idx" ON "public"."order_matches" USING "btree"
 
 
 
-CREATE INDEX "order_messages_order_idx" ON "public"."order_messages" USING "btree" ("order_id");
+CREATE INDEX "order_messages_order_created_idx" ON "public"."order_messages" USING "btree" ("order_id", "created_at" DESC);
 
 
 
@@ -8529,15 +9912,19 @@ CREATE INDEX "order_status_history_order_idx" ON "public"."order_status_history"
 
 
 
+CREATE INDEX "order_status_history_order_seq_idx" ON "public"."order_status_history" USING "btree" ("order_id", "seq");
+
+
+
 CREATE INDEX "orders_booster_completed_at_idx" ON "public"."orders" USING "btree" ("assigned_booster_id", "completed_at") WHERE ("status" = 'completed'::"public"."order_status");
 
 
 
-CREATE INDEX "orders_booster_id_idx" ON "public"."orders" USING "btree" ("assigned_booster_id");
-
-
-
 CREATE INDEX "orders_booster_service_id_idx" ON "public"."orders" USING "btree" ("booster_service_id");
+
+
+
+CREATE INDEX "orders_booster_status_created_idx" ON "public"."orders" USING "btree" ("assigned_booster_id", "status", "created_at" DESC) WHERE ("assigned_booster_id" IS NOT NULL);
 
 
 
@@ -8549,11 +9936,11 @@ CREATE INDEX "orders_created_at_idx" ON "public"."orders" USING "btree" ("create
 
 
 
-CREATE INDEX "orders_customer_id_idx" ON "public"."orders" USING "btree" ("customer_id");
-
-
-
 CREATE UNIQUE INDEX "orders_customer_idempotency_idx" ON "public"."orders" USING "btree" ("customer_id", "idempotency_key") WHERE ("idempotency_key" IS NOT NULL);
+
+
+
+CREATE INDEX "orders_customer_status_created_idx" ON "public"."orders" USING "btree" ("customer_id", "status", "created_at" DESC);
 
 
 
@@ -8573,6 +9960,10 @@ CREATE INDEX "orders_status_idx" ON "public"."orders" USING "btree" ("status");
 
 
 
+CREATE INDEX "orders_sync_attempt_idx" ON "public"."orders" USING "btree" ("last_match_sync_attempt_at" NULLS FIRST) WHERE (("status" = ANY (ARRAY['in_progress'::"public"."order_status", 'paused'::"public"."order_status", 'drop_requested'::"public"."order_status"])) AND ("riot_id" IS NOT NULL));
+
+
+
 CREATE INDEX "payments_customer_idx" ON "public"."payments" USING "btree" ("customer_id");
 
 
@@ -8589,7 +9980,7 @@ CREATE INDEX "payout_records_booster_idx" ON "public"."payout_records" USING "bt
 
 
 
-CREATE UNIQUE INDEX "payout_records_order_unique_idx" ON "public"."payout_records" USING "btree" ("order_id");
+CREATE UNIQUE INDEX "payout_records_order_booster_unique_idx" ON "public"."payout_records" USING "btree" ("order_id", "booster_id");
 
 
 
@@ -8633,6 +10024,10 @@ CREATE INDEX "reviews_public_idx" ON "public"."reviews" USING "btree" ("is_publi
 
 
 
+CREATE INDEX "riot_lookup_cache_expires_idx" ON "public"."riot_lookup_cache" USING "btree" ("expires_at");
+
+
+
 CREATE UNIQUE INDEX "service_extras_flow_code_idx" ON "public"."service_extras" USING "btree" ("flow", "code") WHERE (("flow" IS NOT NULL) AND ("code" IS NOT NULL));
 
 
@@ -8650,6 +10045,10 @@ CREATE OR REPLACE TRIGGER "booster_profiles_lock_status" BEFORE UPDATE ON "publi
 
 
 CREATE OR REPLACE TRIGGER "clear_terminal_order_credentials_trigger" BEFORE UPDATE OF "status", "payment_status" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."clear_terminal_order_credentials"();
+
+
+
+CREATE OR REPLACE TRIGGER "invalidate_login_tokens_on_order_change" BEFORE UPDATE OF "status", "assigned_booster_id" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."invalidate_login_tokens_on_order_change"();
 
 
 
@@ -8681,15 +10080,19 @@ CREATE OR REPLACE TRIGGER "trg_booster_active_on_message" AFTER INSERT ON "publi
 
 
 
-CREATE OR REPLACE TRIGGER "trg_cap_active_clash_orders" BEFORE INSERT ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_cap_active_clash_orders"();
+CREATE OR REPLACE TRIGGER "trg_cap_active_clash_orders" BEFORE INSERT OR UPDATE OF "status", "service_type", "customer_id" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_cap_active_clash_orders"();
 
 
 
-CREATE OR REPLACE TRIGGER "trg_cap_coach_packages" BEFORE INSERT ON "public"."booster_services" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_cap_coach_packages"();
+CREATE OR REPLACE TRIGGER "trg_cap_coach_packages" BEFORE INSERT OR UPDATE OF "deleted_at", "service_type" ON "public"."booster_services" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_cap_coach_packages"();
 
 
 
 CREATE OR REPLACE TRIGGER "trg_cap_pending_orders" BEFORE INSERT ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_cap_pending_orders"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_duo_accounts_close_reservation" AFTER UPDATE OF "reserved_order_id" ON "public"."duo_accounts" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_close_duo_reservation_on_release"();
 
 
 
@@ -8710,6 +10113,14 @@ CREATE OR REPLACE TRIGGER "trg_guard_notifications_user_update" BEFORE UPDATE ON
 
 
 CREATE OR REPLACE TRIGGER "trg_guard_profiles_trust_columns" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_guard_profiles_trust_columns"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_hold_declared_rank_order" BEFORE UPDATE OF "status" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."hold_declared_rank_order"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_ledger_alert_negative_balance" AFTER INSERT ON "public"."booster_ledger_entries" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_alert_negative_balance"();
 
 
 
@@ -8761,6 +10172,22 @@ CREATE OR REPLACE TRIGGER "trg_order_paid_customer_stats" AFTER UPDATE OF "statu
 
 
 
+CREATE OR REPLACE TRIGGER "trg_orders_close_pending_drop_requests" AFTER UPDATE OF "status" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_close_pending_drop_requests"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_orders_completed_guard" BEFORE UPDATE OF "status" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_orders_completed_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_orders_reset_exclusive_announce" BEFORE UPDATE OF "exclusive_until" ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_reset_exclusive_announce"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_payments_sync_amount_paid" AFTER INSERT OR UPDATE OF "status", "amount" ON "public"."payments" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_sync_order_amount_paid"();
+
+
+
 CREATE OR REPLACE TRIGGER "trg_refunds_dedupe_provider_after_manual" BEFORE INSERT ON "public"."refunds" FOR EACH ROW EXECUTE FUNCTION "public"."dedupe_provider_refund_after_manual"();
 
 
@@ -8770,6 +10197,16 @@ CREATE OR REPLACE TRIGGER "trg_release_duo_account_on_order_end" AFTER UPDATE OF
 
 
 CREATE OR REPLACE TRIGGER "trg_reviews_rate_limit" BEFORE INSERT ON "public"."reviews" FOR EACH ROW EXECUTE FUNCTION "public"."trg_fn_enforce_review_rate_limit"();
+
+
+
+ALTER TABLE ONLY "public"."accept_challenges"
+    ADD CONSTRAINT "accept_challenges_booster_id_fkey" FOREIGN KEY ("booster_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."accept_challenges"
+    ADD CONSTRAINT "accept_challenges_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE CASCADE;
 
 
 
@@ -8898,6 +10335,16 @@ ALTER TABLE ONLY "public"."order_booster_assignments"
 
 
 
+ALTER TABLE ONLY "public"."order_chat_reads"
+    ADD CONSTRAINT "order_chat_reads_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."order_chat_reads"
+    ADD CONSTRAINT "order_chat_reads_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."order_coaching_topics"
     ADD CONSTRAINT "order_coaching_topics_completed_by_fkey" FOREIGN KEY ("completed_by") REFERENCES "public"."profiles"("id");
 
@@ -8950,6 +10397,11 @@ ALTER TABLE ONLY "public"."order_messages"
 
 ALTER TABLE ONLY "public"."order_messages"
     ADD CONSTRAINT "order_messages_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "public"."profiles"("id");
+
+
+
+ALTER TABLE ONLY "public"."order_rank_assessments"
+    ADD CONSTRAINT "order_rank_assessments_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE CASCADE;
 
 
 
@@ -9083,43 +10535,42 @@ ALTER TABLE ONLY "public"."services"
 
 
 
-CREATE POLICY "admins_update_drop_requests" ON "public"."order_drop_requests" FOR UPDATE USING (( SELECT "public"."is_admin"() AS "is_admin"));
+ALTER TABLE "public"."accept_challenges" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "admins_update_drop_requests" ON "public"."order_drop_requests" FOR UPDATE TO "authenticated" USING (( SELECT "public"."is_admin"() AS "is_admin"));
 
 
 
-CREATE POLICY "approved_boosters_read_order_events" ON "public"."booster_order_events" FOR SELECT USING ("public"."is_approved_booster"());
+CREATE POLICY "approved_boosters_read_order_events" ON "public"."booster_order_events" FOR SELECT TO "authenticated" USING ("public"."is_approved_booster"());
 
 
 
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "audit_logs_admin_read" ON "public"."audit_logs" FOR SELECT USING ("public"."is_admin"());
-
-
-
-CREATE POLICY "audit_logs_insert" ON "public"."audit_logs" FOR INSERT WITH CHECK ("public"."is_admin"());
+CREATE POLICY "audit_logs_admin_read" ON "public"."audit_logs" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
 
 
 
 ALTER TABLE "public"."booster_admin_notes" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_admin_notes_admin_only" ON "public"."booster_admin_notes" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
+CREATE POLICY "booster_admin_notes_admin_only" ON "public"."booster_admin_notes" TO "authenticated" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
 
 
 
 ALTER TABLE "public"."booster_champion_stats" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_champion_stats_read" ON "public"."booster_champion_stats" FOR SELECT USING (true);
+CREATE POLICY "booster_champion_stats_read" ON "public"."booster_champion_stats" FOR SELECT USING (("public"."is_approved_booster_user"("booster_id") OR ("booster_id" = "auth"."uid"()) OR "public"."is_admin"() OR "public"."customer_has_booster_order"("booster_id")));
 
 
 
 ALTER TABLE "public"."booster_duo_matches" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_duo_matches_read" ON "public"."booster_duo_matches" FOR SELECT USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "booster_duo_matches_read" ON "public"."booster_duo_matches" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "booster_duo_matches"."order_id") AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"())))))));
 
@@ -9128,7 +10579,7 @@ CREATE POLICY "booster_duo_matches_read" ON "public"."booster_duo_matches" FOR S
 ALTER TABLE "public"."booster_ledger_entries" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_ledger_entries_read" ON "public"."booster_ledger_entries" FOR SELECT USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "booster_ledger_entries_read" ON "public"."booster_ledger_entries" FOR SELECT TO "authenticated" USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
@@ -9138,25 +10589,25 @@ ALTER TABLE "public"."booster_order_events" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."booster_performance_segments" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_performance_segments_read" ON "public"."booster_performance_segments" FOR SELECT USING (true);
+CREATE POLICY "booster_performance_segments_read" ON "public"."booster_performance_segments" FOR SELECT USING (("public"."is_approved_booster_user"("booster_id") OR ("booster_id" = "auth"."uid"()) OR "public"."is_admin"() OR "public"."customer_has_booster_order"("booster_id")));
 
 
 
 ALTER TABLE "public"."booster_profile_events" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_profile_events_read" ON "public"."booster_profile_events" FOR SELECT USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "booster_profile_events_read" ON "public"."booster_profile_events" FOR SELECT TO "authenticated" USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
 ALTER TABLE "public"."booster_profiles" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "booster_profiles_read_own_or_admin" ON "public"."booster_profiles" FOR SELECT USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "booster_profiles_read_own_or_admin" ON "public"."booster_profiles" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
-CREATE POLICY "booster_profiles_update_own_or_admin" ON "public"."booster_profiles" FOR UPDATE USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"())) WITH CHECK ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "booster_profiles_update_own_or_admin" ON "public"."booster_profiles" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"())) WITH CHECK ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
@@ -9167,11 +10618,11 @@ CREATE POLICY "booster_services_owner_delete" ON "public"."booster_services" FOR
 
 
 
-CREATE POLICY "booster_services_owner_insert" ON "public"."booster_services" FOR INSERT WITH CHECK (("booster_id" = "auth"."uid"()));
+CREATE POLICY "booster_services_owner_insert" ON "public"."booster_services" FOR INSERT TO "authenticated" WITH CHECK ((("booster_id" = "auth"."uid"()) AND "public"."is_approved_booster"("auth"."uid"())));
 
 
 
-CREATE POLICY "booster_services_owner_update" ON "public"."booster_services" FOR UPDATE USING (("booster_id" = "auth"."uid"())) WITH CHECK (("booster_id" = "auth"."uid"()));
+CREATE POLICY "booster_services_owner_update" ON "public"."booster_services" FOR UPDATE TO "authenticated" USING (("booster_id" = "auth"."uid"())) WITH CHECK (("booster_id" = "auth"."uid"()));
 
 
 
@@ -9181,29 +10632,29 @@ CREATE POLICY "booster_services_read" ON "public"."booster_services" FOR SELECT 
 
 
 
-CREATE POLICY "boosters_select_own_drop_requests" ON "public"."order_drop_requests" FOR SELECT USING ((("booster_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin")));
+CREATE POLICY "boosters_select_own_drop_requests" ON "public"."order_drop_requests" FOR SELECT TO "authenticated" USING ((("booster_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
 ALTER TABLE "public"."customer_profiles" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "customer_profiles_insert_own" ON "public"."customer_profiles" FOR INSERT WITH CHECK ((("user_id" = "auth"."uid"()) AND ("total_orders" = 0) AND ("total_spent" = (0)::numeric)));
+CREATE POLICY "customer_profiles_insert_own" ON "public"."customer_profiles" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND ("total_orders" = 0) AND ("total_spent" = (0)::numeric)));
 
 
 
-CREATE POLICY "customer_profiles_read_own" ON "public"."customer_profiles" FOR SELECT USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "customer_profiles_read_own" ON "public"."customer_profiles" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
-CREATE POLICY "customer_profiles_update_own" ON "public"."customer_profiles" FOR UPDATE USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "customer_profiles_update_own" ON "public"."customer_profiles" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
 
 
 
 ALTER TABLE "public"."duo_account_events" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "duo_account_events_read" ON "public"."duo_account_events" FOR SELECT USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "duo_account_events_read" ON "public"."duo_account_events" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."duo_accounts" "da"
   WHERE (("da"."id" = "duo_account_events"."account_id") AND ("da"."reserved_by" = "auth"."uid"()))))));
 
@@ -9212,32 +10663,35 @@ CREATE POLICY "duo_account_events_read" ON "public"."duo_account_events" FOR SEL
 ALTER TABLE "public"."duo_account_reservations" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "duo_account_reservations_admin_read" ON "public"."duo_account_reservations" FOR SELECT USING ("public"."is_admin"());
+CREATE POLICY "duo_account_reservations_admin_read" ON "public"."duo_account_reservations" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
 
 
 
 ALTER TABLE "public"."duo_accounts" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "duo_accounts_admin_delete" ON "public"."duo_accounts" FOR DELETE USING ("public"."is_admin"());
+CREATE POLICY "duo_accounts_admin_delete" ON "public"."duo_accounts" FOR DELETE TO "authenticated" USING ("public"."is_admin"());
 
 
 
-CREATE POLICY "duo_accounts_admin_insert" ON "public"."duo_accounts" FOR INSERT WITH CHECK ("public"."is_admin"());
+CREATE POLICY "duo_accounts_admin_insert" ON "public"."duo_accounts" FOR INSERT TO "authenticated" WITH CHECK ("public"."is_admin"());
 
 
 
-CREATE POLICY "duo_accounts_admin_update" ON "public"."duo_accounts" FOR UPDATE USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
+CREATE POLICY "duo_accounts_admin_update" ON "public"."duo_accounts" FOR UPDATE TO "authenticated" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
 
 
 
-CREATE POLICY "duo_accounts_read" ON "public"."duo_accounts" FOR SELECT USING (("public"."is_admin"() OR ("is_active" AND (("reserved_by" IS NULL) OR ("reserved_by" = "auth"."uid"())) AND (EXISTS ( SELECT 1
+CREATE POLICY "duo_accounts_read" ON "public"."duo_accounts" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR ("is_active" AND (("reserved_by" IS NULL) OR ("reserved_by" = "auth"."uid"())) AND (EXISTS ( SELECT 1
    FROM "public"."booster_profiles" "bp"
   WHERE (("bp"."user_id" = "auth"."uid"()) AND ("bp"."status" = 'approved'::"public"."booster_status")))))));
 
 
 
 ALTER TABLE "public"."edge_rate_limits" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."elo_div_price_cents" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."games" ENABLE ROW LEVEL SECURITY;
@@ -9289,21 +10743,24 @@ CREATE POLICY "master_plus_pricing_read" ON "public"."master_plus_pricing" FOR S
 ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "notifications_read_own" ON "public"."notifications" FOR SELECT USING (("user_id" = "auth"."uid"()));
+CREATE POLICY "notifications_read_own" ON "public"."notifications" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
 
 
 
-CREATE POLICY "notifications_update_own" ON "public"."notifications" FOR UPDATE USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+CREATE POLICY "notifications_update_own" ON "public"."notifications" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
 
 
 
 ALTER TABLE "public"."order_booster_assignments" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."order_chat_reads" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."order_coaching_topics" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_coaching_topics_read" ON "public"."order_coaching_topics" FOR SELECT USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "order_coaching_topics_read" ON "public"."order_coaching_topics" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "order_coaching_topics"."order_id") AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"())))))));
 
@@ -9318,7 +10775,7 @@ ALTER TABLE "public"."order_ignored_matches" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."order_matches" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_matches_read" ON "public"."order_matches" FOR SELECT USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "order_matches_read" ON "public"."order_matches" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "order_matches"."order_id") AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"())))))));
 
@@ -9327,16 +10784,21 @@ CREATE POLICY "order_matches_read" ON "public"."order_matches" FOR SELECT USING 
 ALTER TABLE "public"."order_messages" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_messages_read" ON "public"."order_messages" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM "public"."orders" "o"
-  WHERE (("o"."id" = "order_messages"."order_id") AND ("o"."assigned_booster_id" IS NOT NULL) AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"()) OR "public"."is_admin"())))));
+CREATE POLICY "order_messages_read" ON "public"."order_messages" FOR SELECT TO "authenticated" USING ("public"."can_read_order_message"("order_id", "created_at"));
+
+
+
+ALTER TABLE "public"."order_rank_assessments" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "order_rank_assessments_admin_read" ON "public"."order_rank_assessments" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
 
 
 
 ALTER TABLE "public"."order_rank_verifications" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_rank_verifications_read" ON "public"."order_rank_verifications" FOR SELECT USING ((("requested_by" = "auth"."uid"()) OR "public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "order_rank_verifications_read" ON "public"."order_rank_verifications" FOR SELECT TO "authenticated" USING ((("requested_by" = "auth"."uid"()) OR "public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "order_rank_verifications"."order_id") AND ("o"."customer_id" = "auth"."uid"()))))));
 
@@ -9345,7 +10807,7 @@ CREATE POLICY "order_rank_verifications_read" ON "public"."order_rank_verificati
 ALTER TABLE "public"."order_status_events" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_status_events_read" ON "public"."order_status_events" FOR SELECT USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
+CREATE POLICY "order_status_events_read" ON "public"."order_status_events" FOR SELECT TO "authenticated" USING (("public"."is_admin"() OR (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "order_status_events"."order_id") AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"())))))));
 
@@ -9354,11 +10816,7 @@ CREATE POLICY "order_status_events_read" ON "public"."order_status_events" FOR S
 ALTER TABLE "public"."order_status_history" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "order_status_history_insert" ON "public"."order_status_history" FOR INSERT WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "order_status_history_read" ON "public"."order_status_history" FOR SELECT USING (((EXISTS ( SELECT 1
+CREATE POLICY "order_status_history_read" ON "public"."order_status_history" FOR SELECT TO "authenticated" USING (((EXISTS ( SELECT 1
    FROM "public"."orders" "o"
   WHERE (("o"."id" = "order_status_history"."order_id") AND (("o"."customer_id" = "auth"."uid"()) OR ("o"."assigned_booster_id" = "auth"."uid"()))))) OR "public"."is_admin"()));
 
@@ -9367,59 +10825,39 @@ CREATE POLICY "order_status_history_read" ON "public"."order_status_history" FOR
 ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "orders_customer_read" ON "public"."orders" FOR SELECT USING ((("customer_id" = "auth"."uid"()) OR ("assigned_booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
-
-
-
-CREATE POLICY "orders_update" ON "public"."orders" FOR UPDATE USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
+CREATE POLICY "orders_customer_read" ON "public"."orders" FOR SELECT TO "authenticated" USING ((("customer_id" = "auth"."uid"()) OR ("assigned_booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
 ALTER TABLE "public"."payments" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "payments_admin_delete" ON "public"."payments" FOR DELETE USING ("public"."is_admin"());
-
-
-
-CREATE POLICY "payments_admin_insert" ON "public"."payments" FOR INSERT WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "payments_admin_update" ON "public"."payments" FOR UPDATE USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "payments_read" ON "public"."payments" FOR SELECT USING ((("customer_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "payments_read" ON "public"."payments" FOR SELECT TO "authenticated" USING ((("customer_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
 ALTER TABLE "public"."payout_records" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "payout_records_admin_update" ON "public"."payout_records" FOR UPDATE USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "payout_records_read" ON "public"."payout_records" FOR SELECT USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "payout_records_read" ON "public"."payout_records" FOR SELECT TO "authenticated" USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
 ALTER TABLE "public"."payout_requests" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "payout_requests_read" ON "public"."payout_requests" FOR SELECT USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "payout_requests_read" ON "public"."payout_requests" FOR SELECT TO "authenticated" USING ((("booster_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "profiles_read_own" ON "public"."profiles" FOR SELECT USING ((("id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "profiles_read_own" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
-CREATE POLICY "profiles_update_own" ON "public"."profiles" FOR UPDATE USING (("id" = "auth"."uid"())) WITH CHECK ((("id" = "auth"."uid"()) AND ("role" = ( SELECT "profiles_1"."role"
+CREATE POLICY "profiles_update_own" ON "public"."profiles" FOR UPDATE TO "authenticated" USING (("id" = "auth"."uid"())) WITH CHECK ((("id" = "auth"."uid"()) AND ("role" = ( SELECT "profiles_1"."role"
    FROM "public"."profiles" "profiles_1"
   WHERE ("profiles_1"."id" = "auth"."uid"())))));
 
@@ -9428,7 +10866,7 @@ CREATE POLICY "profiles_update_own" ON "public"."profiles" FOR UPDATE USING (("i
 ALTER TABLE "public"."refunds" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "refunds_read" ON "public"."refunds" FOR SELECT USING (((EXISTS ( SELECT 1
+CREATE POLICY "refunds_read" ON "public"."refunds" FOR SELECT TO "authenticated" USING (((EXISTS ( SELECT 1
    FROM "public"."payments" "p"
   WHERE (("p"."id" = "refunds"."payment_id") AND ("p"."customer_id" = "auth"."uid"())))) OR "public"."is_admin"()));
 
@@ -9437,13 +10875,13 @@ CREATE POLICY "refunds_read" ON "public"."refunds" FOR SELECT USING (((EXISTS ( 
 ALTER TABLE "public"."reviews" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "reviews_customer_insert" ON "public"."reviews" FOR INSERT WITH CHECK ((("customer_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+CREATE POLICY "reviews_customer_insert" ON "public"."reviews" FOR INSERT TO "authenticated" WITH CHECK ((("customer_id" = "auth"."uid"()) AND ("booster_id" IS NOT NULL) AND (EXISTS ( SELECT 1
    FROM "public"."orders" "o"
-  WHERE (("o"."id" = "reviews"."order_id") AND ("o"."customer_id" = "auth"."uid"()) AND ("o"."status" = 'completed'::"public"."order_status") AND (NOT ("o"."assigned_booster_id" IS DISTINCT FROM "reviews"."booster_id")))))));
+  WHERE (("o"."id" = "reviews"."order_id") AND ("o"."customer_id" = "auth"."uid"()) AND ("o"."status" = 'completed'::"public"."order_status") AND ("o"."assigned_booster_id" = "reviews"."booster_id"))))));
 
 
 
-CREATE POLICY "reviews_public_read" ON "public"."reviews" FOR SELECT USING ((("is_public" = true) OR ("customer_id" = "auth"."uid"()) OR "public"."is_admin"()));
+CREATE POLICY "reviews_public_read" ON "public"."reviews" FOR SELECT TO "authenticated" USING ((("is_public" = true) OR ("customer_id" = "auth"."uid"()) OR "public"."is_admin"()));
 
 
 
@@ -9452,6 +10890,9 @@ ALTER TABLE "public"."riot_league_cutoffs" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "riot_league_cutoffs_read" ON "public"."riot_league_cutoffs" FOR SELECT USING (true);
 
+
+
+ALTER TABLE "public"."riot_lookup_cache" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."service_extras" ENABLE ROW LEVEL SECURITY;
@@ -9507,65 +10948,6 @@ CREATE POLICY "win_price_cents_catalog_read" ON "public"."win_price_cents_catalo
 
 
 
-
-
-ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
-
-
-
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."booster_order_events";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."booster_profile_events";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."duo_account_events";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."notifications";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."order_coaching_topics";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."order_drop_requests";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."order_messages";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."order_status_events";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."payments";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."payout_requests";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."refunds";
-
-
-
-
-
-
-
-
-
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
@@ -9573,264 +10955,38 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_booster_share_pct"("p_user_id" "uuid", "p_service_type" "public"."service_type") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_booster_share_pct"("p_user_id" "uuid", "p_service_type" "public"."service_type") TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_clawback_order_commissions"("p_order_id" "uuid", "p_provider_status" "text", "p_mp_payment_id" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_clawback_order_commissions"("p_order_id" "uuid", "p_provider_status" "text", "p_mp_payment_id" "text") TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_complete_order_by_customer"("p_order_id" "uuid", "p_actor" "uuid", "p_reason" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_complete_order_by_customer"("p_order_id" "uuid", "p_actor" "uuid", "p_reason" "text") TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_elo_step_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_step" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_elo_step_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_step" integer) TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_order_progress_detail"("p_order_id" "uuid", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_order_progress_detail"("p_order_id" "uuid", "p_coaching_pct" numeric) TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."_order_progress_fraction"("p_order_id" "uuid", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_order_progress_fraction"("p_order_id" "uuid", "p_coaching_pct" numeric) TO "service_role";
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+REVOKE ALL ON FUNCTION "public"."_order_settlement_numbers"("p_order_id" "uuid", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_order_settlement_numbers"("p_order_id" "uuid", "p_coaching_pct" numeric) TO "service_role";
 
 
 
@@ -9839,9 +10995,20 @@ GRANT ALL ON FUNCTION "public"."_release_pending_review_order"("p_order_id" "uui
 
 
 
-REVOKE ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."_settle_order"("p_order_id" "uuid", "p_outcome" "text", "p_reason" "text", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_settle_order"("p_order_id" "uuid", "p_outcome" "text", "p_reason" "text", "p_coaching_pct" numeric) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid", "p_challenge_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid", "p_challenge_id" "uuid") TO "service_role";
+GRANT ALL ON FUNCTION "public"."accept_boost_order"("p_order_id" "uuid", "p_booster_user_id" "uuid", "p_challenge_id" "uuid") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."accept_legal"("p_version" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."accept_legal"("p_version" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."accept_legal"("p_version" "text") TO "authenticated";
 
 
 
@@ -9869,6 +11036,12 @@ GRANT ALL ON FUNCTION "public"."admin_cancel_manual_refund"("p_refund_id" "uuid"
 
 
 
+REVOKE ALL ON FUNCTION "public"."admin_cancel_paid_order"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_cancel_paid_order"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) TO "service_role";
+GRANT ALL ON FUNCTION "public"."admin_cancel_paid_order"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) TO "authenticated";
+
+
+
 REVOKE ALL ON FUNCTION "public"."admin_cancel_pending_review_order"("p_order_id" "uuid", "p_reason" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."admin_cancel_pending_review_order"("p_order_id" "uuid", "p_reason" "text") TO "service_role";
 GRANT ALL ON FUNCTION "public"."admin_cancel_pending_review_order"("p_order_id" "uuid", "p_reason" "text") TO "authenticated";
@@ -9881,9 +11054,9 @@ GRANT ALL ON FUNCTION "public"."admin_confirm_manual_refund"("p_refund_id" "uuid
 
 
 
-REVOKE ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_amount" numeric) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_amount" numeric) TO "service_role";
-GRANT ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_amount" numeric) TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) TO "service_role";
+GRANT ALL ON FUNCTION "public"."admin_create_manual_refund"("p_order_id" "uuid", "p_reason" "text", "p_coaching_pct" numeric) TO "authenticated";
 
 
 
@@ -9923,9 +11096,21 @@ GRANT ALL ON FUNCTION "public"."admin_list_review_cases"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."admin_list_reviews"("p_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_list_reviews"("p_limit" integer) TO "service_role";
+GRANT ALL ON FUNCTION "public"."admin_list_reviews"("p_limit" integer) TO "authenticated";
+
+
+
 REVOKE ALL ON FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uuid", "p_proof_url" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uuid", "p_proof_url" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."admin_mark_payout_paid"("p_request_id" "uuid", "p_proof_url" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admin_moderate_review"("p_review_id" "uuid", "p_is_public" boolean, "p_note" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_moderate_review"("p_review_id" "uuid", "p_is_public" boolean, "p_note" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."admin_moderate_review"("p_review_id" "uuid", "p_is_public" boolean, "p_note" "text") TO "authenticated";
 
 
 
@@ -9976,6 +11161,11 @@ GRANT ALL ON FUNCTION "public"."approve_booster"("p_booster_id" "uuid", "p_new_s
 
 
 
+REVOKE ALL ON FUNCTION "public"."auto_complete_awaiting_customer_orders"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."auto_complete_awaiting_customer_orders"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."booster_active_slot_counts"("p_booster_user_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."booster_active_slot_counts"("p_booster_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."booster_active_slot_counts"("p_booster_user_id" "uuid") TO "service_role";
@@ -10005,6 +11195,11 @@ GRANT ALL ON FUNCTION "public"."booster_has_active_exclusive_slot"("p_booster_us
 
 
 
+REVOKE ALL ON FUNCTION "public"."booster_has_open_orders"("p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."booster_has_open_orders"("p_user_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."booster_heartbeat"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."booster_heartbeat"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."booster_heartbeat"() TO "service_role";
@@ -10017,9 +11212,15 @@ GRANT ALL ON FUNCTION "public"."booster_payout_totals"("p_booster_id" "uuid") TO
 
 
 
-GRANT ALL ON FUNCTION "public"."can_booster_accept_order"("p_booster_user_id" "uuid", "p_boost_mode" "text", "p_service_type" "text") TO "anon";
+REVOKE ALL ON FUNCTION "public"."can_booster_accept_order"("p_booster_user_id" "uuid", "p_boost_mode" "text", "p_service_type" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."can_booster_accept_order"("p_booster_user_id" "uuid", "p_boost_mode" "text", "p_service_type" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."can_booster_accept_order"("p_booster_user_id" "uuid", "p_boost_mode" "text", "p_service_type" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."can_read_order_message"("p_order_id" "uuid", "p_created_at" timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."can_read_order_message"("p_order_id" "uuid", "p_created_at" timestamp with time zone) TO "service_role";
+GRANT ALL ON FUNCTION "public"."can_read_order_message"("p_order_id" "uuid", "p_created_at" timestamp with time zone) TO "authenticated";
 
 
 
@@ -10035,7 +11236,6 @@ GRANT ALL ON FUNCTION "public"."cancel_pending_order_payment"("p_order_id" "uuid
 
 
 REVOKE ALL ON FUNCTION "public"."check_own_write_rate_limit"("p_scope" "text", "p_limit" integer, "p_window_seconds" integer) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."check_own_write_rate_limit"("p_scope" "text", "p_limit" integer, "p_window_seconds" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."check_own_write_rate_limit"("p_scope" "text", "p_limit" integer, "p_window_seconds" integer) TO "service_role";
 
 
@@ -10046,8 +11246,7 @@ GRANT ALL ON FUNCTION "public"."clear_duo_own_riot_id"("p_order_id" "uuid") TO "
 
 
 
-GRANT ALL ON FUNCTION "public"."clear_terminal_order_credentials"() TO "anon";
-GRANT ALL ON FUNCTION "public"."clear_terminal_order_credentials"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."clear_terminal_order_credentials"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."clear_terminal_order_credentials"() TO "service_role";
 
 
@@ -10074,10 +11273,22 @@ GRANT ALL ON FUNCTION "public"."consume_edge_rate_limit"("p_scope" "text", "p_su
 
 
 
+REVOKE ALL ON FUNCTION "public"."current_legal_version"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."current_legal_version"() TO "service_role";
+GRANT ALL ON FUNCTION "public"."current_legal_version"() TO "authenticated";
+
+
+
 REVOKE ALL ON FUNCTION "public"."current_user_role"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."current_user_role"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."current_user_role"() TO "service_role";
-GRANT ALL ON FUNCTION "public"."current_user_role"() TO "anon";
+
+
+
+REVOKE ALL ON FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") TO "service_role";
+GRANT ALL ON FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."customer_has_booster_order"("p_booster_id" "uuid") TO "authenticated";
 
 
 
@@ -10089,6 +11300,12 @@ GRANT ALL ON FUNCTION "public"."dedupe_provider_refund_after_manual"() TO "servi
 REVOKE ALL ON FUNCTION "public"."delete_duo_account"("p_account_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."delete_duo_account"("p_account_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."delete_duo_account"("p_account_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dispute_order_completion"("p_order_id" "uuid", "p_reason" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dispute_order_completion"("p_order_id" "uuid", "p_reason" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."dispute_order_completion"("p_order_id" "uuid", "p_reason" "text") TO "authenticated";
 
 
 
@@ -10116,6 +11333,11 @@ GRANT ALL ON FUNCTION "public"."expire_stale_booster_suspensions"() TO "service_
 
 REVOKE ALL ON FUNCTION "public"."expire_stale_pix_orders"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."expire_stale_pix_orders"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_accept_challenge_image_data"("p_challenge_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_accept_challenge_image_data"("p_challenge_id" "uuid") TO "service_role";
 
 
 
@@ -10194,8 +11416,17 @@ GRANT ALL ON FUNCTION "public"."get_top_boosters"("p_service_type" "text", "p_ra
 
 
 REVOKE ALL ON FUNCTION "public"."handle_new_user"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."hold_declared_rank_order"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."hold_declared_rank_order"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."invalidate_login_tokens_on_order_change"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."invalidate_login_tokens_on_order_change"() TO "service_role";
 
 
 
@@ -10215,6 +11446,30 @@ GRANT ALL ON FUNCTION "public"."is_approved_booster"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."is_approved_booster"("p_booster_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."is_approved_booster"("p_booster_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_approved_booster"("p_booster_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") TO "service_role";
+GRANT ALL ON FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_approved_booster_user"("p_user_id" "uuid") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_payout_window_day"("p_at" timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_payout_window_day"("p_at" timestamp with time zone) TO "service_role";
+GRANT ALL ON FUNCTION "public"."is_payout_window_day"("p_at" timestamp with time zone) TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_valid_cpf"("p_cpf" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_valid_cpf"("p_cpf" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."is_valid_cpf"("p_cpf" "text") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."issue_accept_challenge"("p_booster_id" "uuid", "p_order_id" "uuid", "p_champion_id" "text", "p_answer_norm" "text", "p_seed" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."issue_accept_challenge"("p_booster_id" "uuid", "p_order_id" "uuid", "p_champion_id" "text", "p_answer_norm" "text", "p_seed" integer) TO "service_role";
 
 
 
@@ -10260,8 +11515,7 @@ GRANT ALL ON FUNCTION "public"."notify_admins_on_pending_review"() TO "service_r
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_booster_profile_changed"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_booster_profile_changed"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."notify_booster_profile_changed"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."notify_booster_profile_changed"() TO "service_role";
 
 
@@ -10271,26 +11525,22 @@ GRANT ALL ON FUNCTION "public"."notify_boosters_order_available"() TO "service_r
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_discord_chat_mention"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_discord_chat_mention"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."notify_discord_chat_mention"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."notify_discord_chat_mention"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_discord_order_webhook"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_discord_order_webhook"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."notify_discord_order_webhook"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."notify_discord_order_webhook"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_discord_review"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_discord_review"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."notify_discord_review"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."notify_discord_review"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_duo_account_changed"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_duo_account_changed"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."notify_duo_account_changed"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."notify_duo_account_changed"() TO "service_role";
 
 
@@ -10300,15 +11550,21 @@ GRANT ALL ON FUNCTION "public"."notify_order_status_changed"() TO "service_role"
 
 
 
+REVOKE ALL ON FUNCTION "public"."onboard_booster"("p_display_name" "text", "p_bio" "text", "p_peak_rank" "jsonb", "p_opgg_link" "text", "p_hours_per_day_min" integer, "p_hours_per_day_max" integer, "p_full_name" "text", "p_cpf" "text", "p_available_days" "text"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."onboard_booster"("p_display_name" "text", "p_bio" "text", "p_peak_rank" "jsonb", "p_opgg_link" "text", "p_hours_per_day_min" integer, "p_hours_per_day_max" integer, "p_full_name" "text", "p_cpf" "text", "p_available_days" "text"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."onboard_booster"("p_display_name" "text", "p_bio" "text", "p_peak_rank" "jsonb", "p_opgg_link" "text", "p_hours_per_day_min" integer, "p_hours_per_day_max" integer, "p_full_name" "text", "p_cpf" "text", "p_available_days" "text"[]) TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."order_drop_completion_pct"("p_order_id" "uuid") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."order_drop_completion_pct"("p_order_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."order_drop_completion_pct"("p_order_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."order_drop_completion_pct"("p_order_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."order_progress_fraction"("p_order_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."order_progress_fraction"("p_order_id" "uuid") TO "service_role";
+GRANT ALL ON FUNCTION "public"."order_progress_fraction"("p_order_id" "uuid") TO "authenticated";
 
 
 
@@ -10318,26 +11574,41 @@ GRANT ALL ON FUNCTION "public"."order_requires_access_token"("p_service_type" "p
 
 
 
+REVOKE ALL ON FUNCTION "public"."order_settlement_preview"("p_order_id" "uuid", "p_coaching_pct" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."order_settlement_preview"("p_order_id" "uuid", "p_coaching_pct" numeric) TO "service_role";
+GRANT ALL ON FUNCTION "public"."order_settlement_preview"("p_order_id" "uuid", "p_coaching_pct" numeric) TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."order_tab_counts"("p_owner" "text", "p_owner_id" "uuid", "p_admin" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."order_tab_counts"("p_owner" "text", "p_owner_id" "uuid", "p_admin" boolean) TO "service_role";
+GRANT ALL ON FUNCTION "public"."order_tab_counts"("p_owner" "text", "p_owner_id" "uuid", "p_admin" boolean) TO "authenticated";
+
+
+
 REVOKE ALL ON FUNCTION "public"."payout_request_order_breakdown"("p_request_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."payout_request_order_breakdown"("p_request_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."payout_request_order_breakdown"("p_request_id" "uuid") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."prevent_non_admin_booster_privileged_column_change"() TO "anon";
-GRANT ALL ON FUNCTION "public"."prevent_non_admin_booster_privileged_column_change"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."prevent_non_admin_booster_privileged_column_change"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."prevent_non_admin_booster_privileged_column_change"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."prevent_non_admin_booster_status_change"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."prevent_non_admin_booster_status_change"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."prevent_non_admin_booster_status_change"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."process_mp_payment_event"("p_order_id" "uuid", "p_mp_payment_id" "text", "p_provider_status" "text", "p_amount" numeric, "p_currency" "text", "p_event_id" "text", "p_refund_id" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."process_mp_payment_event"("p_order_id" "uuid", "p_mp_payment_id" "text", "p_provider_status" "text", "p_amount" numeric, "p_currency" "text", "p_event_id" "text", "p_refund_id" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."prune_old_data"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."prune_old_data"() TO "service_role";
 
 
 
@@ -10353,8 +11624,8 @@ GRANT ALL ON FUNCTION "public"."rank_step"("p_tier" "text", "p_division" "text")
 
 
 
-REVOKE ALL ON FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric) TO "service_role";
+REVOKE ALL ON FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric, "p_method_type" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."record_card_payment"("p_order_id" "uuid", "p_customer_id" "uuid", "p_mp_payment_id" "text", "p_amount" numeric, "p_method_type" "text") TO "service_role";
 
 
 
@@ -10481,7 +11752,6 @@ GRANT ALL ON FUNCTION "public"."set_duo_own_riot_id"("p_order_id" "uuid", "p_rio
 
 
 REVOKE ALL ON FUNCTION "public"."set_master_plus_pricing_updated_at"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."set_master_plus_pricing_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."set_master_plus_pricing_updated_at"() TO "service_role";
 
 
@@ -10498,121 +11768,133 @@ GRANT ALL ON FUNCTION "public"."set_order_credentials"("p_order_id" "uuid", "p_l
 
 
 
+REVOKE ALL ON FUNCTION "public"."trg_fn_alert_negative_balance"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_alert_negative_balance"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."trg_fn_booster_active_on_accept"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_booster_active_on_accept"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_booster_active_on_accept"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_booster_active_on_message"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_booster_active_on_message"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_booster_active_on_message"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."trg_fn_cap_active_clash_orders"() TO "anon";
-GRANT ALL ON FUNCTION "public"."trg_fn_cap_active_clash_orders"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."trg_fn_cap_active_clash_orders"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."trg_fn_cap_active_clash_orders"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_cap_coach_packages"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_cap_coach_packages"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_cap_coach_packages"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."trg_fn_cap_pending_orders"() TO "anon";
-GRANT ALL ON FUNCTION "public"."trg_fn_cap_pending_orders"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."trg_fn_cap_pending_orders"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."trg_fn_cap_pending_orders"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."trg_fn_close_duo_reservation_on_release"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_close_duo_reservation_on_release"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."trg_fn_close_pending_drop_requests"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_close_pending_drop_requests"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."trg_fn_enforce_booster_display_name_cooldown"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_enforce_booster_display_name_cooldown"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_enforce_booster_display_name_cooldown"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_enforce_message_rate_limit"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_enforce_message_rate_limit"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_enforce_message_rate_limit"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_enforce_review_rate_limit"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_enforce_review_rate_limit"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_enforce_review_rate_limit"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_guard_booster_profile_trust_columns"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_guard_booster_profile_trust_columns"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_guard_booster_profile_trust_columns"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_guard_customer_profile_trust_columns"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_guard_customer_profile_trust_columns"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_guard_customer_profile_trust_columns"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_guard_notifications_user_update"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_guard_notifications_user_update"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_guard_notifications_user_update"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_guard_profiles_trust_columns"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_guard_profiles_trust_columns"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_guard_profiles_trust_columns"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."trg_fn_lock_chat_on_order_completed"() TO "anon";
-GRANT ALL ON FUNCTION "public"."trg_fn_lock_chat_on_order_completed"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."trg_fn_lock_chat_on_order_completed"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."trg_fn_lock_chat_on_order_completed"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_order_completed_booster_stats"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_order_completed_booster_stats"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_order_completed_booster_stats"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."trg_fn_order_paid_customer_stats"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_order_paid_customer_stats"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_order_paid_customer_stats"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() TO "anon";
-GRANT ALL ON FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."trg_fn_orders_completed_guard"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_orders_completed_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."trg_fn_release_duo_account_on_order_end"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."trg_fn_reset_exclusive_announce"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_reset_exclusive_announce"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."trg_fn_reviews_refresh_booster_rating"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."trg_fn_reviews_refresh_booster_rating"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trg_fn_reviews_refresh_booster_rating"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."trg_fn_sync_order_amount_paid"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."trg_fn_sync_order_amount_paid"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."update_booster_applications_updated_at"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."update_booster_applications_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_booster_applications_updated_at"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."update_booster_professional_profile"("p_display_name" "text", "p_bio" "text", "p_peak_tier" "text", "p_opgg_link" "text", "p_opgg_link_visible" boolean, "p_available_days" "text"[], "p_hours_per_day_min" integer, "p_hours_per_day_max" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."update_booster_professional_profile"("p_display_name" "text", "p_bio" "text", "p_peak_tier" "text", "p_opgg_link" "text", "p_opgg_link_visible" boolean, "p_available_days" "text"[], "p_hours_per_day_min" integer, "p_hours_per_day_max" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_booster_professional_profile"("p_display_name" "text", "p_bio" "text", "p_peak_tier" "text", "p_opgg_link" "text", "p_opgg_link_visible" boolean, "p_available_days" "text"[], "p_hours_per_day_min" integer, "p_hours_per_day_max" integer) TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."update_booster_services_updated_at"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."update_booster_services_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_booster_services_updated_at"() TO "service_role";
 
 
@@ -10624,14 +11906,25 @@ GRANT ALL ON FUNCTION "public"."update_duo_account_rank"("p_account_id" "uuid", 
 
 
 REVOKE ALL ON FUNCTION "public"."update_duo_accounts_updated_at"() FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."update_duo_accounts_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_duo_accounts_updated_at"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."update_my_cpf"("p_cpf" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."update_my_cpf"("p_cpf" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."update_my_cpf"("p_cpf" "text") TO "authenticated";
 
 
 
 REVOKE ALL ON FUNCTION "public"."update_my_display_name"("p_display_name" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."update_my_display_name"("p_display_name" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_my_display_name"("p_display_name" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."update_my_full_name"("p_full_name" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."update_my_full_name"("p_full_name" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."update_my_full_name"("p_full_name" "text") TO "authenticated";
 
 
 
@@ -10651,46 +11944,31 @@ GRANT ALL ON FUNCTION "public"."update_order_status"("p_order_id" "uuid", "p_new
 
 
 
+REVOKE ALL ON FUNCTION "public"."verify_accept_challenge"("p_challenge_id" "uuid", "p_booster_id" "uuid", "p_answer_norm" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."verify_accept_challenge"("p_challenge_id" "uuid", "p_booster_id" "uuid", "p_answer_norm" "text") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."win_price_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_tier" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."win_price_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_tier" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."win_price_cents"("p_queue" "public"."queue_type", "p_mode" "text", "p_tier" "text") TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."accept_challenges" TO "service_role";
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."audit_logs" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."audit_logs" TO "authenticated";
+GRANT SELECT ON TABLE "public"."audit_logs" TO "authenticated";
 GRANT ALL ON TABLE "public"."audit_logs" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_drop_requests" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_drop_requests" TO "authenticated";
+GRANT SELECT ON TABLE "public"."order_drop_requests" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_drop_requests" TO "service_role";
 
 
 
-GRANT INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."orders" TO "authenticated";
 GRANT ALL ON TABLE "public"."orders" TO "service_role";
 
 
@@ -10919,7 +12197,7 @@ GRANT SELECT("customer_lanes") ON TABLE "public"."orders" TO "authenticated";
 
 
 
-GRANT SELECT("reassigned_by_admin"),INSERT("reassigned_by_admin"),UPDATE("reassigned_by_admin") ON TABLE "public"."orders" TO "authenticated";
+GRANT SELECT("reassigned_by_admin") ON TABLE "public"."orders" TO "authenticated";
 
 
 
@@ -10927,28 +12205,36 @@ GRANT SELECT("duo_current_rank") ON TABLE "public"."orders" TO "authenticated";
 
 
 
-GRANT ALL ON TABLE "public"."available_boost_orders" TO "authenticated";
+GRANT SELECT("rank_source") ON TABLE "public"."orders" TO "authenticated";
+
+
+
+GRANT SELECT("stint_start_rank") ON TABLE "public"."orders" TO "authenticated";
+
+
+
+GRANT SELECT ON TABLE "public"."available_boost_orders" TO "authenticated";
 GRANT ALL ON TABLE "public"."available_boost_orders" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_admin_notes" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_admin_notes" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_admin_notes" TO "service_role";
 
 
 
 GRANT ALL ON TABLE "public"."booster_champion_stats" TO "service_role";
-GRANT SELECT ON TABLE "public"."booster_champion_stats" TO "anon";
 GRANT SELECT ON TABLE "public"."booster_champion_stats" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_champion_stats" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_duo_matches" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_duo_matches" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_duo_matches" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_ledger_entries" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_ledger_entries" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_ledger_entries" TO "service_role";
 
 
@@ -10958,66 +12244,55 @@ GRANT SELECT ON TABLE "public"."booster_order_events" TO "authenticated";
 
 
 
-GRANT ALL ON SEQUENCE "public"."booster_order_events_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."booster_order_events_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."booster_order_events_id_seq" TO "service_role";
 
 
 
 GRANT ALL ON TABLE "public"."booster_performance_segments" TO "service_role";
-GRANT SELECT ON TABLE "public"."booster_performance_segments" TO "anon";
 GRANT SELECT ON TABLE "public"."booster_performance_segments" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_performance_segments" TO "anon";
 
 
 
-GRANT INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_profile_events" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_profile_events" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_profile_events" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_profile_events" TO "service_role";
 
 
 
-GRANT ALL ON SEQUENCE "public"."booster_profile_events_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."booster_profile_events_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."booster_profile_events_id_seq" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_profiles" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_profiles" TO "authenticated";
+GRANT SELECT ON TABLE "public"."booster_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_profiles" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_services" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."booster_services" TO "authenticated";
+GRANT SELECT,INSERT,UPDATE ON TABLE "public"."booster_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."booster_services" TO "service_role";
+GRANT SELECT ON TABLE "public"."booster_services" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."customer_profiles" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."customer_profiles" TO "authenticated";
+GRANT SELECT ON TABLE "public"."customer_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."customer_profiles" TO "service_role";
 
 
 
-GRANT INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."duo_account_events" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."duo_account_events" TO "authenticated";
+GRANT SELECT ON TABLE "public"."duo_account_events" TO "authenticated";
 GRANT ALL ON TABLE "public"."duo_account_events" TO "service_role";
 
 
 
-GRANT ALL ON SEQUENCE "public"."duo_account_events_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."duo_account_events_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."duo_account_events_id_seq" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."duo_account_reservations" TO "authenticated";
+GRANT SELECT ON TABLE "public"."duo_account_reservations" TO "authenticated";
 GRANT ALL ON TABLE "public"."duo_account_reservations" TO "service_role";
 
 
 
-GRANT MAINTAIN ON TABLE "public"."duo_accounts" TO "authenticated";
 GRANT ALL ON TABLE "public"."duo_accounts" TO "service_role";
 
 
@@ -11046,21 +12321,28 @@ GRANT ALL ON TABLE "public"."edge_rate_limits" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."games" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."games" TO "authenticated";
+GRANT ALL ON TABLE "public"."elo_div_price_cents" TO "service_role";
+
+
+
+GRANT SELECT ON TABLE "public"."games" TO "authenticated";
 GRANT ALL ON TABLE "public"."games" TO "service_role";
+GRANT SELECT ON TABLE "public"."games" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."master_plus_pricing" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."master_plus_pricing" TO "authenticated";
+GRANT SELECT ON TABLE "public"."master_plus_pricing" TO "authenticated";
 GRANT ALL ON TABLE "public"."master_plus_pricing" TO "service_role";
+GRANT SELECT ON TABLE "public"."master_plus_pricing" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."notifications" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."notifications" TO "authenticated";
+GRANT SELECT ON TABLE "public"."notifications" TO "authenticated";
 GRANT ALL ON TABLE "public"."notifications" TO "service_role";
+
+
+
+GRANT UPDATE("is_read") ON TABLE "public"."notifications" TO "authenticated";
 
 
 
@@ -11068,7 +12350,11 @@ GRANT ALL ON TABLE "public"."order_booster_assignments" TO "service_role";
 
 
 
-GRANT SELECT,MAINTAIN ON TABLE "public"."order_coaching_topics" TO "authenticated";
+GRANT ALL ON TABLE "public"."order_chat_reads" TO "service_role";
+
+
+
+GRANT SELECT ON TABLE "public"."order_coaching_topics" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_coaching_topics" TO "service_role";
 
 
@@ -11077,113 +12363,150 @@ GRANT ALL ON TABLE "public"."order_ignored_matches" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_matches" TO "authenticated";
+GRANT SELECT ON TABLE "public"."order_matches" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_matches" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_messages" TO "anon";
-GRANT SELECT,MAINTAIN ON TABLE "public"."order_messages" TO "authenticated";
+GRANT SELECT ON TABLE "public"."order_messages" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_messages" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_rank_verifications" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_rank_verifications" TO "authenticated";
+GRANT ALL ON TABLE "public"."order_rank_assessments" TO "service_role";
+GRANT SELECT ON TABLE "public"."order_rank_assessments" TO "authenticated";
+
+
+
+GRANT SELECT ON TABLE "public"."order_rank_verifications" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_rank_verifications" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_status_events" TO "authenticated";
+GRANT SELECT ON TABLE "public"."order_status_events" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_status_events" TO "service_role";
 
 
 
-GRANT ALL ON SEQUENCE "public"."order_status_events_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."order_status_events_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."order_status_events_id_seq" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_status_history" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."order_status_history" TO "authenticated";
+GRANT SELECT ON TABLE "public"."order_status_history" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_status_history" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."payments" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."order_status_history_seq_seq" TO "service_role";
+
+
+
+GRANT SELECT ON TABLE "public"."payments" TO "authenticated";
 GRANT ALL ON TABLE "public"."payments" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."payout_records" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."payout_records" TO "authenticated";
+GRANT SELECT ON TABLE "public"."payout_records" TO "authenticated";
 GRANT ALL ON TABLE "public"."payout_records" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."payout_requests" TO "authenticated";
+GRANT SELECT ON TABLE "public"."payout_requests" TO "authenticated";
 GRANT ALL ON TABLE "public"."payout_requests" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "authenticated";
+GRANT SELECT ON TABLE "public"."profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."public_booster_profiles" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."public_booster_profiles" TO "authenticated";
+GRANT UPDATE("avatar_url") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT ON TABLE "public"."public_booster_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_booster_profiles" TO "service_role";
+GRANT SELECT ON TABLE "public"."public_booster_profiles" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."refunds" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."refunds" TO "authenticated";
+GRANT SELECT ON TABLE "public"."refunds" TO "authenticated";
 GRANT ALL ON TABLE "public"."refunds" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."reviews" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."reviews" TO "authenticated";
 GRANT ALL ON TABLE "public"."reviews" TO "service_role";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."riot_league_cutoffs" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."riot_league_cutoffs" TO "authenticated";
+GRANT SELECT("id") ON TABLE "public"."reviews" TO "anon";
+GRANT SELECT("id") ON TABLE "public"."reviews" TO "authenticated";
+
+
+
+GRANT SELECT("order_id"),INSERT("order_id") ON TABLE "public"."reviews" TO "authenticated";
+
+
+
+GRANT SELECT("customer_id"),INSERT("customer_id") ON TABLE "public"."reviews" TO "authenticated";
+
+
+
+GRANT SELECT("booster_id"),INSERT("booster_id") ON TABLE "public"."reviews" TO "authenticated";
+GRANT SELECT("booster_id") ON TABLE "public"."reviews" TO "anon";
+
+
+
+GRANT SELECT("rating"),INSERT("rating") ON TABLE "public"."reviews" TO "authenticated";
+GRANT SELECT("rating") ON TABLE "public"."reviews" TO "anon";
+
+
+
+GRANT SELECT("content"),INSERT("content") ON TABLE "public"."reviews" TO "authenticated";
+GRANT SELECT("content") ON TABLE "public"."reviews" TO "anon";
+
+
+
+GRANT SELECT("is_public") ON TABLE "public"."reviews" TO "anon";
+GRANT SELECT("is_public") ON TABLE "public"."reviews" TO "authenticated";
+
+
+
+GRANT SELECT("created_at") ON TABLE "public"."reviews" TO "anon";
+GRANT SELECT("created_at") ON TABLE "public"."reviews" TO "authenticated";
+
+
+
+GRANT SELECT ON TABLE "public"."riot_league_cutoffs" TO "authenticated";
 GRANT ALL ON TABLE "public"."riot_league_cutoffs" TO "service_role";
+GRANT SELECT ON TABLE "public"."riot_league_cutoffs" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."service_extras" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."service_extras" TO "authenticated";
+GRANT ALL ON TABLE "public"."riot_lookup_cache" TO "service_role";
+
+
+
+GRANT SELECT ON TABLE "public"."service_extras" TO "authenticated";
 GRANT ALL ON TABLE "public"."service_extras" TO "service_role";
+GRANT SELECT ON TABLE "public"."service_extras" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."services" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."services" TO "authenticated";
+GRANT SELECT ON TABLE "public"."services" TO "authenticated";
 GRANT ALL ON TABLE "public"."services" TO "service_role";
+GRANT SELECT ON TABLE "public"."services" TO "anon";
 
 
 
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."win_price_cents_catalog" TO "anon";
-GRANT SELECT,INSERT,DELETE,MAINTAIN,UPDATE ON TABLE "public"."win_price_cents_catalog" TO "authenticated";
+GRANT SELECT ON TABLE "public"."win_price_cents_catalog" TO "authenticated";
 GRANT ALL ON TABLE "public"."win_price_cents_catalog" TO "service_role";
-
-
-
-
-
-
+GRANT SELECT ON TABLE "public"."win_price_cents_catalog" TO "anon";
 
 
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";
 
 
@@ -11192,8 +12515,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQ
 
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "service_role";
 
 
@@ -11202,33 +12523,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUN
 
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

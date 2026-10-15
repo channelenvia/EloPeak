@@ -60,13 +60,13 @@ supabase/functions/.env
 supabase/functions/.env.local
 supabase/functions/.env.*
 
-# Copia local antiga do historico (234 arquivos, redundante): o historico agora
-# esta versionado em supabase/migrations_history/ e pode apagar esta pasta.
-supabase/migrations_archive/
-
-# Historico antigo de migrations: referencia LOCAL, nao versionado. O baseline em supabase/migrations/
-# ja contem o resultado de todas; os testes de regra de negocio sao pgTAP em supabase/tests/database/.
+# Historico antigo de migrations: referencia LOCAL, nao versionado (manter no disco, nunca apagar).
+# supabase/migrations/ = baseline (dump de producao) + migrations ainda nao aplicadas em producao;
+# os testes de regra de negocio sao pgTAP em supabase/tests/database/.
 supabase/migrations_history/
+
+# Dumps de producao gerados na regeneracao do baseline (nao versionar)
+supabase/.dump*.sql
 
 # Deploy tooling
 .vercel/
@@ -100,7 +100,7 @@ id_ed25519*
 CLAUDE.md
 .gitattributes
 supabase/snippets/
-scripts/
+/script/
 
 # Documentacao vive no grafo (graphify-out/); pendencias manuais ficam locais
 docs/

@@ -1,7 +1,36 @@
-import { lazy } from 'react'
+import { lazy, type ComponentType } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { RouteError } from '@/components/RouteError'
+import { useAuthStore } from '@/stores/authStore'
 import { SuspensePage, RequireAuth } from './routeGuards'
+
+// Páginas lazy agrupadas por papel: depois do login (ou no idle, pra visitante)
+// os chunks do papel são baixados em segundo plano, então trocar de aba no
+// painel não espera download nem mostra o PageLoader.
+type Group = 'pub' | 'cus' | 'boo' | 'adm'
+type Loader = () => Promise<{ default: ComponentType }>
+const loaders: Record<Group, Loader[]> = { pub: [], cus: [], boo: [], adm: [] }
+const grouped = (group: Group) => (loader: Loader) => {
+  loaders[group].push(loader)
+  return lazy(loader)
+}
+const pub = grouped('pub')
+const cus = grouped('cus')
+const boo = grouped('boo')
+const adm = grouped('adm')
+
+function preloadGroup(group: Group) {
+  const run = () => { for (const load of loaders[group]) void load().catch(() => {}) }
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run)
+  else setTimeout(run, 1500)
+}
+
+let preloadedRole: string | undefined
+function preloadForRole(role: string | undefined) {
+  if (role === preloadedRole) return
+  preloadedRole = role
+  preloadGroup(role === 'customer' ? 'cus' : role === 'booster' ? 'boo' : role === 'admin' ? 'adm' : 'pub')
+}
 
 // Layouts (eager — pequenos, reutilizados em toda a sessão)
 import { PublicLayout } from '@/features/public/PublicLayout'
@@ -10,51 +39,51 @@ import { BoosterLayout } from '@/features/booster/BoosterLayout'
 import { AdminLayout } from '@/features/admin/AdminLayout'
 
 // Public pages
-const NotFoundPage     = lazy(() => import('@/features/public/pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
-const HomePage         = lazy(() => import('@/features/public/pages/HomePage').then(m => ({ default: m.HomePage })))
-const ServicesPage     = lazy(() => import('@/features/public/pages/ServicesPage').then(m => ({ default: m.ServicesPage })))
-const PricingPage      = lazy(() => import('@/features/public/pages/PricingPage').then(m => ({ default: m.PricingPage })))
-const SecurityPage     = lazy(() => import('@/features/public/pages/SecurityPage').then(m => ({ default: m.SecurityPage })))
-const FAQPage          = lazy(() => import('@/features/public/pages/FAQPage').then(m => ({ default: m.FAQPage })))
-const BoosterApplyPage = lazy(() => import('@/features/public/pages/BoosterApplyPage').then(m => ({ default: m.BoosterApplyPage })))
-const BoostersPage               = lazy(() => import('@/features/public/pages/BoostersPage').then(m => ({ default: m.BoostersPage })))
-const BoosterPublicProfilePage   = lazy(() => import('@/features/public/pages/BoosterPublicProfilePage').then(m => ({ default: m.BoosterPublicProfilePage })))
-const TermsPage                   = lazy(() => import('@/features/public/pages/LegalPages').then(m => ({ default: m.TermsPage })))
-const PrivacyPage                 = lazy(() => import('@/features/public/pages/LegalPages').then(m => ({ default: m.PrivacyPage })))
+const NotFoundPage     = pub(() => import('@/features/public/pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
+const HomePage         = pub(() => import('@/features/public/pages/HomePage').then(m => ({ default: m.HomePage })))
+const ServicesPage     = pub(() => import('@/features/public/pages/ServicesPage').then(m => ({ default: m.ServicesPage })))
+const PricingPage      = pub(() => import('@/features/public/pages/PricingPage').then(m => ({ default: m.PricingPage })))
+const SecurityPage     = pub(() => import('@/features/public/pages/SecurityPage').then(m => ({ default: m.SecurityPage })))
+const FAQPage          = pub(() => import('@/features/public/pages/FAQPage').then(m => ({ default: m.FAQPage })))
+const BoosterApplyPage = pub(() => import('@/features/public/pages/BoosterApplyPage').then(m => ({ default: m.BoosterApplyPage })))
+const BoostersPage               = pub(() => import('@/features/public/pages/BoostersPage').then(m => ({ default: m.BoostersPage })))
+const BoosterPublicProfilePage   = pub(() => import('@/features/public/pages/BoosterPublicProfilePage').then(m => ({ default: m.BoosterPublicProfilePage })))
+const TermsPage                   = pub(() => import('@/features/public/pages/LegalPages').then(m => ({ default: m.TermsPage })))
+const PrivacyPage                 = pub(() => import('@/features/public/pages/LegalPages').then(m => ({ default: m.PrivacyPage })))
 
 // Auth pages
-const LoginPage          = lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.LoginPage })))
+const LoginPage          = pub(() => import('@/features/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 
 // Customer pages
-const CustomerDashboard = lazy(() => import('@/features/customer/pages/Dashboard').then(m => ({ default: m.CustomerDashboard })))
-const OrderBuilderPage  = lazy(() => import('@/features/customer/pages/OrderBuilder').then(m => ({ default: m.OrderBuilderPage })))
-const OrderDetailPage   = lazy(() => import('@/features/customer/pages/OrderDetail').then(m => ({ default: m.OrderDetailPage })))
-const OrderHistoryPage  = lazy(() => import('@/features/customer/pages/OrderHistory').then(m => ({ default: m.OrderHistoryPage })))
+const CustomerDashboard = cus(() => import('@/features/customer/pages/Dashboard').then(m => ({ default: m.CustomerDashboard })))
+const OrderBuilderPage  = cus(() => import('@/features/customer/pages/OrderBuilder').then(m => ({ default: m.OrderBuilderPage })))
+const OrderDetailPage   = cus(() => import('@/features/customer/pages/OrderDetail').then(m => ({ default: m.OrderDetailPage })))
+const OrderHistoryPage  = cus(() => import('@/features/customer/pages/OrderHistory').then(m => ({ default: m.OrderHistoryPage })))
 
 // Booster pages
-const BoosterDashboard    = lazy(() => import('@/features/booster/pages/Dashboard').then(m => ({ default: m.BoosterDashboard })))
-const AvailableJobsPage   = lazy(() => import('@/features/booster/pages/AvailableJobs').then(m => ({ default: m.AvailableJobsPage })))
-const JobDetailPage       = lazy(() => import('@/features/booster/pages/JobDetail').then(m => ({ default: m.JobDetailPage })))
-const BoosterOrdersPage   = lazy(() => import('@/features/booster/pages/Orders').then(m => ({ default: m.BoosterOrdersPage })))
-const BoosterAccountsPage = lazy(() => import('@/features/booster/pages/Accounts').then(m => ({ default: m.BoosterAccountsPage })))
-const BoosterPaymentsPage = lazy(() => import('@/features/booster/pages/Payments').then(m => ({ default: m.BoosterPaymentsPage })))
-const BoosterServicesPage = lazy(() => import('@/features/booster/pages/Services').then(m => ({ default: m.BoosterServicesPage })))
+const BoosterDashboard    = boo(() => import('@/features/booster/pages/Dashboard').then(m => ({ default: m.BoosterDashboard })))
+const AvailableJobsPage   = boo(() => import('@/features/booster/pages/AvailableJobs').then(m => ({ default: m.AvailableJobsPage })))
+const JobDetailPage       = boo(() => import('@/features/booster/pages/JobDetail').then(m => ({ default: m.JobDetailPage })))
+const BoosterOrdersPage   = boo(() => import('@/features/booster/pages/Orders').then(m => ({ default: m.BoosterOrdersPage })))
+const BoosterAccountsPage = boo(() => import('@/features/booster/pages/Accounts').then(m => ({ default: m.BoosterAccountsPage })))
+const BoosterPaymentsPage = boo(() => import('@/features/booster/pages/Payments').then(m => ({ default: m.BoosterPaymentsPage })))
+const BoosterServicesPage = boo(() => import('@/features/booster/pages/Services').then(m => ({ default: m.BoosterServicesPage })))
 
 // Admin pages
-const AdminOverview       = lazy(() => import('@/features/admin/pages/Overview').then(m => ({ default: m.AdminOverview })))
-const AdminOrdersPage     = lazy(() => import('@/features/admin/pages/Orders').then(m => ({ default: m.AdminOrdersPage })))
-const AdminOrderDetailPage = lazy(() => import('@/features/admin/pages/OrderDetail').then(m => ({ default: m.AdminOrderDetailPage })))
-const AdminBoostersPage   = lazy(() => import('@/features/admin/pages/Boosters').then(m => ({ default: m.AdminBoostersPage })))
-const AdminBoosterDetailPage = lazy(() => import('@/features/admin/pages/BoosterDetail').then(m => ({ default: m.AdminBoosterDetailPage })))
-const AdminCustomersPage  = lazy(() => import('@/features/admin/pages/Customers').then(m => ({ default: m.AdminCustomersPage })))
-const AdminCustomerDetailPage = lazy(() => import('@/features/admin/pages/CustomerDetail').then(m => ({ default: m.AdminCustomerDetailPage })))
-const AdminPaymentsPage   = lazy(() => import('@/features/admin/pages/Payments').then(m => ({ default: m.AdminPaymentsPage })))
-const AdminPayoutsPage    = lazy(() => import('@/features/admin/pages/Payouts').then(m => ({ default: m.AdminPayoutsPage })))
-const AdminRefundsPage    = lazy(() => import('@/features/admin/pages/Refunds').then(m => ({ default: m.AdminRefundsPage })))
-const AdminDropsPage      = lazy(() => import('@/features/admin/pages/Drops').then(m => ({ default: m.AdminDropsPage })))
-const AdminDuoAccountsPage = lazy(() => import('@/features/admin/pages/DuoAccounts').then(m => ({ default: m.AdminDuoAccountsPage })))
-const AdminReviewsPage    = lazy(() => import('@/features/admin/pages/Reviews').then(m => ({ default: m.AdminReviewsPage })))
-const AdminAuditLogPage   = lazy(() => import('@/features/admin/pages/AuditLog').then(m => ({ default: m.AdminAuditLogPage })))
+const AdminOverview       = adm(() => import('@/features/admin/pages/Overview').then(m => ({ default: m.AdminOverview })))
+const AdminOrdersPage     = adm(() => import('@/features/admin/pages/Orders').then(m => ({ default: m.AdminOrdersPage })))
+const AdminOrderDetailPage = adm(() => import('@/features/admin/pages/OrderDetail').then(m => ({ default: m.AdminOrderDetailPage })))
+const AdminBoostersPage   = adm(() => import('@/features/admin/pages/Boosters').then(m => ({ default: m.AdminBoostersPage })))
+const AdminBoosterDetailPage = adm(() => import('@/features/admin/pages/BoosterDetail').then(m => ({ default: m.AdminBoosterDetailPage })))
+const AdminCustomersPage  = adm(() => import('@/features/admin/pages/Customers').then(m => ({ default: m.AdminCustomersPage })))
+const AdminCustomerDetailPage = adm(() => import('@/features/admin/pages/CustomerDetail').then(m => ({ default: m.AdminCustomerDetailPage })))
+const AdminPaymentsPage   = adm(() => import('@/features/admin/pages/Payments').then(m => ({ default: m.AdminPaymentsPage })))
+const AdminPayoutsPage    = adm(() => import('@/features/admin/pages/Payouts').then(m => ({ default: m.AdminPayoutsPage })))
+const AdminRefundsPage    = adm(() => import('@/features/admin/pages/Refunds').then(m => ({ default: m.AdminRefundsPage })))
+const AdminDropsPage      = adm(() => import('@/features/admin/pages/Drops').then(m => ({ default: m.AdminDropsPage })))
+const AdminDuoAccountsPage = adm(() => import('@/features/admin/pages/DuoAccounts').then(m => ({ default: m.AdminDuoAccountsPage })))
+const AdminReviewsPage    = adm(() => import('@/features/admin/pages/Reviews').then(m => ({ default: m.AdminReviewsPage })))
+const AdminAuditLogPage   = adm(() => import('@/features/admin/pages/AuditLog').then(m => ({ default: m.AdminAuditLogPage })))
 
 export const router = createBrowserRouter([
   // Public routes
@@ -180,3 +209,5 @@ export const router = createBrowserRouter([
   // Fallback
   { path: '*', element: <SuspensePage><NotFoundPage /></SuspensePage> },
 ])
+
+useAuthStore.subscribe((s) => { if (s.isInitialized && !s.isLoading) preloadForRole(s.profile?.role) })

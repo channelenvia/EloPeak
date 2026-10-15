@@ -77,7 +77,7 @@ export function usePublicBoosters() {
     // Refetch periódico pro badge "Online" (derivado de last_active_at, ver
     // isBoosterOnline em lib/utils.ts) refletir presença em near-real-time --
     // mesmo intervalo já usado em useAdminOrders/booster-month-orders.
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'public-boosters',
@@ -97,7 +97,7 @@ export function usePublicBooster(displayName: string | undefined) {
     // Mesmo refetch periódico do usePublicBoosters, pro badge "Online" do
     // perfil (derivado de last_active_at, ver isBoosterOnline em lib/utils.ts)
     // não ficar defasado em relação ao card da listagem.
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: `public-booster-${displayName ?? 'none'}`,
@@ -145,7 +145,7 @@ export function useAdminBoosters(status?: string) {
   const query = useQuery({
     queryKey: queryKeys.boosters.adminList({ status }),
     queryFn: () => listAdminBoosters(status),
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-boosters',
@@ -172,7 +172,7 @@ export function useAdminBoosterDetail(boosterId: string | undefined) {
     queryKey: queryKeys.boosters.adminDetail(boosterId ?? ''),
     queryFn: () => getAdminBoosterDetail(boosterId!),
     enabled: !!boosterId,
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: `admin-booster-detail-${boosterId ?? 'none'}`,

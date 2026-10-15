@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
 import type { OrderStatus, ServiceType } from '@/types'
@@ -29,7 +29,7 @@ export function useOrder(orderId: string | undefined) {
     queryKey: queryKeys.orders.detail(orderId ?? ''),
     queryFn: () => getOrder(orderId!),
     enabled: !!orderId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: `order-${orderId ?? 'none'}`,
@@ -89,7 +89,7 @@ export function useBoosterOrder(orderId: string | undefined) {
     queryKey: queryKeys.orders.detail(orderId ?? ''),
     queryFn: () => getBoosterOrder(orderId!),
     enabled: !!orderId,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   })
   useRealtimeInvalidate({
     channel: `booster-order-${orderId ?? 'none'}`,
@@ -107,7 +107,8 @@ export function useCustomerOrders(customerId: string | undefined, tab: OrderList
     queryKey: queryKeys.orders.customerList(customerId ?? '', { tab, limit, includeCanceled }),
     queryFn: () => listCustomerOrders(customerId!, tab, limit, includeCanceled),
     enabled: !!customerId,
-    refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
   })
   // Sem filter= aqui de propósito -- order_status_events não tem coluna
   // customer_id pra filtrar na assinatura. RLS da própria tabela (migration
@@ -131,7 +132,7 @@ export function useCustomerOrderTabCounts(customerId: string | undefined) {
     queryKey: queryKeys.orders.customerTabCounts(customerId ?? ''),
     queryFn: () => getCustomerOrderTabCounts(customerId!),
     enabled: !!customerId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 }
 
@@ -157,7 +158,7 @@ export function useAvailableJobs() {
   const query = useQuery({
     queryKey: queryKeys.orders.availableJobs(),
     queryFn: () => listAvailableJobs(),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'available-jobs',
@@ -175,7 +176,8 @@ export function useBoosterOrdersPage(boosterId: string | undefined, tab: OrderLi
     queryKey: queryKeys.orders.boosterList(boosterId ?? '', { tab, page, pageSize, includeCanceled }),
     queryFn: () => listBoosterOrdersPage({ boosterId: boosterId!, tab, offset: page - 1, pageSize, includeCanceled }),
     enabled: !!boosterId,
-    refetchInterval: 30_000,
+    placeholderData: keepPreviousData, // troca de aba/página sem piscar o loader
+    refetchInterval: 60_000,
   })
   // Sem isso, a lista "Meus pedidos" do booster (diferente da tela de
   // detalhe de UM pedido, que já tem sua própria assinatura) só refletia
@@ -201,7 +203,7 @@ export function useBoosterOrderTabCounts(boosterId: string | undefined) {
     queryKey: queryKeys.orders.boosterTabCounts(boosterId ?? ''),
     queryFn: () => getBoosterOrderTabCounts(boosterId!),
     enabled: !!boosterId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 }
 
@@ -209,7 +211,8 @@ export function useAdminOrders(tab: OrderListTab = 'all', serviceType?: ServiceT
   const query = useQuery({
     queryKey: queryKeys.orders.adminList({ status: tab, serviceType, includeCanceled }),
     queryFn: () => listAdminOrders(tab, serviceType, undefined, includeCanceled),
-    refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000, // realtime (abaixo) cobre o imediato; poll é só fallback
   })
   useRealtimeInvalidate({
     channel: 'admin-orders',
@@ -226,7 +229,7 @@ export function useAdminOrderTabCounts() {
   return useQuery({
     queryKey: queryKeys.orders.adminTabCounts(),
     queryFn: getAdminOrderTabCounts,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 }
 
@@ -302,7 +305,7 @@ export function usePendingDropRequest(orderId: string | undefined) {
     queryKey: queryKeys.orders.dropRequest(orderId ?? ''),
     queryFn: () => getPendingDropRequest(orderId!),
     enabled: !!orderId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   // Sem isso, o banner "pedido travado" ficava até 30s desatualizado depois
   // do admin aprovar/rejeitar -- order_drop_requests não tinha nenhuma
@@ -322,7 +325,7 @@ export function useCustomerOrderState(orderId: string | undefined) {
     queryKey: queryKeys.orders.state(orderId ?? ''),
     queryFn: () => getCustomerOrderState(orderId),
     enabled: !!orderId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   // can_confirm_completion/requires_credentials só eram recalculados por
   // mutations locais (ex.: o próprio cliente confirmando) -- sem isso, o

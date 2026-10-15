@@ -54,7 +54,7 @@ export function useNotifications(userId: string | undefined) {
     queryKey: queryKeys.notifications.list(userId ?? ''),
     queryFn: () => listNotifications(userId!),
     enabled: !!userId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 
   useRealtimeInvalidate({
@@ -80,7 +80,7 @@ export function useUnreadNotificationsCount(userId: string | undefined, channelS
     queryKey: queryKeys.notifications.unreadCount(userId ?? ''),
     queryFn: () => getUnreadNotificationsCount(userId!),
     enabled: !!userId,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 
   useRealtimeInvalidate({

@@ -14,7 +14,7 @@ export function useBoosterDuoAccounts() {
   const query = useQuery({
     queryKey: queryKeys.duoAccounts.list(),
     queryFn: () => listDuoAccounts<BoosterVisibleDuoAccount>(),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'booster-duo-accounts',
@@ -29,7 +29,7 @@ export function useAdminDuoAccounts() {
   const query = useQuery({
     queryKey: queryKeys.duoAccounts.adminList(),
     queryFn: listAdminDuoAccounts,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-duo-accounts',

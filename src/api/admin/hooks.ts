@@ -12,7 +12,7 @@ export function useAdminReviewCases() {
   const query = useQuery({
     queryKey: queryKeys.admin.reviewCases(),
     queryFn: listAdminReviewCases,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-review-cases',
@@ -75,7 +75,7 @@ export function useAdminDashboardStats() {
   const query = useQuery({
     queryKey: queryKeys.admin.dashboardStats(),
     queryFn: getAdminDashboardStats,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-dashboard-stats',
@@ -90,7 +90,7 @@ export function useAdminRefunds() {
   const query = useQuery({
     queryKey: queryKeys.admin.refunds(),
     queryFn: () => listAdminRefunds(),
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-refunds',
@@ -104,7 +104,7 @@ export function useAdminPayments() {
   const query = useQuery({
     queryKey: queryKeys.admin.payments(),
     queryFn: () => listAdminPayments(),
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-payments',
@@ -118,7 +118,7 @@ export function useAdminDropRequests() {
   const query = useQuery({
     queryKey: queryKeys.admin.drops(),
     queryFn: () => listAdminDropRequests(),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
   useRealtimeInvalidate({
     channel: 'admin-drop-requests',

@@ -144,6 +144,15 @@ async function orderTabCounts(
   ownerFilter?: { column: 'customer_id' | 'assigned_booster_id'; value: string },
   statusesForTab: (tab: OrderListTab) => OrderStatus[] | null = orderListTabStatuses,
 ): Promise<OrderListTabCounts> {
+  // 1 request (RPC order_tab_counts). Se a migration ainda não foi aplicada,
+  // cai no caminho antigo (várias consultas HEAD) em vez de quebrar a UI.
+  const { data: rpcCounts, error: rpcError } = await supabase.rpc('order_tab_counts' as never, {
+    p_owner: ownerFilter ? (ownerFilter.column === 'customer_id' ? 'customer' : 'booster') : null,
+    p_owner_id: ownerFilter?.value ?? null,
+    p_admin: statusesForTab === adminOrderListTabStatuses,
+  } as never)
+  if (!rpcError && rpcCounts) return rpcCounts as unknown as OrderListTabCounts
+
   async function countStatuses(statuses: OrderStatus[] | null): Promise<number> {
     let query = supabase.from('orders').select('id', { count: 'exact', head: true })
     if (ownerFilter) query = query.eq(ownerFilter.column, ownerFilter.value)

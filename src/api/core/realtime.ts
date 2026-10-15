@@ -34,6 +34,7 @@ export function useRealtimeInvalidate({
     if (!enabled) return
     let cancelled = false
     let subscribedBefore = false
+    let debounce: ReturnType<typeof setTimeout> | undefined
     let subscription: ReturnType<typeof supabase.channel> | null = null
 
     async function setup() {
@@ -55,7 +56,12 @@ export function useRealtimeInvalidate({
       subscription = supabase
         .channel(channelName)
         .on('postgres_changes', config, () => {
-          for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
+          // Rajada de eventos (ex.: vários status de um pedido de uma vez) vira
+          // um único refetch -- invalidateQueries cancela e reinicia o fetch em andamento.
+          clearTimeout(debounce)
+          debounce = setTimeout(() => {
+            for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
+          }, 250)
         })
         .subscribe((status) => {
           if (status !== 'SUBSCRIBED') return
@@ -69,6 +75,7 @@ export function useRealtimeInvalidate({
 
     return () => {
       cancelled = true
+      clearTimeout(debounce)
       if (subscription) void supabase.removeChannel(subscription)
     }
     // queryKeys é recriado a cada render por design (chaves derivadas de

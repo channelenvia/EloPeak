@@ -13,8 +13,8 @@ begin
   for v_job in
     select * from (values
       ('announce-expired-exclusive-jobs',        '*/5 * * * *',    'announce-expired-exclusive-jobs',        'discord_exclusive_job_cron_secret',      15000),
-      ('discord-top3-announcement',               '0 12 15,30 * *', 'discord-top3-announcement',               'discord_top3_cron_secret',               15000),
-      ('discord-payout-window-reminder',          '0 12 15,30 * *', 'discord-payout-window-reminder',          'discord_payout_reminder_cron_secret',    30000),
+      ('discord-top3-announcement',               '0 12 * * *',     'discord-top3-announcement',               'discord_top3_cron_secret',               15000),
+      ('discord-payout-window-reminder',          '0 12 * * *',     'discord-payout-window-reminder',          'discord_payout_reminder_cron_secret',    30000),
       ('discord-customer-inactivity-reminder',    '0 13 * * *',     'discord-customer-inactivity-reminder',    'discord_inactivity_reminder_cron_secret', 30000),
       ('cron-sync-order-matches',                 '*/30 * * * *',   'cron-sync-order-matches',                 'cron_sync_order_matches_secret',         120000),
       ('announce-stale-awaiting-assignment-jobs', '*/5 * * * *',    'announce-stale-awaiting-assignment-jobs', 'discord_awaiting_assignment_cron_secret', 15000)
@@ -26,7 +26,10 @@ begin
     end if;
     perform cron.schedule(
       v_job.job_name, v_job.schedule,
-      format($c$select net.http_post(
+      -- top3 e lembrete de saque rodam todo dia e so agem na janela de saque.
+      case when v_job.fn in ('discord-top3-announcement', 'discord-payout-window-reminder')
+           then 'select case when public.is_payout_window_day() then (' else 'select (' end ||
+      format($c$net.http_post(
         url := 'https://yrynfqjxqblrbxxiobty.supabase.co/functions/v1/%s',
         headers := jsonb_build_object(
           'Content-Type', 'application/json',
@@ -35,7 +38,9 @@ begin
         ),
         body := '{}'::jsonb,
         timeout_milliseconds := %s
-      );$c$, v_job.fn, v_anon, v_job.secret_name, v_job.timeout_ms));
+      )$c$, v_job.fn, v_anon, v_job.secret_name, v_job.timeout_ms) ||
+      case when v_job.fn in ('discord-top3-announcement', 'discord-payout-window-reminder')
+           then ') end;' else ');' end);
   end loop;
 end
 $cron$;
