@@ -25,6 +25,13 @@ export async function fetchBoosterPayoutRequests(boosterId: string): Promise<Pay
   return data ?? []
 }
 
+// CPF do snapshot fica cifrado; admin lê por RPC (gera audit_logs 'payout_request.cpf_viewed').
+export async function fetchAdminPayoutCpf(requestId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('admin_get_payout_cpf', { p_request_id: requestId })
+  if (error) throw normalizeApiError(error)
+  return data ?? null
+}
+
 export async function fetchAdminPayoutRequests(status?: PayoutRequestRow['status']): Promise<PayoutRequestRow[]> {
   let query = supabase.from('payout_requests').select('*').order('created_at', { ascending: false })
   if (status) query = query.eq('status', status)

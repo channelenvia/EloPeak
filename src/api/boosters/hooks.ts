@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/core/queryKeys'
 import { useRealtimeInvalidate } from '@/api/core/realtime'
 import {
-  getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
+  getAdminBoosterCpf, getAdminBoosterDetail, getAssignedBoosterProfile, getBoosterAccessState, getBoosterPerformanceByRank, getOwnBoosterDisplayName,
   getOwnBoosterTop3Status, getOwnProfessionalProfile, getPublicBooster, getTopBoosters, listAdminBoosters,
   listBoosterAdminNotes, listBoostersPerformance, listBoostersWithSlots, listBoosterNames, listPublicBoosters,
   getOwnBoosterSlotEligibility, getOwnBoosterFullProfile,
@@ -164,6 +164,15 @@ export function useBoostersWithSlots(enabled: boolean) {
     queryKey: queryKeys.boosters.slots(),
     queryFn: listBoostersWithSlots,
     enabled,
+  })
+}
+
+export function useAdminBoosterCpf(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['boosters', 'admin-cpf', userId ?? ''],
+    queryFn: () => getAdminBoosterCpf(userId!),
+    enabled: !!userId,
+    staleTime: 5 * 60_000,
   })
 }
 

@@ -6,14 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Banknote, CheckCircle2, Clock3, FileText, ShieldCheck, Upload, XCircle } from 'lucide-react'
 import { Button, Card, EmptyState, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
-import { cn, formatDateTime, maskCpf, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
+import { cn, formatDateTime, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
 import { useCurrency } from '@/hooks/useCurrency'
 import {
   useAdminPayoutRequests, useAdminReviewPayoutRequest, useAdminMarkPayoutPaid, usePayoutRequestBreakdown,
 } from '@/api/payouts'
-import { uploadPayoutProof, getPayoutProofSignedUrl } from '@/api/payouts'
+import { uploadPayoutProof, getPayoutProofSignedUrl, fetchAdminPayoutCpf } from '@/api/payouts'
+import { useQuery } from '@tanstack/react-query'
 import type { PayoutRequestRow, PayoutRequestStatus } from '@/api/payouts'
 
 const STATUS_LABEL = PAYOUT_REQUEST_STATUS_LABEL
@@ -102,6 +103,8 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
     review.mutate({ requestId: request.id, newStatus: 'rejected', note: data.note.trim() }, { onSuccess: onClose })
   }
 
+  const { data: fullCpf } = useQuery({ queryKey: ['payouts', 'admin-cpf', request.id], queryFn: () => fetchAdminPayoutCpf(request.id), staleTime: 5 * 60_000 })
+
   async function handleViewProof() {
     if (!request.proof_url) return
     const url = await getPayoutProofSignedUrl(request.proof_url)
@@ -112,7 +115,7 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
     <Modal open onOpenChange={(open) => !open && onClose()} title={`Solicitação de saque · ${request.booster_legal_name_snapshot ?? request.booster_id.slice(0, 8)}`}>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><p className="text-xs text-ink-muted">CPF</p><p className="font-semibold text-ink" data-tabular>{request.booster_cpf_snapshot ?? '—'}</p></div>
+          <div><p className="text-xs text-ink-muted">CPF</p><p className="font-semibold text-ink" data-tabular>{fullCpf ?? request.booster_cpf_snapshot ?? '—'}</p></div>
           <div><p className="text-xs text-ink-muted">Nome legal</p><p className="font-semibold text-ink">{request.booster_legal_name_snapshot ?? '—'}</p></div>
           <div><p className="text-xs text-ink-muted">Valor solicitado</p><p className="font-bold text-ink" data-tabular>{currency(request.amount)}</p></div>
           <div><p className="text-xs text-ink-muted">Status</p><StatusBadge status={request.status} /></div>
@@ -257,7 +260,7 @@ export function AdminPayoutsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink text-sm truncate">{row.booster_legal_name_snapshot ?? '—'}</p>
-                  <p className="text-xs text-ink-muted" data-tabular>{maskCpf(row.booster_cpf_snapshot)}</p>
+                  <p className="text-xs text-ink-muted" data-tabular>{row.booster_cpf_snapshot ?? '—'}</p>
                 </div>
                 <StatusBadge status={row.status} />
               </div>

@@ -20,11 +20,15 @@ export interface BoosterPanelFields {
 export async function getBoosterPanelFields(userId: string): Promise<BoosterPanelFields | null> {
   const { data, error } = await supabase
     .from('booster_profiles')
-    .select('display_name, display_name_changed_at, full_name, cpf')
+    .select('display_name, display_name_changed_at, full_name')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw normalizeApiError(error)
-  return data
+  if (!data) return null
+  // CPF fica cifrado no banco; só o dono lê (get_my_cpf).
+  const { data: cpf, error: cpfError } = await supabase.rpc('get_my_cpf')
+  if (cpfError) throw normalizeApiError(cpfError)
+  return { ...data, cpf: cpf ?? null }
 }
 
 export async function updateMyAvatar(params: { userId: string; avatarUrl: string }) {

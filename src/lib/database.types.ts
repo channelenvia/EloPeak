@@ -250,13 +250,13 @@ isOneToOne: false
                   ]
                 },"booster_profiles": {
                   Row: {
-                    "available_days": (string)[] | null,"bio": string | null,"cpf": string | null,"created_at": string,"current_rank": Json | null,"display_name": string,"display_name_changed_at": string | null,"email": string | null,"full_name": string | null,"games": (string)[],"hours_per_day_max": number | null,"hours_per_day_min": number | null,"id": string,"is_top3": boolean,"lanes": (string)[] | null,"last_active_at": string | null,"opgg_link": string | null,"opgg_link_visible": boolean,"peak_rank": Json | null,"rating": number,"rating_count": number,"specialties": (string)[] | null,"status": Database["public"]['Enums']["booster_status"],"suspended_until": string | null,"total_completed": number,"total_earnings": number,"updated_at": string,"user_id": string,"verified_at": string | null
+                    "available_days": (string)[] | null,"bio": string | null,"cpf": string | null,"cpf_enc": string | null,"cpf_hash": string | null,"created_at": string,"current_rank": Json | null,"display_name": string,"display_name_changed_at": string | null,"email": string | null,"full_name": string | null,"games": (string)[],"hours_per_day_max": number | null,"hours_per_day_min": number | null,"id": string,"is_top3": boolean,"lanes": (string)[] | null,"last_active_at": string | null,"opgg_link": string | null,"opgg_link_visible": boolean,"peak_rank": Json | null,"rating": number,"rating_count": number,"specialties": (string)[] | null,"status": Database["public"]['Enums']["booster_status"],"suspended_until": string | null,"total_completed": number,"total_earnings": number,"updated_at": string,"user_id": string,"verified_at": string | null
                   }
                   Insert: {
-                    "available_days"?: (string)[] | null,"bio"?: string | null,"cpf"?: string | null,"created_at"?: string,"current_rank"?: Json | null,"display_name": string,"display_name_changed_at"?: string | null,"email"?: string | null,"full_name"?: string | null,"games"?: (string)[],"hours_per_day_max"?: number | null,"hours_per_day_min"?: number | null,"id"?: string,"is_top3"?: boolean,"lanes"?: (string)[] | null,"last_active_at"?: string | null,"opgg_link"?: string | null,"opgg_link_visible"?: boolean,"peak_rank"?: Json | null,"rating"?: number,"rating_count"?: number,"specialties"?: (string)[] | null,"status"?: Database["public"]['Enums']["booster_status"],"suspended_until"?: string | null,"total_completed"?: number,"total_earnings"?: number,"updated_at"?: string,"user_id": string,"verified_at"?: string | null
+                    "available_days"?: (string)[] | null,"bio"?: string | null,"cpf"?: string | null,"cpf_enc"?: string | null,"cpf_hash"?: string | null,"created_at"?: string,"current_rank"?: Json | null,"display_name": string,"display_name_changed_at"?: string | null,"email"?: string | null,"full_name"?: string | null,"games"?: (string)[],"hours_per_day_max"?: number | null,"hours_per_day_min"?: number | null,"id"?: string,"is_top3"?: boolean,"lanes"?: (string)[] | null,"last_active_at"?: string | null,"opgg_link"?: string | null,"opgg_link_visible"?: boolean,"peak_rank"?: Json | null,"rating"?: number,"rating_count"?: number,"specialties"?: (string)[] | null,"status"?: Database["public"]['Enums']["booster_status"],"suspended_until"?: string | null,"total_completed"?: number,"total_earnings"?: number,"updated_at"?: string,"user_id": string,"verified_at"?: string | null
                   }
                   Update: {
-                    "available_days"?: (string)[] | null,"bio"?: string | null,"cpf"?: string | null,"created_at"?: string,"current_rank"?: Json | null,"display_name"?: string,"display_name_changed_at"?: string | null,"email"?: string | null,"full_name"?: string | null,"games"?: (string)[],"hours_per_day_max"?: number | null,"hours_per_day_min"?: number | null,"id"?: string,"is_top3"?: boolean,"lanes"?: (string)[] | null,"last_active_at"?: string | null,"opgg_link"?: string | null,"opgg_link_visible"?: boolean,"peak_rank"?: Json | null,"rating"?: number,"rating_count"?: number,"specialties"?: (string)[] | null,"status"?: Database["public"]['Enums']["booster_status"],"suspended_until"?: string | null,"total_completed"?: number,"total_earnings"?: number,"updated_at"?: string,"user_id"?: string,"verified_at"?: string | null
+                    "available_days"?: (string)[] | null,"bio"?: string | null,"cpf"?: string | null,"cpf_enc"?: string | null,"cpf_hash"?: string | null,"created_at"?: string,"current_rank"?: Json | null,"display_name"?: string,"display_name_changed_at"?: string | null,"email"?: string | null,"full_name"?: string | null,"games"?: (string)[],"hours_per_day_max"?: number | null,"hours_per_day_min"?: number | null,"id"?: string,"is_top3"?: boolean,"lanes"?: (string)[] | null,"last_active_at"?: string | null,"opgg_link"?: string | null,"opgg_link_visible"?: boolean,"peak_rank"?: Json | null,"rating"?: number,"rating_count"?: number,"specialties"?: (string)[] | null,"status"?: Database["public"]['Enums']["booster_status"],"suspended_until"?: string | null,"total_completed"?: number,"total_earnings"?: number,"updated_at"?: string,"user_id"?: string,"verified_at"?: string | null
                   }
                   Relationships: [
                     {
@@ -947,13 +947,13 @@ isOneToOne: false
                   ]
                 },"payout_requests": {
                   Row: {
-                    "admin_note": string | null,"amount": number,"booster_cpf_snapshot": string | null,"booster_id": string,"booster_legal_name_snapshot": string | null,"created_at": string,"id": string,"paid_at": string | null,"paid_by": string | null,"proof_url": string | null,"rejection_reason": string | null,"requested_at": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["payout_request_status"],"updated_at": string
+                    "admin_note": string | null,"amount": number,"booster_cpf_enc": string | null,"booster_cpf_snapshot": string | null,"booster_id": string,"booster_legal_name_snapshot": string | null,"created_at": string,"id": string,"paid_at": string | null,"paid_by": string | null,"proof_url": string | null,"rejection_reason": string | null,"requested_at": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": Database["public"]['Enums']["payout_request_status"],"updated_at": string
                   }
                   Insert: {
-                    "admin_note"?: string | null,"amount": number,"booster_cpf_snapshot"?: string | null,"booster_id": string,"booster_legal_name_snapshot"?: string | null,"created_at"?: string,"id"?: string,"paid_at"?: string | null,"paid_by"?: string | null,"proof_url"?: string | null,"rejection_reason"?: string | null,"requested_at"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["payout_request_status"],"updated_at"?: string
+                    "admin_note"?: string | null,"amount": number,"booster_cpf_enc"?: string | null,"booster_cpf_snapshot"?: string | null,"booster_id": string,"booster_legal_name_snapshot"?: string | null,"created_at"?: string,"id"?: string,"paid_at"?: string | null,"paid_by"?: string | null,"proof_url"?: string | null,"rejection_reason"?: string | null,"requested_at"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["payout_request_status"],"updated_at"?: string
                   }
                   Update: {
-                    "admin_note"?: string | null,"amount"?: number,"booster_cpf_snapshot"?: string | null,"booster_id"?: string,"booster_legal_name_snapshot"?: string | null,"created_at"?: string,"id"?: string,"paid_at"?: string | null,"paid_by"?: string | null,"proof_url"?: string | null,"rejection_reason"?: string | null,"requested_at"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["payout_request_status"],"updated_at"?: string
+                    "admin_note"?: string | null,"amount"?: number,"booster_cpf_enc"?: string | null,"booster_cpf_snapshot"?: string | null,"booster_id"?: string,"booster_legal_name_snapshot"?: string | null,"created_at"?: string,"id"?: string,"paid_at"?: string | null,"paid_by"?: string | null,"proof_url"?: string | null,"rejection_reason"?: string | null,"requested_at"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: Database["public"]['Enums']["payout_request_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1445,6 +1445,15 @@ isOneToOne: true
                            },
 "is_payout_window_day":
 { Args: { "p_at"?: string }; Returns: boolean
+                           },
+"get_my_cpf":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
+"admin_get_booster_cpf":
+{ Args: { "p_user_id": string }; Returns: string
+                           },
+"admin_get_payout_cpf":
+{ Args: { "p_request_id": string }; Returns: string
                            },
 "is_valid_cpf":
 { Args: { "p_cpf": string }; Returns: boolean

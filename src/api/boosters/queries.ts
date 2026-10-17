@@ -168,6 +168,13 @@ export async function getAdminBoosterDetail(boosterId: string): Promise<BoosterP
   return data as unknown as BoosterProfile
 }
 
+// CPF cifrado no banco: admin lê por RPC (gera audit_logs 'booster_profile.cpf_viewed').
+export async function getAdminBoosterCpf(userId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('admin_get_booster_cpf', { p_user_id: userId })
+  if (error) throw normalizeApiError(error)
+  return data ?? null
+}
+
 export async function listBoosterAdminNotes(): Promise<Map<string, BoosterAdminNote>> {
   const { data, error } = await supabase.from('booster_admin_notes').select('*')
   if (error) throw normalizeApiError(error)

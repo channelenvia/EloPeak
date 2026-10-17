@@ -6,7 +6,7 @@ import { Trophy, Swords, Users, ExternalLink, CheckCircle2, Wallet, Star } from 
 import { Card, BoosterStatusBadge, DetailPageHeader, OrderStatusBadge, Avatar, RankBadge, Skeleton } from '@/components/ui'
 import { formatDate, formatRank, formatLastSeen, safeOpggUrl, getOrderServiceName } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
-import { useAdminBoosterDetail } from '@/api/boosters'
+import { useAdminBoosterCpf, useAdminBoosterDetail } from '@/api/boosters'
 import { useBoosterSlotInfo, useBoosterOrdersPage } from '@/api/orders'
 import { RankPerformanceBreakdown } from '@/components/rank/RankPerformanceBreakdown'
 import type { Division, RankTier } from '@/types'
@@ -18,6 +18,7 @@ export function AdminBoosterDetailPage() {
   const currency = useCurrency()
 
   const { data: booster, isLoading, isError, error, refetch } = useAdminBoosterDetail(id)
+  const { data: cpf } = useAdminBoosterCpf(booster?.user_id)
   const { data: slotInfo } = useBoosterSlotInfo(booster?.user_id, booster?.status === 'approved')
   const { data: boosterOrders, isLoading: loadingOrders } = useBoosterOrdersPage(booster?.user_id, 'in_progress', 1, 8)
 
@@ -149,7 +150,7 @@ export function AdminBoosterDetailPage() {
                   {[
                     ['Nome completo', booster.full_name ?? '—'],
                     ['Email', booster.email ?? '—'],
-                    ['CPF', booster.cpf ? booster.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—'],
+                    ['CPF', cpf ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—'],
                   ].map(([l, v]) => (
                     <div key={l} className="min-w-0">
                       <p className="text-2xs text-ink-muted uppercase tracking-wide">{l}</p>
