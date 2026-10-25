@@ -66,6 +66,7 @@ export function DuoAccountSection({ order, onLinked }: { order: Order; onLinked?
   // conta do pool (DuoAccounts.tsx) -- só confere existência, não precisa
   // do rank aqui (não filtra/lista a conta própria em lugar nenhum).
   const saveOwnAccount = useMutation({
+    meta: { silentError: true }, // erro mostrado inline pela própria tela
     mutationFn: async () => {
       const trimmed = ownRiotId.trim()
       const lookup = await lookupDuoAccountRiotRank(trimmed)

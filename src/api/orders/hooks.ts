@@ -287,6 +287,7 @@ export function useOrderCoachingTopics(orderId: string | undefined) {
 export function useAddOrderCoachingTopic(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Tópico adicionado' },
     mutationFn: (content: string) => addOrderCoachingTopic({ orderId, content }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.orders.topics(orderId) }),
   })
@@ -354,9 +355,9 @@ export function useBoosterSlotInfo(boosterId: string | undefined, enabled: boole
 // Uma acao sobre o pedido muda tambem listas, abas com contadores e vagas do booster: invalida tudo isso junto
 // (antes so o detalhe e o estado, e as listas ficavam velhas ate o proximo poll).
 const ORDER_LIST_KEYS = [
-  ['orders', 'customer'], ['orders', 'booster'], ['orders', 'admin'],
-  ['orders', 'customer-tab-counts'], ['orders', 'booster-tab-counts'], ['orders', 'admin-tab-counts'],
-  ['orders', 'booster-active'], ['orders', 'available-jobs'], ['boosters', 'slots'],
+  queryKeys.orders.customerScope, queryKeys.orders.boosterScope, queryKeys.orders.adminScope,
+  queryKeys.orders.customerTabCountsScope, queryKeys.orders.boosterTabCountsScope, queryKeys.orders.adminTabCountsScope,
+  queryKeys.orders.boosterActiveScope, queryKeys.orders.availableJobs(), queryKeys.boosters.slots(),
 ] as const
 
 function invalidateOrderLists(queryClient: ReturnType<typeof useQueryClient>) {
@@ -372,6 +373,7 @@ function invalidateOrder(queryClient: ReturnType<typeof useQueryClient>, orderId
 export function useSetOrderCredentials(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Credenciais enviadas', silentError: true },
     mutationFn: setOrderCredentials,
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -380,6 +382,7 @@ export function useSetOrderCredentials(orderId: string) {
 export function useConfirmOrderCompletion(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conclusão confirmada' },
     mutationFn: () => confirmOrderCompletion(orderId),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -388,6 +391,7 @@ export function useConfirmOrderCompletion(orderId: string) {
 export function useDisputeOrderCompletion(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Contestação enviada' },
     mutationFn: (reason: string) => disputeOrderCompletion({ orderId, reason }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -396,6 +400,7 @@ export function useDisputeOrderCompletion(orderId: string) {
 export function useUpdateOrderStatus(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Status atualizado' },
     mutationFn: (newStatus: OrderStatus) => updateOrderStatus({ orderId, newStatus }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -404,6 +409,7 @@ export function useUpdateOrderStatus(orderId: string) {
 export function useAdminOverrideOrderStatus(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Status atualizado' },
     mutationFn: adminOverrideOrderStatus,
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -412,6 +418,7 @@ export function useAdminOverrideOrderStatus(orderId: string) {
 export function useAdminDropOrder(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Drop aplicado' },
     mutationFn: (params: { reason: string; coachingCompletionPct?: number }) => adminDropOrder({ orderId, ...params }),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -420,6 +427,7 @@ export function useAdminDropOrder(orderId: string) {
 export function useAdminReassignBooster(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Booster reatribuído' },
     mutationFn: (params: { targetBoosterId: string; reason: string; coachingCompletionPct?: number }) => adminReassignBooster({ orderId, ...params }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
@@ -431,6 +439,7 @@ export function useAdminReassignBooster(orderId: string) {
 export function useAdminFlagOrderUnderReview(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido marcado em revisão' },
     mutationFn: (reason: string) => adminFlagOrderUnderReview({ orderId, reason }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
@@ -449,7 +458,7 @@ export function useAdminFlagOrderUnderReview(orderId: string) {
 // (queryKeys.admin.refunds()) já se atualiza sozinha via realtime.
 export function useOrderSettlementPreview(orderId: string | undefined, coachingPct?: number) {
   return useQuery({
-    queryKey: ['orders', 'settlement-preview', orderId ?? '', coachingPct ?? null],
+    queryKey: queryKeys.orders.settlementPreview(orderId ?? '', coachingPct ?? null),
     queryFn: () => getOrderSettlementPreview(orderId!, coachingPct),
     enabled: !!orderId,
   })
@@ -458,6 +467,7 @@ export function useOrderSettlementPreview(orderId: string | undefined, coachingP
 export function useAdminCancelPaidOrder() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido cancelado' },
     mutationFn: adminCancelPaidOrder,
     onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
@@ -466,6 +476,7 @@ export function useAdminCancelPaidOrder() {
 export function useAdminCreateManualRefund() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Reembolso registrado' },
     mutationFn: adminCreateManualRefund,
     onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
@@ -479,7 +490,7 @@ function useRefundDecision(mutationFn: (refundId: string) => Promise<unknown>) {
     mutationFn,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.refunds() })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
     },
   })
 }
@@ -495,6 +506,7 @@ export function useAdminCancelManualRefund() {
 export function useRequestOrderDrop(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido de drop enviado' },
     mutationFn: (reason: string) => requestOrderDrop({ orderId, reason }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
@@ -506,6 +518,7 @@ export function useRequestOrderDrop(orderId: string) {
 export function useRequestCustomerOrderDrop(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido de drop enviado' },
     mutationFn: (reason: string) => requestCustomerOrderDrop({ orderId, reason }),
     onSuccess: () => {
       invalidateOrder(queryClient, orderId)
@@ -521,6 +534,7 @@ export function useRevealOrderCredentials() {
 export function useAcceptBoostOrder() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido aceito' },
     mutationFn: acceptBoostOrder,
     onSuccess: (_data, variables) => invalidateOrder(queryClient, variables.orderId),
   })
@@ -529,6 +543,7 @@ export function useAcceptBoostOrder() {
 export function useGeneratePix(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { silentError: true }, // a tela trata o erro (cartão em análise / ErrorAlert inline)
     mutationFn: () => generatePix(orderId),
     onSuccess: () => invalidateOrder(queryClient, orderId),
   })
@@ -537,6 +552,7 @@ export function useGeneratePix(orderId: string) {
 export function useCancelPendingOrder() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { silentError: true }, // o fluxo de expiração/cancelamento decide o que mostrar (pode redirecionar para pedido pago)
     mutationFn: cancelPendingOrder,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })

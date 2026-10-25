@@ -1,3 +1,4 @@
+import { queryKeys } from '@/api/core/queryKeys'
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -93,7 +94,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
       setTimeout(() => setSaved(false), 3000)
       // Prefix match: cobre ['boosters', 'public-profile', id] (BoosterPublicProfilePage),
       // ['boosters', 'public-list'] (BoostersPage) e ['boosters', 'top'] (HomePage).
-      qc.invalidateQueries({ queryKey: ['boosters'] })
+      qc.invalidateQueries({ queryKey: queryKeys.boosters.all })
     } catch (err) {
       // ApiError.message já vem traduzido (ver PROFESSIONAL_PROFILE_MESSAGES
       // em src/api/boosters/mutations.ts); a mensagem do trigger de cooldown
@@ -186,7 +187,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
               type="button"
               onClick={() => setPeakTier(value)}
               className={cn(
-                'py-2.5 px-4 rounded-xl border-2 text-sm font-bold transition-all',
+                'py-2.5 px-4 rounded-xl border-2 text-sm font-bold transition-interactive',
                 peakTier === value
                   ? 'bg-brand/15 border-brand text-brand'
                   : 'border-border-subtle text-ink-secondary hover:border-brand/40 hover:text-ink',
@@ -231,7 +232,7 @@ export function BoosterProfessionalProfileForm({ userId }: { userId: string }) {
                 type="button"
                 onClick={() => toggleDay(key)}
                 className={cn(
-                  'px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all',
+                  'px-3 py-2 rounded-xl text-xs font-bold border-2 transition-interactive',
                   selected
                     ? 'bg-brand/15 border-brand text-brand'
                     : 'border-border-subtle text-ink-secondary hover:border-brand/40 hover:text-ink',

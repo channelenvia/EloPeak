@@ -131,10 +131,11 @@ export async function createReview({ orderId, boosterId, rating, content }: Crea
 export function useCreateReview(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Avaliação enviada' },
     mutationFn: (input: Omit<CreateReviewInput, 'orderId'>) => createReview({ orderId, ...input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.reviews.own(orderId) })
-      void queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reviews.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.top() })
     },
   })
@@ -175,6 +176,7 @@ const MODERATE_REVIEW_MESSAGES: Record<string, string> = {
 export function useModerateReview() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Avaliação atualizada' },
     mutationFn: async (params: { reviewId: string; isPublic: boolean; note?: string }) => {
       const { data, error } = await supabase.rpc('admin_moderate_review', {
         p_review_id: params.reviewId, p_is_public: params.isPublic, p_note: params.note,
@@ -184,7 +186,7 @@ export function useModerateReview() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ADMIN_REVIEWS_KEY })
-      void queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reviews.all })
     },
   })
 }

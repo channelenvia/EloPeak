@@ -6,6 +6,7 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { RoleRedirectNotice } from '@/components/RoleRedirectNotice'
 import { UserProfilePanel } from '@/components/UserProfilePanel'
 import { useAuthStore } from '@/stores/authStore'
+import { CommandPalette } from './CommandPalette'
 import { AppSidebar, type SidebarNavItem, type SidebarNavSection } from './AppSidebar'
 
 interface AppShellProps {
@@ -32,6 +33,7 @@ export function AppShell({ scope, homeHref, sections, roleBadge, mobileNav = 'ta
 
   return (
     <div className="h-screen overflow-hidden flex">
+      <CommandPalette items={sections.flatMap((section) => section.items)} />
       <AppSidebar scope={scope} homeHref={homeHref} sections={sections} roleBadge={roleBadge} breakpoint={mobileNav === 'scroll' ? 'lg' : 'md'} />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -57,7 +59,7 @@ export function AppShell({ scope, homeHref, sections, roleBadge, mobileNav = 'ta
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <NotificationBell />
-              <button type="button" onClick={() => setPanelOpen(true)} aria-label="Perfil" className="rounded-full hover:ring-2 hover:ring-brand/40 transition-all">
+              <button type="button" onClick={() => setPanelOpen(true)} aria-label="Perfil" className="rounded-full hover:ring-2 hover:ring-brand/40 transition-shadow">
                 <Avatar src={profile?.avatar_url} name={profile?.username} size="sm" />
               </button>
             </div>
@@ -66,7 +68,8 @@ export function AppShell({ scope, homeHref, sections, roleBadge, mobileNav = 'ta
 
         {/* Largura padronizada: toda página do painel herda a mesma régua. */}
         <main className="flex-1 overflow-auto p-6 lg:p-9">
-          <div className="mx-auto w-full max-w-[1600px]">
+          {/* key=pathname: cada página entra com um fade+subida curto (animate-rise). */}
+          <div key={pathname} className="mx-auto w-full max-w-[1600px] animate-rise">
             <Outlet />
           </div>
         </main>

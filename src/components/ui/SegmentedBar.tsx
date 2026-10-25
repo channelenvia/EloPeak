@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
 
 export interface SegmentedBarProps {
@@ -18,6 +19,12 @@ export interface SegmentedBarProps {
 export function SegmentedBar({ segments, filled, tone = 'brand', locked = false, height = 'h-2', className }: SegmentedBarProps) {
   const safeSegments = Math.max(1, Math.round(segments))
   const clampedFilled = Math.max(0, Math.min(safeSegments, filled))
+  // Primeira pintura em 0 para a barra encher na montagem; depois só acompanha `filled`.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
   return (
     <div
       className={cn('flex gap-1', locked && 'blur-[3px] opacity-60', className)}
@@ -27,12 +34,13 @@ export function SegmentedBar({ segments, filled, tone = 'brand', locked = false,
       aria-valuenow={Math.round(clampedFilled * 10) / 10}
     >
       {Array.from({ length: safeSegments }, (_, i) => {
-        const segmentPct = Math.max(0, Math.min(1, clampedFilled - i)) * 100
+        const segmentPct = mounted ? Math.max(0, Math.min(1, clampedFilled - i)) * 100 : 0
         return (
           <div key={i} className={cn('flex-1 min-w-0 rounded-full bg-bg-raised overflow-hidden', height)}>
             <div
-              className={cn('h-full rounded-full transition-all', tone === 'success' ? 'bg-success' : 'bg-brand')}
-              style={{ width: `${segmentPct}%` }}
+              className={cn('h-full w-full transition-[clip-path] duration-[700ms] ease-out', tone === 'success' ? 'bg-success' : 'bg-brand')}
+              // clip-path em vez de width: não dispara layout, e a ponta continua arredondada.
+              style={{ clipPath: `inset(0 ${100 - segmentPct}% 0 0 round 9999px)` }}
             />
           </div>
         )

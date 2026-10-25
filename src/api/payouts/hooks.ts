@@ -63,6 +63,7 @@ export function usePayoutRequestBreakdown(requestId: string | undefined) {
 export function useRequestPayout(boosterId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Saque solicitado' },
     mutationFn: requestPayout,
     onSuccess: () => {
       if (!boosterId) return
@@ -75,6 +76,7 @@ export function useRequestPayout(boosterId: string | undefined) {
 export function useCancelPayoutRequest(boosterId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Saque cancelado' },
     mutationFn: cancelPayoutRequest,
     onSuccess: () => {
       if (!boosterId) return
@@ -87,15 +89,17 @@ export function useCancelPayoutRequest(boosterId: string | undefined) {
 export function useAdminReviewPayoutRequest() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Solicitação revisada', silentError: true },
     mutationFn: adminReviewPayoutRequest,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['payouts'] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.payouts.all }),
   })
 }
 
 export function useAdminMarkPayoutPaid() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Saque marcado como pago', silentError: true },
     mutationFn: adminMarkPayoutPaid,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['payouts'] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.payouts.all }),
   })
 }

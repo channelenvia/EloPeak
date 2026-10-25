@@ -32,7 +32,7 @@ function TopBoosterCard({ entry, position }: { entry: TopBoosterEntry; position:
     <Link
       to={boosterProfilePath(entry)}
       className={cn(
-        'card flex flex-col gap-3 p-5 border-2 transition-all hover:-translate-y-1 hover:shadow-card-hover',
+        'card flex flex-col gap-3 p-5 border-2 transition-interactive hover:-translate-y-1 hover:shadow-card-hover',
         medal.border,
       )}
     >
@@ -80,7 +80,7 @@ function TopBoosterCard({ entry, position }: { entry: TopBoosterEntry; position:
 function BoosterCard({ booster, winRate }: { booster: BoosterProfile; winRate: number }) {
   return (
     <Link to={boosterProfilePath(booster)}>
-      <Card variant="standard" padding="sm" className="flex flex-col items-center text-center gap-3 hover:border-brand/30 hover:shadow-card-hover transition-all cursor-pointer h-full">
+      <Card variant="standard" padding="sm" className="flex flex-col items-center text-center gap-3 hover:border-brand/30 hover:shadow-card-hover transition-interactive cursor-pointer h-full">
         <Avatar src={booster.avatar_url} name={booster.display_name} size="lg" />
 
         <p className="text-sm font-bold text-ink truncate w-full">{booster.display_name}</p>

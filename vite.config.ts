@@ -23,9 +23,6 @@ export default defineConfig(({ mode }) => {
       dedupe: ['react', 'react-dom'],
     },
     server: {
-      // Permite acessar o dev server via túnel ngrok (Vite bloqueia hosts
-      // desconhecidos por padrão desde a 4.x, ver "Blocked request").
-      allowedHosts: ['unlimited-disband-backlight.ngrok-free.dev'],
       ...(supabaseUrl
         ? {
             proxy: {

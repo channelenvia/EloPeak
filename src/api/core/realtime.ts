@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { RealtimePostgresChangesFilter } from '@supabase/supabase-js'
@@ -30,6 +30,13 @@ export function useRealtimeInvalidate({
   const instanceId = useId().replace(/[^a-zA-Z0-9]/g, '')
   const channelName = `${channel}-${instanceId}`
 
+  // queryKeys é recriado a cada render por design (chaves derivadas de ids/filtros):
+  // a assinatura serializada é a dep (evita reassinar o canal à toa) e o ref entrega as
+  // chaves atuais ao handler.
+  const keysSignature = JSON.stringify(queryKeys)
+  const queryKeysRef = useRef(queryKeys)
+  useEffect(() => { queryKeysRef.current = queryKeys })
+
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -60,13 +67,13 @@ export function useRealtimeInvalidate({
           // um único refetch -- invalidateQueries cancela e reinicia o fetch em andamento.
           clearTimeout(debounce)
           debounce = setTimeout(() => {
-            for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
+            for (const key of queryKeysRef.current) void queryClient.invalidateQueries({ queryKey: key })
           }, 250)
         })
         .subscribe((status) => {
           if (status !== 'SUBSCRIBED') return
           // Reconectou depois de uma queda: eventos perdidos nao voltam, entao refaz as consultas.
-          if (subscribedBefore) for (const key of queryKeys) void queryClient.invalidateQueries({ queryKey: key })
+          if (subscribedBefore) for (const key of queryKeysRef.current) void queryClient.invalidateQueries({ queryKey: key })
           subscribedBefore = true
         })
     }
@@ -78,8 +85,5 @@ export function useRealtimeInvalidate({
       clearTimeout(debounce)
       if (subscription) void supabase.removeChannel(subscription)
     }
-    // queryKeys é recriado a cada render por design (chaves derivadas de
-    // ids/filtros) -- serializar pra string evita reassinar o canal à toa.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, table, event, filter, enabled, queryClient, JSON.stringify(queryKeys)])
+  }, [channelName, table, event, filter, enabled, queryClient, keysSignature])
 }

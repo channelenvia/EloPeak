@@ -4,7 +4,7 @@ import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useNavigate } from 'react-router-dom'
 import { ShoppingBag } from 'lucide-react'
-import { EmptyState, Pagination, Skeleton } from '@/components/ui'
+import { EmptyState, Pagination, SkeletonList } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { OrderListToolbar } from '@/components/order/OrderListToolbar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
@@ -81,7 +81,7 @@ export function OrderHistoryPage() {
       <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid >
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-40 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <EmptyState

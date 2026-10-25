@@ -1,6 +1,6 @@
 import { HelmetProvider } from 'react-helmet-async'
 import { LazyMotion, MotionConfig, domAnimation } from 'framer-motion'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense, useEffect, useRef } from 'react'
 
 // Só em DEV, e nunca entra no bundle de produção (import dinâmico atrás da flag).
@@ -14,8 +14,15 @@ import { supabase } from '@/lib/supabase'
 import { EdgeFunctionError, invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
 import { useAuthStore } from '@/stores/authStore'
 import { useOrderBuilderStore } from '@/stores/orderBuilderStore'
+import { AppToaster } from '@/components/AppToaster'
+import { handleMutationError, handleMutationSuccess } from './mutationFeedback'
 
+// Feedback padrão de toda mutation: erro vira toast; sucesso só com meta.successMessage.
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _onMutateResult, mutation) => handleMutationError(error, mutation.meta),
+    onSuccess: (_data, _variables, _onMutateResult, mutation) => handleMutationSuccess(mutation.meta),
+  }),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 2,       // 2 min
@@ -214,6 +221,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <AuthProvider>
               {children}
             </AuthProvider>
+            <AppToaster />
             {ReactQueryDevtools && <Suspense><ReactQueryDevtools initialIsOpen={false} /></Suspense>}
           </QueryClientProvider>
         </LazyMotion>

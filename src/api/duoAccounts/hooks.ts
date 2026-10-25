@@ -51,10 +51,11 @@ export function useDuoAccountReservationHistory(accountId: string | undefined) {
 export function useReserveDuoAccount() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conta reservada' },
     mutationFn: reserveDuoAccount,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() })
-      void queryClient.invalidateQueries({ queryKey: ['orders', 'duo-account-history'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.duoAccountHistoryScope })
     },
   })
 }
@@ -62,10 +63,11 @@ export function useReserveDuoAccount() {
 export function useReleaseDuoAccountReservation() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Reserva liberada' },
     mutationFn: releaseDuoAccountReservation,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.list() })
-      void queryClient.invalidateQueries({ queryKey: ['orders', 'duo-account-history'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.duoAccountHistoryScope })
     },
   })
 }
@@ -79,6 +81,7 @@ export function useGetDuoAccountAccessToken() {
 export function useSetDuoOwnRiotId() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Riot ID salvo', silentError: true },
     mutationFn: setDuoOwnRiotId,
     onSuccess: (_data, variables) => void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(variables.orderId) }),
   })
@@ -87,6 +90,7 @@ export function useSetDuoOwnRiotId() {
 export function useClearDuoOwnRiotId() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Riot ID removido', silentError: true },
     mutationFn: clearDuoOwnRiotId,
     onSuccess: (_data, orderId) => void queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId) }),
   })
@@ -95,6 +99,7 @@ export function useClearDuoOwnRiotId() {
 export function useAdminSaveDuoAccount() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conta salva', silentError: true },
     mutationFn: adminSaveDuoAccount,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.adminList() }),
   })
@@ -103,6 +108,7 @@ export function useAdminSaveDuoAccount() {
 export function useAdminSetDuoAccountActive() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conta atualizada' },
     mutationFn: adminSetDuoAccountActive,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.adminList() }),
   })
@@ -111,6 +117,7 @@ export function useAdminSetDuoAccountActive() {
 export function useAdminReleaseDuoAccount() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conta liberada' },
     mutationFn: adminReleaseDuoAccount,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.adminList() }),
   })
@@ -119,6 +126,7 @@ export function useAdminReleaseDuoAccount() {
 export function useAdminDeleteDuoAccount() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Conta excluída' },
     mutationFn: adminDeleteDuoAccount,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.duoAccounts.adminList() }),
   })

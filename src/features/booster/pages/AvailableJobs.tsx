@@ -6,7 +6,7 @@ import { LiveDot } from '@/components/ui/Badge'
 import { Badge } from '@/components/ui/Badge'
 import { useNavigate } from 'react-router-dom'
 import { Briefcase, Lock, Sparkles } from 'lucide-react'
-import { Button, Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { Button, Card, EmptyState, Pagination, SearchInput, SkeletonList } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { timeAgo, boosterEarningsShare, getOrderServiceName, getOrderModeType } from '@/lib/utils'
 import type { Order } from '@/types'
@@ -176,7 +176,7 @@ export function AvailableJobsPage() {
       {/* Jobs */}
       {isLoading ? (
         <CardGrid >
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-52 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <EmptyState icon={Briefcase} title="Sem jobs disponíveis" description="Volte em breve — jobs chegam frequentemente." />

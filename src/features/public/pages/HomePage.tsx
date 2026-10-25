@@ -1,444 +1,71 @@
-import { boosterProfilePath } from '@/lib/boosterPath'
 import { Link } from 'react-router-dom'
-import { m } from 'framer-motion'
-import {
-  Shield, Zap, Clock, Users, ChevronRight,
-  TrendingUp, MessageCircle, Swords,
-  ArrowRight, Lock, Star,
-} from 'lucide-react'
-import { Avatar, Button, RankBadge } from '@/components/ui'
+import { ChevronRight } from 'lucide-react'
+import { AnimatedNumber, Button } from '@/components/ui'
 import { SEOHead } from '@/components/SEOHead'
-import { formatRank, RANK_TIER_ORDER } from '@/lib/utils'
-import type { RankTier } from '@/types'
 import { TestimonialsCarousel } from '../components/TestimonialsCarousel'
 import { SectionTint } from '../components/SectionTint'
-import { useTopBoosters } from '@/api/boosters'
-
-// ─── Rank ladder (hero) ──────────────────────────────────────────────────────
-// Assinatura visual do hero: a trilha de progressão (mesmo gradient-rail
-// usado no rail de progresso do produto) com os 10 tiers reais em sequência --
-// comunica "subir de elo" antes mesmo de ler qualquer texto. Estática (o
-// marcador animado deslizando foi removido por feedback do usuário).
-function RankLadder() {
-  return (
-    <div className="mt-10 max-w-2xl mx-auto">
-      <div className="relative h-1 rounded-full bg-gradient-rail opacity-80" />
-      <div className="flex justify-between mt-3">
-        {RANK_TIER_ORDER.map((tier, i) => (
-          <m.div
-            key={tier}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.5 + i * 0.05 }}
-          >
-            <RankBadge tier={tier} division={null} size="sm" showLabel={false} />
-          </m.div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
+import { FeaturedBoosters } from '../home/FeaturedBoosters'
+import { FinalCta } from '../home/FinalCta'
+import { HeroScene } from '../home/HeroScene'
+import { KARAOKE_TEXT, STATS } from '../home/homeContent'
+import { KaraokeText } from '../home/KaraokeText'
+import { Rise } from '../home/Rise'
+import { SceneProvider } from '../home/SceneProvider'
+import { ServicesWindow } from '../home/ServicesWindow'
+import { StepsPinned } from '../home/StepsPinned'
+import { Ticker } from '../home/Ticker'
+import { TrustSection } from '../home/TrustSection'
+import { WaveTear } from '../home/WaveTear'
+import { WordsHeading } from '../home/WordsHeading'
+import '../home/home.css'
 
 export function HomePage() {
-  // Mesma seleção sistemática do Top 3 da página /boosters (ver
-  // get_top_boosters) — só pede 1 posição a mais para preencher o teaser de
-  // 4 colunas da home; não é uma lista fixa/manual.
-  const { data: topBoosters } = useTopBoosters(4)
-  const featuredBoosters = (topBoosters ?? []).map((b) => ({
-    id: b.booster_profile_id,
-    display_name: b.display_name,
-    avatar_url: b.avatar_url,
-    current_rank: b.current_rank,
-    rating: b.average_rating ?? 0,
-    rating_count: b.review_count,
-    win_rate_pct: b.win_rate_pct,
-    total_matches: b.total_matches,
-  }))
-
-  const STATS = [
-    { value: '1.800+', label: 'Pedidos concluídos' },
-    { value: '4,9/5',  label: 'Avaliação média'    },
-    { value: '88%',    label: 'Taxa de vitória'    },
-    { value: '20+',    label: 'Boosters ativos'    },
-  ]
-
-  const SERVICES = [
-    {
-      icon: TrendingUp,
-      title: 'Elo Boost',
-      href: '/orders/new?service=elo_boost',
-      badge: 'Mais Popular',
-      color: 'text-brand bg-brand/10',
-      desc: 'Nossos boosters jogam na sua conta (Solo) ou ao seu lado (Duo) e sobem do seu rank atual até o rank desejado, divisão por divisão.',
-    },
-    {
-      icon: Zap,
-      title: 'Win Boost',
-      href: '/orders/new?service=win_boost',
-      badge: 'Rápido',
-      color: 'text-accent bg-accent/10',
-      desc: 'Compre um número fixo de vitórias para ganhar LP rápido — ou, se ainda não jogou o posicionamento, ative a garantia MD5 automaticamente.',
-    },
-    {
-      icon: Swords,
-      title: 'Clash',
-      href: '/orders/new?service=clash',
-      badge: 'Fim de Semana',
-      color: 'text-warning bg-warning/10',
-      desc: 'Solo Clash ou Duo Clash aos sábados e domingos — o booster monta o time e garante sua participação no torneio.',
-    },
-    {
-      icon: Users,
-      title: 'Coaching',
-      href: '/orders/new?service=coaching',
-      badge: 'Pro',
-      color: 'text-success bg-success/10',
-      desc: 'Sessões 1-a-1 ao vivo. Seu coach analisa seus VODs, identifica erros e cria um plano de melhoria personalizado.',
-    },
-  ]
-
-  const TRUST_FEATURES = [
-    { icon: Lock,          label: 'Proteção VPN',  desc: 'Cada sessão roda através de um VPN local.' },
-    { icon: MessageCircle, label: 'Chat ao Vivo',  desc: 'Chat direto com seu booster dentro do seu pedido.' },
-    { icon: Star,          label: 'Garantia 100%', desc: 'Reembolso total se não conseguirmos concluir seu pedido.' },
-    { icon: Clock,         label: 'Início rápido', desc: 'Seu pedido é atribuído em até 30 minutos após o pagamento.' },
-  ]
-
   return (
-    <div>
+    <SceneProvider>
       <SEOHead
         title="EloPeak"
         description="Boosting de elo, win boost, MD5, Clash e coaching para League of Legends. Boosters verificados, entrega segura e pagamento via PIX ou cartão."
       />
-      {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
-        <div className="absolute -top-60 right-0 w-[700px] h-[700px] rounded-full bg-brand/6 blur-[140px] pointer-events-none" />
+      <HeroScene />
+      <Ticker />
 
-        <div className="container-wide py-20 lg:py-24 relative">
-          <m.div
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55 }}
-            className="max-w-4xl mx-auto text-center"
-          >
-            <h1 className="text-5xl sm:text-6xl xl:text-7xl font-black tracking-tight text-ink leading-[1.02]">
-              SUBA DE{' '}
-              <span className="text-gradient-brand">ELO.</span>
-            </h1>
-
-            <p className="mt-6 text-lg sm:text-xl text-ink-secondary leading-relaxed max-w-2xl mx-auto">
-              Solo boost, duo boost, coaching e MD5 profissionais — com transparência total, chat ao vivo e{' '}
-              <span className="text-ink font-semibold">garantia de 100% de conclusão</span>.
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
-              <Button asChild size="lg">
-                <Link to="/orders/new">
-                  Começar Agora <ArrowRight className="h-5 w-5" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="secondary">
-                <Link to="/apply?booster=1">Seja Booster</Link>
-              </Button>
-            </div>
-
-            {/* Trilha de rank -- a narrativa de "subir de elo" como
-                assinatura visual do hero, não só texto: os 10 tiers reais do
-                jogo (mesma paleta/ícones usados no resto do produto) ligados
-                pelo gradiente que já existia só pra isso (gradient-rail),
-                com um marcador subindo em loop -- desligado quando o usuário
-                prefere menos movimento. */}
-            <RankLadder />
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 mt-12 overflow-hidden rounded-2xl border border-border-subtle bg-bg-raised/70 gap-px shadow-card">
-              {STATS.map(({ value, label }) => (
-                <div key={label} className="bg-bg-surface/90 px-4 py-5 sm:px-6">
-                  <p className="text-2xl font-extrabold text-ink">{value}</p>
-                  <p className="text-xs text-ink-muted mt-1">{label}</p>
-                </div>
-              ))}
-            </div>
-          </m.div>
-        </div>
-      </section>
-
-      {/* ── SERVICES ─────────────────────────────────────────────────────── */}
-      <section id="services" className="relative py-16 lg:py-20 scroll-mt-20">
-        <SectionTint />
-        <div className="container-wide">
-          <m.div
-            initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="text-center mb-10"
-          >
-            <p className="section-label mb-3">O que oferecemos</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">Serviços disponíveis</h2>
-            <p className="mt-4 text-ink-secondary text-lg max-w-xl mx-auto">Todos os serviços incluem chat ao vivo com seu booster, atualizações em tempo real e garantia de reembolso total.</p>
-          </m.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {SERVICES.map(({ icon: Icon, title, href, badge, color, desc }, i) => (
-              <m.div key={title}
-                initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.1 }}
-              >
-                <Link to={href}
-                  className="card p-6 flex flex-col gap-6 h-full group hover:shadow-card-hover hover:-translate-y-1 hover:border-brand/25 transition-all duration-200"
-                >
-                  {badge && (
-                    <span className="self-start text-xs font-bold px-2.5 py-0.5 rounded-full bg-brand/15 text-brand border border-brand/25">
-                      {badge}
-                    </span>
-                  )}
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${color} group-hover:scale-110 transition-transform`}>
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-ink mb-2">{title}</h3>
-                    <p className="text-sm text-ink-secondary leading-relaxed">{desc}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-brand text-sm font-bold mt-auto">
-                    Pedir agora <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </Link>
-              </m.div>
+      <section className="relative px-5 py-[clamp(90px,13vw,170px)] sm:px-8 lg:px-16" aria-label="O que é o EloPeak">
+        <div className="mx-auto max-w-5xl">
+          <span className="mb-6 inline-flex items-center gap-2.5 text-sm font-bold text-ink-secondary" aria-hidden="true">
+            <span className="lp-eq inline-flex items-center gap-[3px] rounded-full bg-brand px-3 py-2 text-ink-inverse">{Array.from({ length: 5 }, (_, i) => <i key={i} />)}</span>
+            Seu pedido, ao vivo
+          </span>
+          <KaraokeText text={KARAOKE_TEXT} className="max-w-[22em] font-display text-[clamp(30px,4.6vw,54px)] font-bold leading-[1.16] tracking-tight text-pretty" />
+          <div className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border-subtle bg-border-subtle shadow-card lg:grid-cols-4">
+            {STATS.map(({ to, suffix, decimals, label }, i) => (
+              <Rise key={label} step={i} className="bg-bg-surface px-4 py-5 sm:px-6">
+                <p className="font-display text-3xl font-extrabold text-ink tabular-figures"><AnimatedNumber value={to} format={(n) => `${n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`} /></p>
+                <p className="mt-1 text-xs text-ink-muted">{label}</p>
+              </Rise>
             ))}
           </div>
-
-          {/* Ver todos os serviços */}
-          <m.div
-            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.35 }}
-            className="mt-8 text-center"
-          >
-            <Button asChild variant="link">
-              <Link to="/services">
-                Ver todos os serviços em detalhe <ChevronRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </m.div>
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
-      <section className="py-16 lg:py-20 relative overflow-hidden">
-        <div className="container-wide relative">
-          <m.div
-            initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="text-center mb-10"
-          >
-            <p className="section-label mb-3">Processo simples</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">3 passos para seu rank alvo</h2>
-          </m.div>
+      <WaveTear />
+      <ServicesWindow />
+      <div className="py-6 text-center">
+        <Button asChild variant="link"><Link to="/services">Ver todos os serviços em detalhe <ChevronRight className="h-4 w-4" /></Link></Button>
+      </div>
+      <StepsPinned />
+      <TrustSection />
+      <FeaturedBoosters />
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            {[
-              { n: '01', title: 'Configure e Pague', body: 'Escolha seu serviço, rank atual e alvo na calculadora acima. Veja o preço na hora. Pague com segurança — seus dados são sempre protegidos.' },
-              { n: '02', title: 'Booster Atribuído', body: 'Em minutos, um booster verificado que combina com seu tipo de fila e preferências de campeão aceita seu pedido.' },
-              { n: '03', title: 'Acompanhe e Converse', body: 'Acompanhe o progresso ao vivo. Converse direto com seu booster. Pause quando quiser. Receba notificação quando seu rank alvo for atingido.' },
-            ].map(({ n, title, body }, idx) => (
-              <m.div key={n}
-                initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.45, delay: idx * 0.12 }}
-                className="relative flex flex-col items-center text-center gap-4"
-              >
-                <div className="h-16 w-16 rounded-2xl bg-gradient-brand flex items-center justify-center text-ink-inverse text-xl font-black shadow-brand">
-                  {n}
-                </div>
-                <h3 className="text-xl font-bold text-ink">{title}</h3>
-                <p className="text-ink-secondary leading-relaxed">{body}</p>
-              </m.div>
-            ))}
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── TRUST & SECURITY ─────────────────────────────────────────────── */}
-      <section className="relative py-16 lg:py-20">
+      <section className="relative overflow-hidden py-16 lg:py-24">
         <SectionTint />
-        <div className="container-wide">
-          <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
-
-            <m.div
-              initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5 }}
-            >
-              <p className="section-label mb-4">Por que mais de 1.800 jogadores confiam em nós</p>
-              <h2 className="text-4xl md:text-5xl font-black text-ink mb-6 leading-tight">
-                Sua conta está em boas mãos.
-              </h2>
-              <p className="text-ink-secondary text-lg mb-7 leading-relaxed">
-                As credenciais enviadas pela plataforma são criptografadas antes de serem armazenadas e ficam disponíveis apenas para o booster atribuído e para a equipe autorizada quando necessário. Cada sessão roda através de VPN. Você tem um histórico completo no histórico de pedidos ao vivo.
-              </p>
-              <Button asChild size="lg" variant="secondary">
-                <Link to="/security">Leia nossa política de segurança →</Link>
-              </Button>
-            </m.div>
-
-            <div>
-              <div className="grid grid-cols-2 gap-4">
-                {TRUST_FEATURES.map(({ icon: Icon, label, desc }, i) => (
-                  <m.div key={label}
-                    initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
-                    className="card p-5 space-y-3 hover:border-success/25 transition-colors"
-                  >
-                    <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
-                      <Icon className="h-5 w-5 text-success" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-ink text-sm">{label}</h4>
-                      <p className="text-xs text-ink-secondary mt-1 leading-relaxed">{desc}</p>
-                    </div>
-                  </m.div>
-                ))}
-              </div>
-            </div>
-
-          </div>
+        <div className="container-wide mb-10 text-center">
+          <Rise><p className="section-label mb-3">Clientes reais</p></Rise>
+          <WordsHeading text="O que os jogadores dizem" className="font-display text-4xl font-black text-ink md:text-5xl" highlight={[2, 3]} />
         </div>
-      </section>
-
-      {/* ── BOOSTERS ─────────────────────────────────────────────────────── */}
-      {featuredBoosters.length > 0 && (
-        <section className="py-16 lg:py-20">
-          <div className="container-wide">
-            <m.div
-              initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5 }}
-              className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10"
-            >
-              <div>
-                <p className="section-label mb-3">Boosters</p>
-                <h2 className="text-4xl md:text-5xl font-black text-ink">Perfis em destaque</h2>
-                <p className="mt-4 text-ink-secondary text-lg max-w-xl">
-                  Boosters aprovados manualmente, com dados carregados direto do catálogo público.
-                </p>
-              </div>
-              <Button asChild variant="link">
-                <Link to="/boosters">
-                  Ver todos <ChevronRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </m.div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredBoosters.map((booster, index) => (
-                <m.div
-                  key={booster.id}
-                  initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }} transition={{ duration: 0.4, delay: index * 0.08 }}
-                >
-                  <Link
-                    to={boosterProfilePath(booster)}
-                    className="card p-5 flex flex-col gap-4 h-full hover:shadow-card-hover hover:-translate-y-1 hover:border-brand/25 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar src={booster.avatar_url} name={booster.display_name} size="md" />
-                      <div className="min-w-0">
-                        <p className="font-bold text-ink truncate">{booster.display_name}</p>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <Star className="h-3 w-3 text-warning fill-warning" />
-                          <span className="text-xs font-semibold text-ink-secondary">
-                            {booster.rating_count > 0 ? booster.rating.toFixed(1) : 'Novo'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {booster.current_rank && (
-                      <div className="flex items-center gap-2">
-                        <RankBadge tier={booster.current_rank.tier as RankTier} division={booster.current_rank.division} size="sm" showLabel={false} />
-                        <span className="text-xs font-semibold text-ink-secondary">
-                          {formatRank(booster.current_rank.tier as RankTier, booster.current_rank.division)}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="mt-auto grid grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
-                      <div>
-                        <p className="text-2xs text-ink-muted">Winrate</p>
-                        <p className="text-sm font-extrabold text-brand">{booster.win_rate_pct && booster.win_rate_pct > 0 ? `${booster.win_rate_pct}%` : 'Sem partidas'}</p>
-                      </div>
-                      <div>
-                        <p className="text-2xs text-ink-muted">Partidas</p>
-                        <p className="text-sm font-extrabold text-ink">{booster.total_matches}</p>
-                      </div>
-                    </div>
-                  </Link>
-                </m.div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── CUSTOMER REVIEWS ─────────────────────────────────────────────── */}
-      {/* Sempre com o mesmo tratamento visual, independente de existir ou não
-          a seção de Boosters acima -- antes o tint dependia de
-          featuredBoosters.length, o que deixava a alternância de peso visual
-          inconsistente conforme os dados (fonte da quebra perceptível). */}
-      <section className="relative py-16 lg:py-20 overflow-hidden">
-        <SectionTint />
-        <div className="container-wide">
-          <m.div
-            initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="text-center mb-10"
-          >
-            <p className="section-label mb-3">Clientes reais</p>
-            <h2 className="text-4xl md:text-5xl font-black text-ink">O que os jogadores dizem</h2>
-          </m.div>
-        </div>
-
         <TestimonialsCarousel />
       </section>
 
-      {/* ── FINAL CTA ────────────────────────────────────────────────────── */}
-      {/* Sempre com o glow próprio (igual ao Hero), nunca o tint plano --
-          antes alternava com base em featuredBoosters.length, mesma
-          inconsistência de dados corrigida na seção de Reviews acima. */}
-      <section className="py-16 lg:py-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-hero-glow opacity-60 pointer-events-none" />
-        <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center relative">
-          <m.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.55 }}
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-success/10 border border-success/20 text-success text-xs font-bold mb-8">
-              <Shield className="h-3.5 w-3.5" />
-              Garantia 100% de conclusão
-            </div>
-
-            <h2 className="text-4xl md:text-6xl font-black text-ink mb-6 leading-tight">
-              Pronto para alcançar seu rank objetivo?
-            </h2>
-            <p className="text-ink-secondary text-xl mb-10">
-              Junte-se a mais de 1.800 jogadores. Configure seu boost acima e comece em minutos.
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Button asChild size="xl">
-                <Link to="/orders/new">
-                  Começar Seu Boost <ArrowRight className="h-5 w-5" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="ghost">
-                <Link to="/faq">Dúvidas frequentes</Link>
-              </Button>
-            </div>
-
-            <p className="mt-8 text-xs text-ink-muted">
-              Pagamento seguro · Sem compromisso · Suporte 24/7
-            </p>
-          </m.div>
-        </div>
-      </section>
-    </div>
+      <FinalCta />
+    </SceneProvider>
   )
 }

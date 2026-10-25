@@ -1,3 +1,5 @@
+import { MetricCard } from '../components/MetricCard'
+import { queryKeys } from '@/api/core/queryKeys'
 import { useState } from 'react'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -5,7 +7,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Banknote, CheckCircle2, Clock3, FileText, ShieldCheck, Upload, XCircle } from 'lucide-react'
-import { Button, Card, EmptyState, FilterTabs, Modal, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { Button, Card, EmptyState, FilterTabs, Modal, Pagination, SearchInput, Skeleton, SkeletonList } from '@/components/ui'
 import { cn, formatDateTime, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
@@ -33,22 +35,6 @@ function StatusBadge({ status }: { status: PayoutRequestStatus }) {
     <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold', STATUS_COLOR[status])}>
       {STATUS_LABEL[status]}
     </span>
-  )
-}
-
-function StatCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: React.ElementType; tone: string }) {
-  return (
-    <Card padding="md" className="min-w-0">
-      <div className="flex items-center gap-3">
-        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone)}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="truncate text-lg font-black text-ink" data-tabular>{value}</p>
-        </div>
-      </div>
-    </Card>
   )
 }
 
@@ -103,7 +89,7 @@ function PayoutActionModal({ request, onClose }: { request: PayoutRequestRow; on
     review.mutate({ requestId: request.id, newStatus: 'rejected', note: data.note.trim() }, { onSuccess: onClose })
   }
 
-  const { data: fullCpf } = useQuery({ queryKey: ['payouts', 'admin-cpf', request.id], queryFn: () => fetchAdminPayoutCpf(request.id), staleTime: 5 * 60_000 })
+  const { data: fullCpf } = useQuery({ queryKey: queryKeys.payouts.adminCpf(request.id), queryFn: () => fetchAdminPayoutCpf(request.id), staleTime: 5 * 60_000 })
 
   async function handleViewProof() {
     if (!request.proof_url) return
@@ -213,8 +199,8 @@ export function AdminPayoutsPage() {
       <PageHeader eyebrow="Financeiro" title="Solicitações de saque" description="Repasses aos boosters, sacados do saldo acumulado no ledger financeiro — não são mais uma ação por pedido." />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Aguardando" value={currency(pendingTotal)} icon={Clock3} tone="bg-warning/10 text-warning" />
-        <StatCard label="Pago" value={currency(paidTotal)} icon={CheckCircle2} tone="bg-success/10 text-success" />
+        <MetricCard label="Aguardando" value={pendingTotal} format={currency} icon={Clock3} tone="bg-warning/10 text-warning" />
+        <MetricCard label="Pago" value={paidTotal} format={currency} icon={CheckCircle2} tone="bg-success/10 text-success" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -240,7 +226,7 @@ export function AdminPayoutsPage() {
 
       {isLoading ? (
         <CardGrid cols={4}>
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-40 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">

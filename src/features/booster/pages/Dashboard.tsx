@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { InlineEmpty } from '@/components/ui/EmptyState'
 import { Briefcase, Clock, Sparkles } from 'lucide-react'
-import { Button, Card, Skeleton, ErrorAlert } from '@/components/ui'
+import { Button, Card, Skeleton, ErrorAlert, SkeletonList } from '@/components/ui'
 import { RankPerformanceBreakdown } from '@/components/rank/RankPerformanceBreakdown'
 import { useAuthStore } from '@/stores/authStore'
 import type { Order } from '@/types'
@@ -104,7 +104,7 @@ export function BoosterDashboard() {
         <h3 className="text-base font-semibold text-ink mb-3">Fila de pedidos</h3>
         {queueLoading ? (
           <CardGrid >
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+            <SkeletonList count={3} className="h-40 w-full rounded-2xl" />
           </CardGrid>
         ) : activeOrdersError || monthOrdersError ? (
           <ErrorAlert message="Não foi possível carregar seus pedidos." />

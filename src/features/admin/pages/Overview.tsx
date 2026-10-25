@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { LiveDot } from '@/components/ui/Badge'
 import { ShoppingBag, Users, TrendingUp } from 'lucide-react'
-import { Card, OrderStatusBadge, Skeleton, StatCard, ErrorAlert } from '@/components/ui'
+import { Card, OrderStatusBadge, Skeleton, StatCard, ErrorAlert, SkeletonList, InlineEmpty } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -45,7 +45,7 @@ export function AdminOverview() {
           continua clicável e muda de cor quando precisa de atenção. */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+          <SkeletonList count={3} className="h-24 rounded-2xl" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -61,7 +61,8 @@ export function AdminOverview() {
           </Link>
           <StatCard
             label="Lucro da plataforma"
-            value={currency(stats?.platform_profit ?? 0)}
+            value={stats?.platform_profit ?? 0}
+            format={currency}
             icon={TrendingUp}
             color="text-success bg-success/10"
             valueSize="lg"
@@ -100,7 +101,8 @@ export function AdminOverview() {
             <h3 className="text-sm font-semibold text-ink">Pedidos Recentes</h3>
             <Link to="/admin/orders" className="text-xs text-brand hover:underline">Ver todos</Link>
           </div>
-          <div className="divide-y divide-border-subtle max-h-[300px] overflow-y-auto">
+          <div className="stagger-children divide-y divide-border-subtle max-h-[300px] overflow-y-auto">
+            {recentOrders.length === 0 && <InlineEmpty>Nenhum pedido recente.</InlineEmpty>}
             {recentOrders.map((order) => (
               <Link key={order.id} to={`/admin/orders/${order.id}`}>
                 <div className="flex items-center justify-between py-2 hover:bg-bg-interactive rounded-lg px-2 -mx-2 transition-colors cursor-pointer">

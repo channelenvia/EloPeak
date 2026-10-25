@@ -4,7 +4,7 @@ import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useState } from 'react'
 import { Users, ShoppingBag, Wallet } from 'lucide-react'
-import { Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { Card, EmptyState, Pagination, SearchInput, SkeletonList } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminCustomers } from '@/api/customers'
@@ -39,7 +39,7 @@ export function AdminCustomersPage() {
       <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid cols={4}>
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-32 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">

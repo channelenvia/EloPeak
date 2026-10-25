@@ -6,6 +6,14 @@
 @import 'tailwindcss';
 @config '../../tailwind.config.ts';
 
+/* Transição padrão de controles: só o que de fato muda (nunca `all`, que animaria
+   layout e repintaria propriedades sem necessidade). */
+@utility transition-interactive {
+  transition-property: background-color, border-color, color, box-shadow, transform, opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease-out);
+}
+
 @layer base {
   /* "Premium Competitive Operations Interface" — evolução do tema "High-Elo
      Operations Center": mesma identidade (verde de marca, dourado de acento,
@@ -197,9 +205,18 @@
     @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
 
+  /* O brilho é um ::after que desliza por transform (compositor), em vez de
+     animar background-position, que repintava o skeleton a cada quadro. */
   .skeleton {
-    @apply bg-gradient-to-r from-bg-surface via-bg-raised to-bg-surface
-           bg-[length:200%_100%] animate-shimmer rounded-xl;
+    @apply relative overflow-hidden bg-bg-raised rounded-xl;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(var(--color-bg-interactive) / 0.8), transparent);
+    transform: translateX(-100%);
+    animation: skeleton-sweep 1.6s linear infinite;
   }
 
   .section-label {
@@ -253,3 +270,26 @@
 .mp-brick [class^="row-"] > div:has(> p) {
   display: none !important;
 }
+
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+/* Entrada padrão de conteúdo (animate-rise em tailwind.config.ts): sobe 8px e aparece. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Filhos diretos entram em escada de 40ms (travada em 8, ver lib/motion.ts). Usado
+   pelo CardGrid e por listas verticais; cada remontagem (ex.: troca de página) repete. */
+.stagger-children > * {
+  animation: rise 240ms var(--motion-ease-out) both;
+}
+.stagger-children > :nth-child(2) { animation-delay: 40ms; }
+.stagger-children > :nth-child(3) { animation-delay: 80ms; }
+.stagger-children > :nth-child(4) { animation-delay: 120ms; }
+.stagger-children > :nth-child(5) { animation-delay: 160ms; }
+.stagger-children > :nth-child(6) { animation-delay: 200ms; }
+.stagger-children > :nth-child(7) { animation-delay: 240ms; }
+.stagger-children > :nth-child(n + 8) { animation-delay: 280ms; }

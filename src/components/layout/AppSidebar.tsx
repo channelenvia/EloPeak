@@ -72,7 +72,7 @@ export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, break
 
       <div className={cn(
         'flex flex-col border-r border-border-subtle bg-bg-surface/95 backdrop-blur-md',
-        'fixed inset-y-0 z-40 transition-all duration-panel ease-out overflow-hidden',
+        'fixed inset-y-0 z-40 transition-[width] duration-panel ease-out overflow-hidden',
         expanded ? 'w-64' : 'w-[76px]',
       )}>
         {/* Topo: logo (+ badge de papel + pin só quando expandido). */}
@@ -159,7 +159,7 @@ export function AppSidebar({ scope: _scope, sections, homeHref, roleBadge, break
           ) : (
             <button
               onClick={() => setPanelOpen(true)}
-              className="focus-ring relative flex w-full items-center justify-center rounded-full hover:ring-2 hover:ring-brand/40 transition-all"
+              className="focus-ring relative flex w-full items-center justify-center rounded-full hover:ring-2 hover:ring-brand/40 transition-shadow"
               title={profile?.username ?? 'Perfil'}
             >
               <Avatar src={profile?.avatar_url} name={profile?.username} size="sm" />

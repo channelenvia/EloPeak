@@ -26,11 +26,12 @@ export function useAdminReviewCases() {
 export function useAdminAdjustBoosterBalance() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Saldo ajustado' },
     mutationFn: adminAdjustBoosterBalance,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.reviewCases() })
       // O ajuste mexe no saldo do booster (cards de totais, extrato e saques).
-      void queryClient.invalidateQueries({ queryKey: ['payouts'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payouts.all })
     },
   })
 }
@@ -55,6 +56,7 @@ export function useAdminSetPendingReviewLock() {
 export function useAdminCancelPendingReviewOrder() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Pedido cancelado' },
     mutationFn: adminCancelPendingReviewOrder,
     onSuccess: (_data, variables) => invalidateAdminOrderQueries(queryClient, variables.orderId),
   })
@@ -63,6 +65,7 @@ export function useAdminCancelPendingReviewOrder() {
 export function useAdminAssignPendingReviewOrder() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Booster atribuído' },
     mutationFn: adminAssignPendingReviewOrder,
     onSuccess: (_data, variables) => {
       invalidateAdminOrderQueries(queryClient, variables.orderId)
@@ -168,6 +171,7 @@ export function useAdminAuditLogs() {
 export function useResolveDropRequest() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Drop resolvido' },
     mutationFn: resolveDropRequest,
     // Além da própria fila de drops, invalida a lista de pedidos do admin e
     // qualquer pedido/solicitação de drop pendente em cache -- sem isso, só
@@ -177,7 +181,7 @@ export function useResolveDropRequest() {
     // que o pedido "sumiu" ou não voltou pra listagem certa até F5.
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.drops() })
-      void queryClient.invalidateQueries({ queryKey: ['orders', 'admin'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.adminScope })
       void queryClient.invalidateQueries({ predicate: (q) => q.queryKey.includes('drop-request') })
     },
   })

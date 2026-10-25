@@ -2,7 +2,7 @@ import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { useParams, Link } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { ShoppingBag, Star, Wallet, ClipboardList } from 'lucide-react'
-import { Card, DetailPageHeader, Pagination, Skeleton, EmptyState, StarRating } from '@/components/ui'
+import { AnimatedNumber, Card, DetailPageHeader, Pagination, Skeleton, EmptyState, StarRating, SkeletonList } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { formatDate, timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -34,18 +34,18 @@ export function AdminCustomerDetailPage() {
       {/* Controle */}
       <Card padding="md">
         <h3 className="text-base font-semibold text-ink mb-3">Controle</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="stagger-children grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: 'Pedidos', value: customer.total_orders, icon: ShoppingBag, color: 'text-brand bg-brand/10' },
-            { label: 'Total Gasto', value: currency(customer.total_spent), icon: Wallet, color: 'text-success bg-success/10' },
+            { label: 'Total Gasto', value: customer.total_spent, format: currency, icon: Wallet, color: 'text-success bg-success/10' },
             { label: 'Avaliações Dadas', value: reviews?.length ?? 0, icon: Star, color: 'text-warning bg-warning/10' },
             { label: 'Cliente desde', value: formatDate(customer.profiles?.created_at ?? customer.created_at), icon: ClipboardList, color: 'text-ink-secondary bg-bg-raised' },
-          ].map(({ label, value, icon: Icon, color }) => (
+          ].map(({ label, value, format, icon: Icon, color }) => (
             <div key={label} className="text-center">
               <div className={`h-9 w-9 rounded-xl ${color} flex items-center justify-center mx-auto mb-2`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <p className="text-base font-bold text-ink">{value}</p>
+              <p className="text-base font-bold text-ink">{typeof value === 'number' ? <AnimatedNumber value={value} format={format} /> : value}</p>
               <p className="text-2xs text-ink-muted">{label}</p>
             </div>
           ))}
@@ -57,7 +57,7 @@ export function AdminCustomerDetailPage() {
         <h3 className="text-base font-semibold text-ink mb-3">Pedidos</h3>
         {loadingOrders ? (
           <CardGrid cols={3}>
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
+            <SkeletonList count={3} className="h-64 w-full rounded-2xl" />
           </CardGrid>
         ) : !orders?.length ? (
           <Card padding="none"><EmptyState icon={ShoppingBag} title="Nenhum pedido ainda" /></Card>
@@ -78,7 +78,7 @@ export function AdminCustomerDetailPage() {
         <h3 className="text-base font-semibold text-ink mb-3">Avaliações Dadas</h3>
         {loadingReviews ? (
           <CardGrid cols={4}>
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-2xl" />)}
+            <SkeletonList count={4} className="h-28 w-full rounded-2xl" />
           </CardGrid>
         ) : !reviews?.length ? (
           <Card padding="none"><EmptyState icon={Star} title="Nenhuma avaliação ainda" /></Card>

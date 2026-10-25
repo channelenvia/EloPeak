@@ -134,7 +134,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
       )}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} variant="standard" padding="md" className="space-y-3">
               <Skeleton className="h-4 w-3/4" />
@@ -161,7 +161,7 @@ export function BoosterServicesList({ userId }: { userId: string }) {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {services.map(service =>
             editingId === service.id ? (
               <BoosterServiceForm

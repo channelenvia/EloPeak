@@ -1,0 +1,70 @@
+/* Efeitos da home. Tokens vêm de globals.css (cores em trios RGB). */
+
+/* Lenis conduz a rolagem; o smooth nativo de globals.css brigaria com ele. */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+
+/* Entrada da página: cada linha sobe sem borrão, em escada. */
+.lp-intro {
+  opacity: 0; translate: 0 26px; filter: blur(4px);
+  animation: lp-intro .9s cubic-bezier(.23, 1, .32, 1) forwards;
+  animation-delay: calc(.15s + var(--d, 0) * .14s);
+}
+@keyframes lp-intro { to { opacity: 1; translate: 0 0; filter: blur(0); } }
+
+/* Entrada do emblema: mola de 1.5s depois de .8s. */
+.lp-pop { animation: lp-pop 1.5s cubic-bezier(.34, 1.35, .64, 1) .8s both; }
+@keyframes lp-pop { from { translate: 0 70%; } }
+
+.lp-bob { animation: lp-bob 4s ease-in-out infinite; }
+@keyframes lp-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+
+.lp-marquee { animation: lp-marquee 38s linear infinite; }
+@keyframes lp-marquee { to { transform: translateX(-50%); } }
+
+.lp-eq i { display: block; width: 3px; height: 18px; border-radius: 3px; background: currentColor; animation: lp-eq .9s ease-in-out infinite alternate; }
+.lp-eq i:nth-child(odd) { animation-delay: -.4s; }
+@keyframes lp-eq { from { scale: 1 .28; } to { scale: 1 1; } }
+
+/* Fila de cristais de rank: só o ativo aparece, com mola na troca. */
+.lp-crest { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; scale: .6; transition: opacity .45s, scale .6s cubic-bezier(.34, 1.56, .64, 1); filter: drop-shadow(0 0 40px rgb(var(--color-brand) / .35)); }
+.lp-crest.on { opacity: 1; scale: 1; }
+
+/* Frase karaokê: --p vai de 0 a 1; cada palavra acende quando --p passa do índice
+   dela, e as 8 seguintes ficam em meio-tom. */
+.lp-reveal { --p: 0; }
+.lp-reveal .w {
+  color: rgb(var(--color-ink-muted));
+  opacity: clamp(.14, calc(var(--p) * (var(--n) + 8) - var(--i)), 1);
+  border-radius: 12px; transition: background-color .2s, box-shadow .2s;
+}
+.lp-reveal .w.hl { color: rgb(var(--color-brand)); }
+.lp-reveal .w.now { background: rgb(var(--color-brand) / .14); box-shadow: 0 0 0 5px rgb(var(--color-brand) / .14); }
+
+/* O rasgo: duas metades do cartaz recortadas pela mesma onda. */
+.lp-half { position: absolute; inset: 0; will-change: transform; pointer-events: none; }
+.lp-half > * { position: absolute; inset: -12%; }
+.lp-shade { background: rgb(0 0 0 / .1); }
+.lp-shade:nth-child(1) { translate: 0 6px; }
+.lp-shade:nth-child(2) { translate: 0 12px; }
+.lp-shade:nth-child(3) { translate: 0 18px; }
+.lp-shade:nth-child(4) { translate: 0 24px; }
+.lp-shade:nth-child(5) { translate: 0 32px; background: rgb(0 0 0 / .06); }
+.lp-edge { background: linear-gradient(90deg, rgb(var(--color-brand-hover)), rgb(var(--color-brand-light)), rgb(var(--color-brand-hover))); }
+.lp-half.top .lp-edge { translate: 0 5px; }
+.lp-half.bottom .lp-edge { translate: 0 -5px; }
+.lp-ring { position: absolute; width: 44vmin; height: 44vmin; margin: -22vmin 0 0 -22vmin; border-radius: 50%; border: 2px solid rgb(var(--color-brand) / .5); animation: lp-ring 2.7s cubic-bezier(.2, .6, .3, 1) infinite; }
+.lp-ring:nth-child(2) { animation-delay: -.9s; }
+.lp-ring:nth-child(3) { animation-delay: -1.8s; }
+@keyframes lp-ring { from { scale: .35; opacity: .9; } to { scale: 2.3; opacity: 0; } }
+
+.lp-swap { animation: lp-swap .4s cubic-bezier(.23, 1, .32, 1) both; }
+@keyframes lp-swap { from { opacity: 0; translate: 0 8px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-intro, .lp-pop { animation: none; opacity: 1; translate: none; filter: none; }
+  .lp-bob, .lp-marquee, .lp-eq i, .lp-ring { animation: none; }
+  .lp-ring { opacity: .25; }
+  .lp-reveal .w { opacity: 1; }
+}

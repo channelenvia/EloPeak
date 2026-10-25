@@ -142,7 +142,7 @@ export function StepExtras() {
                     aria-pressed={selected}
                     onClick={() => toggleExtra(extra.id)}
                     className={cn(
-                      'relative flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all duration-150',
+                      'relative flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-interactive',
                       selected
                         ? 'border-brand bg-brand/10 shadow-brand'
                         : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
@@ -191,7 +191,7 @@ export function StepExtras() {
                     aria-pressed={isSelected}
                     onClick={() => setWinPackage(isSelected ? null : wins)}
                     className={cn(
-                      'relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center transition-all duration-150',
+                      'relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center transition-interactive',
                       isSelected
                         ? 'border-brand bg-brand/10'
                         : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',

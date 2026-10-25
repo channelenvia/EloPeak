@@ -137,41 +137,37 @@ export function JobDetailPage() {
   const unreadChatCount = (chat.data?.messages ?? [])
     .filter((m) => m.sender_id !== profile?.id && !m.is_read).length
   const markChatRead = useMarkOrderChatRead(id ?? '')
+  // `mutate` tem identidade estável no TanStack v5 (o objeto da mutation não): usá-lo
+  // como dep dispara só quando unreadChatCount muda.
+  const { mutate: markChatReadMutate } = markChatRead
   useEffect(() => {
-    if (unreadChatCount > 0) markChatRead.mutate()
-    // markChatRead (objeto de useMutation) muda de identidade a cada render
-    // independente de unreadChatCount -- incluí-lo disparava mutate() de
-    // novo em qualquer re-render não relacionado enquanto ainda houvesse
-    // mensagem não lida, não só quando o count muda.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadChatCount])
+    if (unreadChatCount > 0) markChatReadMutate()
+  }, [unreadChatCount, markChatReadMutate])
 
   const updateStatus = useUpdateOrderStatus(id ?? '')
   const syncMatches = useSyncOrderMatches(id ?? '')
 
+  // Ref atualizado em effect (nunca no render) para o tick do interval ler o pedido atual.
   const orderRef = useRef(order)
-  orderRef.current = order
+  useEffect(() => { orderRef.current = order })
 
+  const { mutate: syncMatchesMutate } = syncMatches
+  const orderId = order?.id
+  const orderStatus = order?.status
   useEffect(() => {
-    if (!order) return
+    if (!orderId) return
     function maybeSync() {
       const current = orderRef.current
       // Coaching nunca tem riot_id (orderPricing.ts) -- nunca é elegível pro
       // cron/endpoint de sync (ambos filtram riot_id is null), então
       // last_match_synced_at fica null pra sempre e shouldAutoSync ficaria
       // batendo aqui a cada 30min só pra tomar 400 "sem conta Riot".
-      if (current && current.service_type !== 'coaching' && shouldAutoSync(current, Date.now())) syncMatches.mutate()
+      if (current && current.service_type !== 'coaching' && shouldAutoSync(current, Date.now())) syncMatchesMutate()
     }
     maybeSync()
     const intervalId = setInterval(maybeSync, AUTO_SYNC_INTERVAL_MS)
     return () => clearInterval(intervalId)
-    // syncMatches (objeto de useMutation) muda de identidade a cada render;
-    // incluí-lo recriaria o interval a cada render em vez de só quando o
-    // pedido muda de fato -- orderRef acima já resolve o mesmo problema pra
-    // `order`, syncMatches.mutate() lido no momento do tick continua válido
-    // (mutation não fica "presa" numa config antiga).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.id, order?.status])
+  }, [orderId, orderStatus, syncMatchesMutate])
   const verifyRank = useVerifyOrderRank(id ?? '')
 
   async function copyNickname() {

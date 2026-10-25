@@ -125,7 +125,7 @@ export function ClashConfigPicker() {
               type="button"
               onClick={() => setBoostMode(mode)}
               className={cn(
-                'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
+                'relative text-left p-4 rounded-2xl border-2 transition-interactive',
                 boostMode === mode
                   ? 'border-brand bg-brand/10 shadow-brand'
                   : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
@@ -190,7 +190,7 @@ export function ClashConfigPicker() {
             onClick={() => void lookupRiotRank()}
             disabled={riotLookupLoading}
             className={cn(
-              'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all',
+              'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-interactive',
               'bg-brand text-ink-inverse hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed',
             )}
           >
@@ -224,7 +224,7 @@ export function ClashConfigPicker() {
                   setManualTierOffer(false)
                   setRiotLookupMessage('Tier informado por você.')
                 }}
-                className="text-left p-3 rounded-xl border-2 border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised transition-all"
+                className="text-left p-3 rounded-xl border-2 border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised transition-interactive"
               >
                 <p className="text-sm font-bold text-ink">{CLASH_TIER_LABEL[tier]}</p>
                 <p className="text-xs text-ink-secondary">{CLASH_TIER_RANGE_LABEL[tier]}</p>

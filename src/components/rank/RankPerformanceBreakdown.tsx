@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { Zap, Trophy, TrendingUp, Sprout, Swords, Star, Gamepad2 } from 'lucide-react'
-import { Card, RankBadge, Skeleton, EmptyState } from '@/components/ui'
+import { Card, RankBadge, EmptyState, SkeletonList } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { RANK_PERFORMANCE_GROUPS } from '@/lib/lolTaxonomy'
 import { useBoosterPerformanceByRank } from '@/api/boosters'
@@ -75,7 +75,7 @@ export function RankPerformanceBreakdown({ boosterUserId, className }: RankPerfo
 
       {isLoading ? (
         <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+          <SkeletonList count={3} className="h-28 w-full rounded-xl" />
         </div>
       ) : !hasRankStats ? (
         <EmptyState

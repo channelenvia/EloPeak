@@ -1,34 +1,27 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { m, AnimatePresence } from 'framer-motion'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
 import { useOrderBuilderStore, type OrderBuilderStep } from '@/stores/orderBuilderStore'
 import { Stepper, Button, Card, Modal } from '@/components/ui'
 import { cn } from '@/lib/cn'
-import { useCurrency } from '@/hooks/useCurrency'
 import { useBoostAddons, EMPTY_ADDONS } from '@/hooks/useBoostAddons'
-import { applyCoupon, getWinBoostPrice } from '@/lib/pricing'
-import { getBoostFlow, isWinPackageAvailable, resolveAddonLabel, isValidRiotId } from '@/lib/boostDomain'
-import { ChevronRight, ChevronLeft, RotateCcw, Shield, Clock, Star, UserCheck, Tag, X } from 'lucide-react'
-import type { ServiceType, Rank } from '@/types'
-import { useAuthStore } from '@/stores/authStore'
-import { getCustomerOrderState } from '@/api/orders'
-import { useCatalogGameId, useCatalogServiceId } from '@/api/catalog'
-import { getAssignedBoosterProfile } from '@/api/boosters'
-import { getActiveCoachingPackage } from '@/api/coaching'
-import { invokeEdgeFunction } from '@/lib/invokeEdgeFunction'
+import { ChevronRight, ChevronLeft, UserCheck, X } from 'lucide-react'
 
-const VALID_SERVICES: ServiceType[] = ['elo_boost', 'win_boost', 'clash', 'coaching']
-
-// Step components
 import { StepService } from '../order-builder/StepService'
 import { StepConfigure } from '../order-builder/StepConfigure'
 import { StepExtras } from '../order-builder/StepExtras'
 import { StepReview } from '../order-builder/StepReview'
 import { StepPayment } from '../order-builder/StepPayment'
-import { consumeIsReloadMount, shouldAutoResumePendingOrder } from '../order-builder/resumeDecision'
+import { OrderBuilderConfirmModals } from '../order-builder/OrderBuilderConfirmModals'
+import { OrderBuilderSummary } from '../order-builder/OrderBuilderSummary'
+import { isStepComplete } from '../order-builder/isStepComplete'
+import { getSummaryTotals, getVisibleWinPackage, getWinPackagePrice, resolveBuilderFlow } from '../order-builder/orderSummaryMath'
+import { useBuilderParams } from '../order-builder/useBuilderParams'
+import { useOrderBuilderExit } from '../order-builder/useOrderBuilderExit'
+import {
+  useCatalogIntent, useResetOnNewOrder, useResolvedCatalogIds, useResumeDraft, useStaleBoosterCleanup,
+} from '../order-builder/useOrderBuilderBootstrap'
 
 // "Pagamento" não aparece mais no stepper visual -- pagamento não é mais uma
 // tela navegável, virou o popup que abre a partir da Revisão (ver
@@ -50,414 +43,129 @@ const STEP_COMPONENTS: Record<OrderBuilderStep, React.ComponentType> = {
   payment: StepPayment,
 }
 
-// Regras de "step completo" usadas só para gatear o botão Continuar — a
-// validação que realmente importa (preço, elegibilidade, etc.) continua
-// sendo feita no backend ao criar o pedido. Isto é só UX: evita avançar
-// com campos obviamente faltando/inválidos ou enquanto uma consulta Riot
-// ainda está em andamento.
-function isStepComplete(
-  step: OrderBuilderStep,
-  state: {
-    serviceType: ServiceType | null
-    selectedCoachPackage: { id: string } | null
-    currentRank: Rank | null
-    targetRank: Rank | null
-    winsPurchased: number | null
-    riotId: string
-    isMd5: boolean
-    riotVerified: boolean
-    riotLookupLoading: boolean
-    md5MatchesRemaining: number | null
-    clashTier: string | null
-    clashDay: string | null
-    customerLanes: string[]
-  },
-): boolean {
-  if (state.riotLookupLoading) return false
-  if (step === 'service') return !!state.serviceType
-  if (step === 'configure') {
-    // Eloboost e Vitórias/MD5 só avançam depois de uma verificação de conta
-    // bem-sucedida na fila atual (mesma trava que esconde os campos).
-    // Rota é opcional nos 3 modos que usam LaneSelectField (elo_boost,
-    // win_boost/md5, clash) -- coaching não tem esse conceito.
-    if (state.serviceType === 'elo_boost') {
-      return state.riotVerified && !!state.currentRank && !!state.targetRank && isValidRiotId(state.riotId)
-    }
-    if (state.serviceType === 'win_boost' || state.serviceType === 'md5') {
-      const winsOk = !!state.winsPurchased
-        && state.winsPurchased >= 1
-        && state.winsPurchased <= 5
-        && (!state.isMd5 || state.md5MatchesRemaining == null || state.winsPurchased <= state.md5MatchesRemaining)
-      return state.riotVerified && !!state.currentRank && winsOk && isValidRiotId(state.riotId)
-    }
-    if (state.serviceType === 'coaching') return !!state.selectedCoachPackage
-    // Riot ID obrigatório nos dois modos de Clash (Solo: referência do
-    // booster antes de logar via credenciais; Duo: identificador pra
-    // convidar o cliente pro time). O tier é sempre derivado da verificação
-    // Riot e não pode ser escolhido manualmente.
-    if (state.serviceType === 'clash') {
-      return state.riotVerified && !!state.clashTier && !!state.clashDay && isValidRiotId(state.riotId)
-    }
-  }
-  return true
+const PANEL_TRANSITION = { type: 'spring', bounce: 0.15, duration: 0.5 } as const
+
+function PreferredBoosterBanner() {
+  const { preferredBoosterName, serviceType, clearPreferredBooster } = useOrderBuilderStore()
+  if (!preferredBoosterName) return null
+  return (
+    <div className="flex items-center gap-3 mb-6 rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm text-ink">
+      <UserCheck className="h-4 w-4 text-brand shrink-0" />
+      <span className="flex-1">
+        Pedido vinculado a <span className="font-semibold">{preferredBoosterName}</span> — {serviceType === 'coaching'
+          ? 'só ele(a) poderá aceitar este pedido.'
+          : 'ele(a) poderá aceitar com exclusividade por 9 horas após o pagamento.'}
+      </span>
+      <button
+        type="button"
+        onClick={() => clearPreferredBooster()}
+        aria-label="Desvincular booster"
+        title="Desvincular booster"
+        className="shrink-0 text-ink-muted hover:text-ink transition-colors"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function useStepComplete(): boolean {
+  const s = useOrderBuilderStore()
+  return isStepComplete(s.step, {
+    serviceType: s.serviceType, selectedCoachPackage: s.selectedCoachPackage, currentRank: s.currentRank,
+    targetRank: s.targetRank, winsPurchased: s.winsPurchased, riotId: s.riotId, isMd5: s.isMd5,
+    riotVerified: s.riotVerified, riotLookupLoading: s.riotLookupLoading, md5MatchesRemaining: s.md5MatchesRemaining,
+    clashTier: s.clashTier, clashDay: s.clashDay, customerLanes: s.customerLanes,
+  })
+}
+
+function useSummaryData() {
+  const {
+    basePrice, extrasPrice, selectedExtraIds, currentRank, boostMode, serviceType, couponCode, winPackage, queueType,
+  } = useOrderBuilderStore()
+  const flow = resolveBuilderFlow(serviceType, currentRank, boostMode, queueType)
+  // Mesma queryKey usada em StepExtras/StepReview — já em cache.
+  const { data: addonData } = useBoostAddons(flow)
+  const selectedAddons = (addonData ?? EMPTY_ADDONS).filter(e => selectedExtraIds.has(e.id))
+  const visibleWinPackage = getVisibleWinPackage(winPackage, flow)
+  const winPackagePrice = getWinPackagePrice(visibleWinPackage, { winPackage, flow, currentRank, queueType, boostMode })
+  const totals = getSummaryTotals(basePrice, extrasPrice, couponCode, serviceType)
+  return { selectedAddons, visibleWinPackage, winPackagePrice, totals }
 }
 
 export function OrderBuilderPage() {
-  const { profile } = useAuthStore()
   const {
-    step, steps, nextStep, prevStep, basePrice, extrasPrice,
-    selectedExtraIds, currentRank, targetRank, boostMode, gameSlug, gameId, serviceType, serviceId,
-    setGame, setService, setServiceId, setStep, reset, preferredBoosterId, preferredBoosterName, setPreferredBooster, clearPreferredBooster,
-    setSelectedCoachPackage, setBasePrice, couponCode,
-    winsPurchased, riotId, isMd5, md5MatchesRemaining, riotLookupLoading, riotVerified,
-    selectedCoachPackage, setStepAttempted, winPackage, queueType,
-    clashTier, clashDay, dismissedOrderId, setDismissedOrderId, customerLanes,
+    step, steps, nextStep, prevStep, basePrice, serviceType, setStepAttempted,
+    riotLookupLoading, couponCode,
   } = useOrderBuilderStore()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const queryClient = useQueryClient()
-  // Pagamento é um popup sobre a revisão, não mais o step 'payment' (esse
-  // some do stepper, só serve pra retomar após reload -- ver resumableOrder
-  // abaixo). Fecha sozinho ao sair de 'review' por qualquer motivo.
-  const [pixModalOpen, setPixModalOpen] = useState(false)
-  // Confirma antes de fechar o popup com um pedido já persistido (?order=
-  // setado por "Gerar PIX"): fechar sem aviso e configurar de novo (?new=1)
-  // dava a impressão de pedido duplicado, com o antigo órfão em "aguardando
-  // pagamento". Sair aqui reseta o configurador de propósito -- o pedido em
-  // si nunca é cancelado, continua pagável em Meus Pedidos.
-  const [showExitConfirm, setShowExitConfirm] = useState(false)
-  const [showRestartConfirm, setShowRestartConfirm] = useState(false)
-  const currency = useCurrency()
-  const pendingOrderId = searchParams.get('order')
-  const explicitlyStartingNewOrder = searchParams.get('new') === '1'
-  const serviceParam = searchParams.get('service')
-  const boosterParam = searchParams.get('booster')
-  const coachPackageParam = searchParams.get('coach_package')
-  const hasCatalogEntryIntent = Boolean(serviceParam || boosterParam || coachPackageParam)
+  const params = useBuilderParams()
+  const exit = useOrderBuilderExit(params)
+  const { setPixModalOpen } = exit
+  const summary = useSummaryData()
+  const stepComplete = useStepComplete()
 
-  // A cobrança é persistida no banco antes de o QR ser exibido. Ao voltar
-  // para /orders/new, restaura a revisão do pedido pendente sem abrir o PIX:
-  // gerar/exibir a cobrança sempre exige um novo clique explícito.
-  // `?new=1` é a escolha explícita do usuário de configurar outro pedido; o
-  // anterior continua intacto e pagável em "Meus pedidos".
-  const { data: resumableOrder } = useQuery({
-    queryKey: ['resumable-customer-order', profile?.id],
-    queryFn: async () => {
-      const state = await getCustomerOrderState()
-      return state.order_id ? { id: state.order_id } : null
-    },
-    enabled: !!profile?.id && !pendingOrderId && !explicitlyStartingNewOrder && !hasCatalogEntryIntent,
-    staleTime: 0,
-  })
-
-  useEffect(() => {
-    // Pedido dispensado via "Sair e reiniciar"/"Voltar" não reabre sozinho (?new=1 só vale pra ESSA visita), e sem
-    // rascunho local (aba nova) a Revisão nasceria vazia -- o pedido segue pagável em Meus Pedidos (H-8).
-    if (!resumableOrder?.id || !shouldAutoResumePendingOrder({
-      resumableOrderId: resumableOrder.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent,
-      dismissedOrderId, hasLocalDraft: !!serviceType,
-    })) return
-    // Mantém a revisão visível, mas não abre o popup automaticamente.
-    setStep('review')
-    setSearchParams({ order: resumableOrder.id }, { replace: true })
-  }, [
-    resumableOrder?.id, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, dismissedOrderId,
-    serviceType, setStep, setSearchParams,
-  ])
+  const resumableOrder = useResumeDraft(params)
 
   useEffect(() => {
     if (step !== 'review') setPixModalOpen(false)
-  }, [step])
+  }, [step, setPixModalOpen])
 
-  // "Voltar" na revisão é a única forma de reconfigurar depois que
-  // StepPayment já persistiu o pedido/gerou o PIX. Só limpar ?order= não
-  // bastava -- o pedido antigo ficava órfão em "aguardando pagamento" até o
-  // cron de expiração cancelar, e cada ida-e-volta criava outro (parecendo
-  // duplicidade). Cancela no servidor antes de sair (mesma rota do cancelamento
-  // manual/expiração do PIX, já defensiva contra pagamento recém-aprovado);
-  // fire-and-forget, nunca trava a navegação.
-  function goBackFromReview() {
-    const orderId = searchParams.get('order')
-    if (orderId) {
-      // Sem isso o auto-resume reabria este mesmo pedido enquanto o cancelamento ainda nao refletia no cache (H-8).
-      setDismissedOrderId(orderId)
-      void invokeEdgeFunction('cancel-pending-order', {
-        body: { order_id: orderId },
-        timeoutMs: 20_000,
-        requireAuth: true,
-      }).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['orders', 'customer'] })
-        queryClient.invalidateQueries({ queryKey: ['resumable-customer-order'] })
-      }).catch(() => {})
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('order')
-        return next
-      }, { replace: true })
-    }
-    prevStep()
-  }
-
-  // Radix chama onOpenChange(false) pra qualquer tentativa de fechar (X,
-  // clique fora, Esc) -- intercepta todas de uma vez só. Sem pedido
-  // persistido ainda (?order= vazio, "Gerar PIX" nunca rodou), fecha direto:
-  // não há nada em Meus Pedidos pra perder.
-  function handlePixModalOpenChange(open: boolean) {
-    if (open) { setPixModalOpen(true); return }
-    if (!pendingOrderId) { setPixModalOpen(false); return }
-    setShowExitConfirm(true)
-  }
-
-  // Nunca cancela o pedido -- ele continua "Aguardando pagamento", pagável
-  // em Meus Pedidos. Só desvincula o configurador local dele (reset +
-  // derruba ?order=), pra que reabrir "Novo Pedido" comece do zero em vez de
-  // reaparecer com a config antiga ainda meio-presa a um pedido já criado.
-  function confirmExitPixModal() {
-    const orderId = pendingOrderId
-    setShowExitConfirm(false)
-    setPixModalOpen(false)
-    reset()
-    // Depois do reset() (que reaplicaria initialState.dismissedOrderId =
-    // null) -- marca esse pedido como dispensado de propósito, persistido
-    // (sobrevive a navegar pra Meus Pedidos e voltar por um link comum,
-    // diferente do ?new=1 abaixo, que só vale pra ESSA visita).
-    if (orderId) setDismissedOrderId(orderId)
-    setStep('service')
-    setSearchParams({ new: '1' }, { replace: true })
-  }
-
-  // "Reiniciar" na aside -- mesmo destino de confirmExitPixModal, mas sempre
-  // pede confirmação antes de descartar a configuração.
-  function handleReiniciarClick() {
-    setShowRestartConfirm(true)
-  }
-
-  function confirmRestart() {
-    setShowRestartConfirm(false)
-    confirmExitPixModal()
-  }
-
-  // Mesma regra de StepExtras.tsx/StepPayment.tsx — Clash reaproveita
-  // solo_standard/duo_standard pela modalidade, sem currentRank envolvido.
-  const flow = serviceType === 'elo_boost' && currentRank
-    ? getBoostFlow(currentRank.tier, boostMode, queueType)
-    : serviceType === 'win_boost' || serviceType === 'md5' || serviceType === 'clash'
-      ? (boostMode === 'duo' ? 'duo_standard' : 'solo_standard')
-      : null
-  // Mesma queryKey usada em StepExtras/StepReview — já em cache.
-  const { data: addonData } = useBoostAddons(flow)
-  const addonCatalog = addonData ?? EMPTY_ADDONS
-  const selectedAddons = addonCatalog.filter(e => selectedExtraIds.has(e.id))
-
-  // gameSlug/serviceType no store guardam o slug/tipo (ex.: 'lol',
-  // 'elo_boost') — nunca os uuids reais de games/services. StepService.tsx
-  // e StepConfigure.tsx só conhecem o slug/tipo, então resolvemos os uuids
-  // aqui, uma vez, antes que StepPayment precise deles pra criar o pedido
-  // (create-pix-payment exige uuid real em service_id/game_id).
-  const { data: resolvedGameId } = useCatalogGameId(gameSlug)
-  useEffect(() => {
-    if (resolvedGameId && resolvedGameId !== gameId) setGame(gameSlug!, resolvedGameId)
-  }, [resolvedGameId, gameId, gameSlug, setGame])
-
-  const catalogServiceType = serviceType === 'md5' ? 'win_boost' : serviceType
-  const { data: resolvedServiceId } = useCatalogServiceId(resolvedGameId, catalogServiceType)
-  useEffect(() => {
-    // Só sobe o uuid resolvido — NÃO reaplica setService (que resetaria
-    // winsPurchased/MD5 e apagaria as partidas restantes recém-detectadas).
-    if (resolvedServiceId && resolvedServiceId !== serviceId) setServiceId(resolvedServiceId)
-  }, [resolvedServiceId, serviceId, setServiceId])
-
-  // ?new=1 sozinho descarta a config em memória e volta ao passo 1 (após PIX
-  // expirado ou vindo de "Meus pedidos"). `startNewOrder()` (StepPayment.tsx)
-  // já reseta direto no clique de "Configurar novo pedido" -- isto cobre só
-  // quem chega aqui por navegação externa.
-  useEffect(() => {
-    if (explicitlyStartingNewOrder && !hasCatalogEntryIntent && !consumeIsReloadMount()) {
-      reset()
-      setStep('service')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Vínculo com um booster (persistido, sobrevive a reload) só deve
-  // desaparecer sozinho quando é lixo de sessão anterior já paga/encerrada
-  // (`resumableOrder === null`, não `undefined`, confirma nenhum pedido
-  // pendente) -- nunca quando o cliente acabou de escolher um pacote de
-  // coach agora (CoachPackagePicker chama setPreferredBooster sem nenhum
-  // pedido ainda persistido, então resumableOrder também dá null nesse
-  // instante). staleBoosterCheckedRef roda esse diagnóstico só uma vez;
-  // initialPreferredBoosterIdRef congela o valor no MOUNT -- sem isso, uma
-  // escolha ao vivo durante o carregamento inicial da query (undefined →
-  // null) seria lida como "vínculo antigo" e apagada por engano.
-  const initialPreferredBoosterIdRef = useRef(preferredBoosterId)
-  const staleBoosterCheckedRef = useRef(false)
-  useEffect(() => {
-    if (staleBoosterCheckedRef.current) return
-    if (resumableOrder === undefined) return
-    staleBoosterCheckedRef.current = true
-    if (resumableOrder !== null) return
-    if (pendingOrderId || explicitlyStartingNewOrder || hasCatalogEntryIntent) return
-    if (!initialPreferredBoosterIdRef.current) return
-    reset()
-  }, [resumableOrder, pendingOrderId, explicitlyStartingNewOrder, hasCatalogEntryIntent, reset])
-
-  // Reage a MUDANÇAS em ?service=/?booster=/?coach_package=, não só ao mount
-  // -- trocar de link de catálogo com a página já montada (React Router não
-  // remonta só porque a query string muda) deixava a config antiga intacta.
-  // Ref evita reprocessar o mesmo parâmetro após consumido.
-  const processedCatalogIntentRef = useRef<string | null>(null)
-  useEffect(() => {
-    const service = serviceParam as ServiceType | null
-    const boosterId = boosterParam
-    const coachPackageId = coachPackageParam
-    if (!service && !boosterId && !coachPackageId) return
-
-    const signature = `${service ?? ''}|${boosterId ?? ''}|${coachPackageId ?? ''}`
-    if (processedCatalogIntentRef.current === signature) return
-    processedCatalogIntentRef.current = signature
-
-    if (service && VALID_SERVICES.includes(service)) {
-      reset()
-      setService(service, service)
-      setStep('configure')
-    }
-
-    if (boosterId) {
-      // Revalida no cliente pra exibir o nome (a validação que importa é a
-      // server-side, ao criar o pedido) — id inválido/não aprovado é
-      // simplesmente ignorado, sem erro visível.
-      getAssignedBoosterProfile(boosterId)
-        .then((data) => {
-          if (data?.user_id && data.display_name) setPreferredBooster(data.user_id, data.display_name)
-        })
-        .catch(() => {})
-    }
-
-    if (coachPackageId) {
-      // Mesma lógica defensiva do ?booster= — id inválido/inativo é
-      // ignorado silenciosamente; a validação que importa é server-side.
-      getActiveCoachingPackage(coachPackageId)
-        .then(async (pkg) => {
-          if (!pkg) return
-          setSelectedCoachPackage({
-            id: pkg.id, title: pkg.title, price: pkg.price, tempo: pkg.tempo,
-            description: pkg.description, requirements: pkg.requirements,
-            lanes: pkg.lanes, specialties: pkg.specialties, champions: pkg.champions,
-          })
-          setBasePrice(pkg.price)
-          if (!boosterId) {
-            const boosterRow = await getAssignedBoosterProfile(pkg.booster_id)
-            if (boosterRow?.user_id && boosterRow.display_name) setPreferredBooster(boosterRow.user_id, boosterRow.display_name)
-          }
-        })
-        .catch(() => {})
-    }
-
-    // Mantém um marcador após consumir os parâmetros de entrada (e derruba um
-    // eventual ?order= de um pedido pendente anterior) -- sem ele, a query de
-    // retomada poderia encontrar aquele pedido antigo e tirar o usuário deste
-    // novo fluxo que ele acabou de escolher.
-    setSearchParams({ new: '1' }, { replace: true })
-  }, [
-    serviceParam, boosterParam, coachPackageParam,
-    reset, setStep, setService, setPreferredBooster, setSelectedCoachPackage, setBasePrice, setSearchParams,
-  ])
+  useResolvedCatalogIds()
+  useResetOnNewOrder(params)
+  useStaleBoosterCleanup(resumableOrder, params)
+  useCatalogIntent(params)
 
   const currentIdx = steps.indexOf(step)
-  const completedSteps = steps.slice(0, currentIdx)
   const StepContent = STEP_COMPONENTS[step]
-  const WIN_PACKAGE_DISCOUNTS: Record<number, number> = { 1: 10, 3: 20, 5: 30 }
-  // Rascunho antigo pode trazer winPackage no fluxo Master+, onde o servidor o ignora (H-7).
-  const visibleWinPackage = winPackage && isWinPackageAvailable(flow) ? winPackage : null
-  const winPackagePrice = visibleWinPackage && currentRank
-    ? Math.round(
-        getWinBoostPrice(queueType, currentRank.tier, boostMode, currentRank.division ?? null)
-        * visibleWinPackage
-        * (1 - (WIN_PACKAGE_DISCOUNTS[visibleWinPackage] ?? 0) / 100)
-        * 100
-      ) / 100
-    : 0
-  const subtotal = basePrice + extrasPrice
-  // Estimativa de exibição -- o mesmo cupom aplicado em StepReview, refletido
-  // aqui pra o resumo persistente não ficar desatualizado nos outros passos.
-  // O valor cobrado de fato é sempre recomputado no servidor.
-  const coupon = couponCode && serviceType ? applyCoupon(subtotal, couponCode, serviceType) : null
-  const discountPrice = coupon?.couponApplied ? coupon.discountPrice : 0
-  const totalPrice = subtotal - discountPrice
   const canGoBack = currentIdx > 0 && step !== 'payment'
   // 'payment' é só o popup do PIX, aberto por "Pagar" -- a Revisão é o último passo navegável.
   const isReviewStep = step === 'review'
   // Aside só existe a partir do step 2 -- no step 'service' o cliente pode
-  // clicar em qualquer card sem a tela encolher; depende do step (não de
-  // serviceType, senão encolheria antes de "Continuar", ainda no step 1).
+  // clicar em qualquer card sem a tela encolher.
   const showSummary = step !== 'service'
-  const stepComplete = isStepComplete(step, {
-    serviceType, selectedCoachPackage, currentRank, targetRank,
-    winsPurchased, riotId, isMd5, riotVerified, riotLookupLoading, md5MatchesRemaining,
-    clashTier, clashDay, customerLanes,
-  })
+
+  function handleContinue() {
+    if (!stepComplete) { setStepAttempted(true); return }
+    setStepAttempted(false)
+    nextStep()
+  }
 
   return (
     <div>
-      {/* Stepper */}
       <div className="mb-8">
         <PageHeader title="Novo Pedido" description="Configure seu boost e extras abaixo." className="mb-6" />
-
-        {preferredBoosterName && (
-          <div className="flex items-center gap-3 mb-6 rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm text-ink">
-            <UserCheck className="h-4 w-4 text-brand shrink-0" />
-            <span className="flex-1">
-              Pedido vinculado a <span className="font-semibold">{preferredBoosterName}</span> — {serviceType === 'coaching'
-                ? 'só ele(a) poderá aceitar este pedido.'
-                : 'ele(a) poderá aceitar com exclusividade por 9 horas após o pagamento.'}
-            </span>
-            <button
-              type="button"
-              onClick={() => clearPreferredBooster()}
-              aria-label="Desvincular booster"
-              title="Desvincular booster"
-              className="shrink-0 text-ink-muted hover:text-ink transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
+        <PreferredBoosterBanner />
         <Stepper
           steps={STEPS.filter((s) => steps.includes(s.id))}
           currentStep={step}
-          completedSteps={completedSteps}
+          completedSteps={steps.slice(0, currentIdx)}
         />
       </div>
 
       {/* Grid (não flex) trava a proporção 70/30 só depois que a aside
-          existe; m.div/layout anima o encolhimento em vez de um
-          salto seco de largura. */}
+          existe; m.div/layout anima o encolhimento em vez de um salto seco. */}
       <div className={cn('grid grid-cols-1 gap-6 lg:items-start', showSummary ? 'lg:grid-cols-10' : 'lg:grid-cols-1')}>
-        {/* Main step content */}
-        <m.div layout transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
+        <m.div layout transition={PANEL_TRANSITION} className={cn('min-w-0', showSummary ? 'lg:col-span-7' : 'lg:col-span-1')}>
           <Card padding="lg" className="animate-fade-in">
-            {step === 'service' ? <StepService fullWidth={!showSummary} /> : <StepContent />}
+            {/* key=step: cada passo entra com animate-rise (o Card em si não remonta). */}
+            <div key={step} className="animate-rise">
+              {step === 'service' ? <StepService fullWidth={!showSummary} /> : <StepContent />}
+            </div>
 
-            {/* Navigation — Voltar/Continuar sempre no widget da esquerda,
-                inclusive na Revisão (onde antes viviam na aside);
-                "Continuar" fica bloqueado ali (pagar é o par Reiniciar/
-                Pagar na aside). */}
+            {/* Voltar/Continuar sempre no widget da esquerda, inclusive na Revisão;
+                "Continuar" fica bloqueado ali (pagar é o par Reiniciar/Pagar na aside). */}
             {step !== 'payment' && (
               <ActionBar className="mt-8 border-t border-border-subtle pt-5">
                 <Button
                   variant="secondary"
-                  onClick={() => (step === 'review' ? goBackFromReview() : prevStep())}
+                  onClick={() => (step === 'review' ? exit.goBackFromReview() : prevStep())}
                   disabled={!canGoBack}
                   leftIcon={<ChevronLeft className="h-4 w-4" />}
                 >
                   Voltar
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (!stepComplete) { setStepAttempted(true); return }
-                    setStepAttempted(false)
-                    nextStep()
-                  }}
+                  onClick={handleContinue}
                   disabled={riotLookupLoading || !stepComplete || isReviewStep}
                   rightIcon={<ChevronRight className="h-4 w-4" />}
                 >
@@ -467,43 +175,26 @@ export function OrderBuilderPage() {
             )}
           </Card>
 
-          {/* Popup de pagamento -- só abre por ação explícita na revisão. O
-              pedido só é salvo (e o PIX/cartão liberado) ao escolher a forma. */}
+          {/* Popup de pagamento -- só abre por ação explícita na revisão. */}
           {step === 'review' && (
-            <Modal open={pixModalOpen} onOpenChange={handlePixModalOpenChange} title="Pagamento" maxWidth="md">
+            <Modal open={exit.pixModalOpen} onOpenChange={exit.handlePixModalOpenChange} title="Pagamento" maxWidth="md">
               <StepPayment insideModal />
             </Modal>
           )}
 
-          <Modal open={showRestartConfirm} onOpenChange={setShowRestartConfirm} title="Reiniciar configuração?" maxWidth="sm">
-            <p className="text-sm text-ink-secondary">
-              Você vai perder toda a configuração deste pedido (serviço, ranks e extras) e voltar ao primeiro passo. Deseja realmente reiniciar?
-            </p>
-            {pendingOrderId && (
-              <p className="text-sm text-ink-secondary">
-                O pedido que você já gerou continua salvo em <strong className="text-ink">Meus Pedidos</strong>.
-              </p>
-            )}
-            <ActionBar>
-              <Button variant="secondary" onClick={() => setShowRestartConfirm(false)}>Cancelar</Button>
-              <Button variant="danger" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={confirmRestart}>Reiniciar</Button>
-            </ActionBar>
-          </Modal>
-
-          <Modal open={showExitConfirm} onOpenChange={setShowExitConfirm} title="Sair sem pagar?" maxWidth="sm">
-            <p className="text-sm text-ink-secondary">
-              Seu configurador será reiniciado, mas seu pedido continua salvo — você pode pagar a qualquer momento na aba <strong className="text-ink">Meus Pedidos</strong>.
-            </p>
-            <ActionBar>
-              <Button variant="secondary" onClick={() => setShowExitConfirm(false)}>Continuar pagamento</Button>
-              <Button variant="danger" onClick={confirmExitPixModal}>Sair e reiniciar</Button>
-            </ActionBar>
-          </Modal>
+          <OrderBuilderConfirmModals
+            hasPendingOrder={!!params.pendingOrderId}
+            showRestartConfirm={exit.showRestartConfirm}
+            onRestartOpenChange={exit.setShowRestartConfirm}
+            onConfirmRestart={exit.confirmRestart}
+            showExitConfirm={exit.showExitConfirm}
+            onExitOpenChange={exit.setShowExitConfirm}
+            onConfirmExit={exit.confirmExitPixModal}
+          />
         </m.div>
 
-        {/* Summary panel — só existe a partir do step 2 (ver showSummary).
-            AnimatePresence anima a entrada em sincronia com o encolhimento
-            do conteúdo principal, os dois disparados pela troca de step. */}
+        {/* Summary panel — AnimatePresence anima a entrada em sincronia com o
+            encolhimento do conteúdo principal. */}
         <AnimatePresence>
           {showSummary && (
             <m.aside
@@ -512,101 +203,18 @@ export function OrderBuilderPage() {
               initial={{ opacity: 0, x: 32 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 32 }}
-              transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
+              transition={PANEL_TRANSITION}
               className="lg:col-span-3"
             >
-          <div className="space-y-4">
-            {/* variant flat (sem blur/sombra/transparência) -- o card
-                "vidro" padrão, isolado nessa coluna estreita, lia como um
-                painel flutuando por cima da página; a coluna da esquerda
-                não tem esse problema porque o Card lá ocupa quase toda a
-                largura, então a mesma sombra/blur não chama atenção. */}
-            <Card padding="lg" className="shadow-none backdrop-blur-none bg-bg-surface">
-              <div className="space-y-3">
-                <div className="flex justify-between text-xs">
-                  <span className="text-ink-secondary">Preço base</span>
-                  <span className="text-ink">{currency(basePrice)}</span>
-                </div>
-
-                {visibleWinPackage && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-ink-secondary">Pacote {visibleWinPackage} {visibleWinPackage === 1 ? 'vitória' : 'vitórias'} (-{WIN_PACKAGE_DISCOUNTS[visibleWinPackage]}%)</span>
-                    <span className="text-ink">+{currency(winPackagePrice)}</span>
-                  </div>
-                )}
-                {selectedAddons.map((extra) => (
-                  <div key={extra.id} className="flex justify-between text-xs">
-                    <span className="text-ink-secondary">{serviceType ? resolveAddonLabel(extra, serviceType).name : extra.name}</span>
-                    <span className="text-ink">
-                      {extra.price_modifier > 0 ? `+${currency(extra.price_modifier)}` :
-                       extra.price_modifier_pct > 0 ? `+${extra.price_modifier_pct}%` : 'Grátis'}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Cupom fixo — aplicado automaticamente pelo store, sem o
-                    cliente digitar nada. Só elo boost/vitórias/md5/clash são
-                    elegíveis (COUPON_ELIGIBLE_SERVICE_TYPES); exige subtotal
-                    > 0 pra não mostrar "aplicado" sobre valor ainda zerado. */}
-                {coupon?.couponApplied && subtotal > 0 && (
-                  <div className="flex items-center gap-1.5 py-2 text-xs text-success font-medium">
-                    <Tag className="h-3.5 w-3.5 shrink-0" />
-                    Cupom {couponCode} aplicado · -{coupon.discountPct}%
-                  </div>
-                )}
-
-                {discountPrice > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-success font-medium">Desconto (-{coupon?.discountPct}%)</span>
-                    <span className="text-success font-medium">-{currency(discountPrice)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-end pt-2">
-                  <span className="text-sm font-semibold text-ink">Total</span>
-                  {discountPrice > 0 ? (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs text-ink-muted line-through">{currency(subtotal)}</span>
-                      <span className="text-lg font-extrabold text-success">{currency(totalPrice)}</span>
-                    </div>
-                  ) : (
-                    <span className="text-base font-bold text-brand">{currency(totalPrice)}</span>
-                  )}
-                </div>
-
-                {/* Reiniciar/Pagar -- só na Revisão, na aside (Voltar/Continuar
-                    já vivem no widget da esquerda, ver nav acima). Reiniciar
-                    descarta a configuração inteira (ícone de "desfazer",
-                    espelhando o ChevronLeft do Voltar); Pagar abre o popup do
-                    PIX (mesmo ChevronRight do Continuar, indicando avanço). */}
-                {step === 'review' && (
-                  <ActionBar className="pt-4">
-                    <Button variant="secondary" onClick={handleReiniciarClick} leftIcon={<RotateCcw className="h-4 w-4" />}>
-                      Reiniciar
-                    </Button>
-                    <Button onClick={() => setPixModalOpen(true)} rightIcon={<ChevronRight className="h-4 w-4" />}>
-                      {serviceType === 'coaching' ? 'Confirmar' : 'Pagar'}
-                    </Button>
-                  </ActionBar>
-                )}
-              </div>
-            </Card>
-
-            {/* Trust badges */}
-            <Card padding="lg" variant="brand">
-              <div className="space-y-4">
-                {[
-                  { icon: Shield, text: 'VPN & proteção offline' },
-                  { icon: Star, text: 'Garantia 100% de conclusão' },
-                  { icon: Clock, text: 'Inicia em até 30 minutos' },
-                ].map(({ icon: Icon, text }) => (
-                  <div key={text} className="flex items-center gap-2 text-xs text-ink-secondary">
-                    <Icon className="h-3.5 w-3.5 text-brand shrink-0" />
-                    {text}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
+              <OrderBuilderSummary
+                basePrice={basePrice}
+                {...summary}
+                serviceType={serviceType}
+                couponCode={couponCode}
+                isReview={step === 'review'}
+                onRestart={() => exit.setShowRestartConfirm(true)}
+                onPay={() => exit.setPixModalOpen(true)}
+              />
             </m.aside>
           )}
         </AnimatePresence>

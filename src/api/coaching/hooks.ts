@@ -67,6 +67,7 @@ export function useCoachingPackageMutations(boosterId: string | undefined) {
 
   return {
     create: useMutation({
+      meta: { successMessage: 'Pacote criado', silentError: true },
       mutationFn: createCoachingPackage,
       onSuccess: (created) => {
         queryClient.setQueryData(servicesKey, (current: import('@/types').BoosterService[] | undefined) =>
@@ -76,6 +77,7 @@ export function useCoachingPackageMutations(boosterId: string | undefined) {
       },
     }),
     update: useMutation({
+      meta: { successMessage: 'Pacote atualizado', silentError: true },
       mutationFn: updateCoachingPackage,
       onSuccess: (updated) => {
         queryClient.setQueryData(servicesKey, (current: import('@/types').BoosterService[] | undefined) =>
@@ -85,6 +87,7 @@ export function useCoachingPackageMutations(boosterId: string | undefined) {
       },
     }),
     remove: useMutation({
+      meta: { successMessage: 'Pacote removido', silentError: true },
       mutationFn: deleteCoachingPackage,
       onSuccess: (deletedId) => {
         queryClient.setQueryData(servicesKey, (current: import('@/types').BoosterService[] | undefined) =>
@@ -94,6 +97,7 @@ export function useCoachingPackageMutations(boosterId: string | undefined) {
       },
     }),
     toggleActive: useMutation({
+      meta: { successMessage: 'Pacote atualizado', silentError: true },
       mutationFn: toggleCoachingPackageActive,
       onSuccess: (updated) => {
         queryClient.setQueryData(servicesKey, (current: import('@/types').BoosterService[] | undefined) =>

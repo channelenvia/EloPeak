@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ShoppingBag } from 'lucide-react'
-import { EmptyState, Pagination, Skeleton } from '@/components/ui'
+import { EmptyState, Pagination, SkeletonList } from '@/components/ui'
 import { useAuthStore } from '@/stores/authStore'
 import { CompletedOrderCard } from '@/features/booster/components/CompletedOrderCard'
 import { OrderListToolbar } from '@/components/order/OrderListToolbar'
@@ -64,7 +64,7 @@ export function BoosterOrdersPage() {
       <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid >
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-40 w-full rounded-2xl" />
         </CardGrid>
       ) : !orders.length ? (
         <EmptyState icon={ShoppingBag} title="Nenhum pedido encontrado" description="Pedidos nesse status aparecerão aqui." />

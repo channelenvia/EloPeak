@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Link } from 'react-router-dom'
 import { History } from 'lucide-react'
-import { EmptyState, Pagination, SearchInput, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui'
+import { EmptyState, Pagination, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SkeletonList } from '@/components/ui'
 import { timeAgo, formatDateTime } from '@/lib/utils'
 import { useAdminAuditLogs } from '@/api/admin'
 import { usePagedList } from '@/hooks/usePagedList'
@@ -75,7 +75,7 @@ export function AdminAuditLogPage() {
       <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <div className="space-y-2">
-          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+          <SkeletonList count={8} className="h-10 w-full rounded-lg" />
         </div>
       ) : !filtered.length ? (
         <EmptyState icon={History} title="Nenhuma entrada encontrada" />

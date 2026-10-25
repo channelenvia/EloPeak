@@ -2,7 +2,7 @@ import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { Link, useNavigate } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { Plus, ShoppingBag, MessageCircle, Zap, Sparkles } from 'lucide-react'
-import { Button, Skeleton, EmptyState, StatCard } from '@/components/ui'
+import { Button, Skeleton, EmptyState, StatCard, SkeletonList } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { useAuthStore } from '@/stores/authStore'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -80,8 +80,8 @@ export function CustomerDashboard() {
           { label: 'Pedidos Ativos',   value: activeCount,                          icon: Zap,           color: 'text-brand bg-brand/10' },
           { label: 'Total de Pedidos', value: stats?.totalOrders ?? 0,               icon: ShoppingBag,   color: 'text-accent bg-accent/10'  },
           { label: 'Concluídos',       value: stats?.completedOrders ?? 0,           icon: ShoppingBag,   color: 'text-success bg-success/10' },
-          { label: 'Total Gasto',      value: currency(stats?.totalSpent ?? 0),      icon: MessageCircle, color: 'text-info bg-info/10' },
-        ].map(({ label, value, icon, color }) => (
+          { label: 'Total Gasto',      value: stats?.totalSpent ?? 0,      icon: MessageCircle, color: 'text-info bg-info/10', format: currency },
+        ].map(({ label, value, icon, color, format }) => (
           <StatCard
             key={label}
             label={label}
@@ -90,6 +90,7 @@ export function CustomerDashboard() {
             // por um instante antes do valor de verdade chegar. Mesmo padrão de
             // Skeleton já usado no grid de pedidos logo abaixo.
             value={statsLoading ? <Skeleton className="h-6 w-12" /> : value}
+            format={format}
             icon={icon}
             color={color}
             valueSize="lg"
@@ -108,7 +109,7 @@ export function CustomerDashboard() {
         <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
         {isLoading ? (
           <CardGrid >
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+            <SkeletonList count={3} className="h-40 w-full rounded-2xl" />
           </CardGrid>
         ) : !orders?.length ? (
           <EmptyState

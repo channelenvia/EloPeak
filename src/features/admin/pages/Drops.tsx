@@ -7,7 +7,7 @@ import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
-import { Button, Card, EmptyState, Pagination, SearchInput, Skeleton, Modal } from '@/components/ui'
+import { Button, Card, EmptyState, Pagination, SearchInput, Modal, SkeletonList } from '@/components/ui'
 import { timeAgo } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminDropRequests, useResolveDropRequest } from '@/api/admin'
@@ -108,7 +108,7 @@ export function AdminDropsPage() {
         <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
         {isLoading ? (
           <CardGrid cols={4}>
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}
+            <SkeletonList count={3} className="h-52 w-full rounded-2xl" />
           </CardGrid>
         ) : !pendingRequests.length ? (
           <Card variant="operational" padding="none">

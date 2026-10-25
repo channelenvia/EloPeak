@@ -1,5 +1,5 @@
 import { MessageSquareText } from 'lucide-react'
-import { EmptyState, Skeleton } from '@/components/ui'
+import { EmptyState, SkeletonList } from '@/components/ui'
 import { usePublicReviews } from '@/api/reviews'
 import { TestimonialCard } from './TestimonialCard'
 
@@ -13,7 +13,7 @@ export function TestimonialsCarousel() {
   if (isLoading) {
     return (
       <div className="max-w-screen-xl mx-auto px-5 sm:px-8 flex gap-6 overflow-hidden">
-        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-80 shrink-0 rounded-2xl" />)}
+        <SkeletonList count={4} className="h-40 w-80 shrink-0 rounded-2xl" />
       </div>
     )
   }

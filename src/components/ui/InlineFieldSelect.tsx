@@ -49,7 +49,7 @@ export function InlineFieldSelect<T extends string>({
         type="button"
         onClick={() => setExpanded(v => !v)}
         className={cn(
-          'flex w-full items-center justify-between gap-1 border border-border-subtle bg-bg-surface px-2 py-1 shadow-xs hover:border-brand/40 hover:shadow-brand transition-all',
+          'flex w-full items-center justify-between gap-1 border border-border-subtle bg-bg-surface px-2 py-1 shadow-xs hover:border-brand/40 hover:shadow-brand transition-interactive',
           expanded ? 'rounded-t-lg border-b-0' : 'rounded-lg',
         )}
         aria-label={expanded ? `Fechar ${fieldLabel}` : `Trocar ${fieldLabel}`}

@@ -90,15 +90,15 @@ export function useBoosterPanelFields(userId: string | undefined, enabled: boole
 }
 
 export function useUpdateMyAvatar() {
-  return useMutation({ mutationFn: updateMyAvatar })
+  return useMutation({ meta: { successMessage: 'Avatar atualizado' }, mutationFn: updateMyAvatar })
 }
 
 export function useBoosterPanelMutations(userId: string | undefined) {
   const queryClient = useQueryClient()
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['auth', 'booster-panel-fields', userId ?? ''] })
   return {
-    updateDisplayName: useMutation({ mutationFn: updateBoosterDisplayName, onSuccess: invalidate }),
-    updateFullName: useMutation({ mutationFn: updateBoosterFullName, onSuccess: invalidate }),
-    updateCpf: useMutation({ mutationFn: updateBoosterCpf, onSuccess: invalidate }),
+    updateDisplayName: useMutation({ meta: { silentError: true }, mutationFn: updateBoosterDisplayName, onSuccess: invalidate }),
+    updateFullName: useMutation({ meta: { silentError: true }, mutationFn: updateBoosterFullName, onSuccess: invalidate }),
+    updateCpf: useMutation({ meta: { silentError: true }, mutationFn: updateBoosterCpf, onSuccess: invalidate }),
   }
 }

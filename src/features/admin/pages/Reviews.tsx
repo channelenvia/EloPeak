@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Eye, EyeOff, Star } from 'lucide-react'
-import { Badge, Button, Card, EmptyState, ErrorAlert, PageHeader, Skeleton } from '@/components/ui'
+import { Badge, Button, Card, EmptyState, ErrorAlert, PageHeader, SkeletonList } from '@/components/ui'
 import { formatDateTime } from '@/lib/utils'
 import { useAdminReviews, useModerateReview, type AdminReview } from '@/api/reviews'
 import { ReasonPromptModal } from '../components/AdminOrderModals'
@@ -19,11 +19,11 @@ export function AdminReviewsPage() {
       {isError && <ErrorAlert message={error instanceof Error ? error.message : 'Não foi possível carregar as avaliações.'} />}
 
       {isLoading ? (
-        <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+        <div className="space-y-2"><SkeletonList count={4} className="h-24 rounded-xl" /></div>
       ) : !isError && !reviews?.length ? (
         <EmptyState icon={Star} title="Nenhuma avaliação ainda" description="As avaliações dos clientes aparecem aqui assim que forem enviadas." />
       ) : (
-        <div className="space-y-3">
+        <div className="stagger-children space-y-3">
           {(reviews ?? []).map((review) => (
             <Card key={review.id} className="p-4 flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">

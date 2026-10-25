@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Landmark, ArrowRight } from 'lucide-react'
-import { Card, EmptyState, Skeleton, RankBadge, ErrorAlert } from '@/components/ui'
+import { Card, EmptyState, RankBadge, ErrorAlert, SkeletonList } from '@/components/ui'
 import { RANK_TIER_LABEL } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useBoosterDuoAccounts, useDuoAccountAutoRefresh } from '@/api/duoAccounts'
@@ -20,7 +20,7 @@ export function BoosterAccountsPage() {
       <PageHeader title="Contas Duo Boost" description="Contas da empresa reservadas para você em pedidos de Duo Boost em andamento. A reserva e o token de acesso ficam na página do próprio pedido — login e senha nunca aparecem aqui." />
 
       {isLoading ? (
-        <div className="space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}</div>
+        <div className="space-y-3"><SkeletonList count={3} className="h-20 w-full rounded-2xl" /></div>
       ) : isError ? (
         <ErrorAlert message={accountsError instanceof Error ? accountsError.message : 'Não foi possível carregar as contas Duo.'} />
       ) : !reserved.length ? (
@@ -30,7 +30,7 @@ export function BoosterAccountsPage() {
           description="Ao aceitar um pedido de Duo Boost, reserve uma conta na página do pedido."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="stagger-children space-y-3">
           {reserved.map((a) => (
             <Card key={a.id} padding="md">
               <div className="flex items-center justify-between gap-4">

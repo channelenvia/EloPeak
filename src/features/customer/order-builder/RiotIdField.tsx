@@ -86,7 +86,7 @@ export function RiotIdField({
             type="button"
             onClick={onVerify}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-ink-inverse bg-gradient-brand transition-all hover:shadow-brand disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-ink-inverse bg-gradient-brand transition-interactive hover:shadow-brand disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Search className="h-4 w-4" />
             {loading ? 'Consultando…' : 'Verificar elo'}

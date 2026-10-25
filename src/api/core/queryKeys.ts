@@ -5,6 +5,16 @@
 export const queryKeys = {
   orders: {
     all: ['orders'] as const,
+    // Escopos (prefixos) para invalidar/remover uma família inteira de chaves de uma vez.
+    customerScope: ['orders', 'customer'] as const,
+    boosterScope: ['orders', 'booster'] as const,
+    adminScope: ['orders', 'admin'] as const,
+    customerTabCountsScope: ['orders', 'customer-tab-counts'] as const,
+    boosterTabCountsScope: ['orders', 'booster-tab-counts'] as const,
+    adminTabCountsScope: ['orders', 'admin-tab-counts'] as const,
+    boosterActiveScope: ['orders', 'booster-active'] as const,
+    duoAccountHistoryScope: ['orders', 'duo-account-history'] as const,
+    settlementPreview: (orderId: string, coachingPct: number | null) => ['orders', 'settlement-preview', orderId, coachingPct] as const,
     customerList: (customerId: string, filters?: Record<string, unknown>) =>
       ['orders', 'customer', customerId, filters ?? {}] as const,
     boosterList: (boosterId: string, filters?: Record<string, unknown>) =>
@@ -34,8 +44,16 @@ export const queryKeys = {
     history: (orderId: string) => ['orders', 'detail', orderId, 'history'] as const,
     dropRequest: (orderId: string) => ['orders', 'detail', orderId, 'drop-request'] as const,
   },
+  // Pedido de cliente em aberto que o configurador sabe retomar (rascunho -> pagamento).
+  resumableOrder: {
+    all: ['resumable-customer-order'] as const,
+    forProfile: (profileId: string | undefined) => ['resumable-customer-order', profileId] as const,
+  },
+  pixPaymentState: (orderId: string | null | undefined) => ['pix-payment-state', orderId] as const,
   boosters: {
     all: ['boosters'] as const,
+    publicProfileScope: ['boosters', 'public-profile'] as const,
+    adminCpf: (userId: string) => ['boosters', 'admin-cpf', userId] as const,
     profile: (userId: string) => ['boosters', 'profile', userId] as const,
     publicProfile: (boosterId: string) => ['boosters', 'public-profile', boosterId] as const,
     publicList: (filters?: Record<string, unknown>) => ['boosters', 'public-list', filters ?? {}] as const,
@@ -63,6 +81,8 @@ export const queryKeys = {
     slots: (boosterId?: string) => (boosterId ? ['boosters', 'slots', boosterId] as const : ['boosters', 'slots'] as const),
   },
   payouts: {
+    all: ['payouts'] as const,
+    adminCpf: (requestId: string) => ['payouts', 'admin-cpf', requestId] as const,
     totals: (boosterId: string) => ['payouts', 'totals', boosterId] as const,
     requests: (boosterId: string) => ['payouts', 'requests', boosterId] as const,
     breakdown: (requestId: string) => ['payouts', 'breakdown', requestId] as const,
@@ -110,6 +130,7 @@ export const queryKeys = {
       ['catalog', 'master-plus-price', currentTier, targetTier, queueType, boostMode, pdlFrom] as const,
   },
   reviews: {
+    all: ['reviews'] as const,
     public: (limit: number) => ['reviews', 'public', limit] as const,
     forBooster: (boosterId: string) => ['reviews', 'booster', boosterId] as const,
     own: (orderId: string) => ['reviews', 'own', orderId] as const,

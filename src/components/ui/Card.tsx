@@ -6,7 +6,7 @@ import { cn } from '@/lib/cn'
 // "card-brand" pra preservar a herança tipográfica de @layer components
 // (globals.css) mesmo quando @layer utilities sobrescreve bg/border/shadow
 // (utilities sempre vence components na ordem de layer do Tailwind).
-const cardVariants = cva('transition-all duration-base', {
+const cardVariants = cva('transition-[transform,box-shadow,border-color,background-color] duration-base', {
   variants: {
     variant: {
       brand: 'card-brand',
@@ -60,9 +60,26 @@ const cardVariants = cva('transition-all duration-base', {
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof cardVariants> {}
 
-export function Card({ className, variant, tone, padding, children, ...props }: CardProps) {
+export function Card({ className, variant, tone, padding, children, onClick, onKeyDown, ...props }: CardProps) {
+  // Card interativo com onClick vira alvo de teclado: Tab foca, Enter/Espaço ativam (só quando o
+  // foco está no próprio card -- botões internos tratam suas teclas sozinhos).
+  const isKeyboardTarget = variant === 'interactive' && onClick != null
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    onKeyDown?.(e)
+    if (!isKeyboardTarget || e.defaultPrevented || e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      e.currentTarget.click()
+    }
+  }
   return (
-    <div className={cn(cardVariants({ variant, tone, padding }), className)} {...props}>
+    <div
+      className={cn(cardVariants({ variant, tone, padding }), isKeyboardTarget && 'focus-ring', className)}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+      tabIndex={isKeyboardTarget ? 0 : props.tabIndex}
+      {...props}
+    >
       {children}
     </div>
   )

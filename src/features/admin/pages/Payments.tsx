@@ -1,10 +1,11 @@
+import { MetricCard } from '../components/MetricCard'
 import { QueryErrorNotice } from '@/components/QueryErrorNotice'
 import { Link } from 'react-router-dom'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useState } from 'react'
 import { CreditCard, DollarSign, ReceiptText } from 'lucide-react'
-import { Card, EmptyState, Pagination, SearchInput, Skeleton } from '@/components/ui'
+import { Card, EmptyState, Pagination, SearchInput, SkeletonList } from '@/components/ui'
 import { cn, formatDateTime, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_COLOR } from '@/lib/utils'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAdminPayments } from '@/api/admin'
@@ -15,22 +16,6 @@ function StatusBadge({ children, className }: { children: React.ReactNode; class
     <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold', className)}>
       {children}
     </span>
-  )
-}
-
-function StatCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: React.ElementType; tone: string }) {
-  return (
-    <Card padding="md" className="min-w-0">
-      <div className="flex items-center gap-3">
-        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone)}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="truncate text-lg font-black text-ink" data-tabular>{value}</p>
-        </div>
-      </div>
-    </Card>
   )
 }
 
@@ -68,8 +53,8 @@ export function AdminPaymentsPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Total recebido" value={currency(paymentSummary?.totalReceived ?? 0)} icon={DollarSign} tone="bg-success/10 text-success" />
-        <StatCard label="Pedidos realizados" value={String(paymentSummary?.paidOrderCount ?? 0)} icon={ReceiptText} tone="bg-brand/10 text-brand" />
+        <MetricCard label="Total recebido" value={paymentSummary?.totalReceived ?? 0} format={currency} icon={DollarSign} tone="bg-success/10 text-success" />
+        <MetricCard label="Pedidos realizados" value={paymentSummary?.paidOrderCount ?? 0} icon={ReceiptText} tone="bg-brand/10 text-brand" />
       </div>
 
       <SearchInput
@@ -83,7 +68,7 @@ export function AdminPaymentsPage() {
       <QueryErrorNotice isError={isError} error={error} onRetry={refetch} />
       {isLoading ? (
         <CardGrid cols={4}>
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-32 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">

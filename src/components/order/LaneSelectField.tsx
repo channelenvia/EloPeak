@@ -45,7 +45,7 @@ export function LaneSelectField({ lanes, onChange, boostMode, error }: LaneSelec
               onClick={() => toggle(key)}
               disabled={disabled}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all',
+                'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-interactive',
                 selected
                   ? 'bg-brand/15 border-brand text-brand'
                   : disabled

@@ -50,7 +50,7 @@ export function CoachProfileCard({ booster, packages, selectedPackageId, onOpen 
       type="button"
       onClick={onOpen}
       className={cn(
-        'text-left rounded-2xl border-2 overflow-hidden flex flex-col transition-all focus-ring',
+        'text-left rounded-2xl border-2 overflow-hidden flex flex-col transition-interactive focus-ring',
         hasSelected ? 'border-brand bg-brand/10' : 'border-border-subtle bg-bg-surface hover:border-brand/30',
       )}
     >
@@ -191,7 +191,7 @@ export function CoachProfilePanel({ booster, packages, selectedPackageId, onClos
             aria-selected={pkg.id === active.id}
             onClick={() => setActiveId(pkg.id)}
             className={cn(
-              'shrink-0 max-w-64 text-left rounded-xl border-2 px-3.5 py-2 transition-all focus-ring',
+              'shrink-0 max-w-64 text-left rounded-xl border-2 px-3.5 py-2 transition-interactive focus-ring',
               pkg.id === active.id ? 'bg-brand/15 border-brand' : 'border-border-subtle hover:border-brand/40',
             )}
           >

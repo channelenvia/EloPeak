@@ -9,7 +9,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Ban, CheckCircle2, ChevronDown, RotateCcw, Shield, StickyNote, Trophy, Star, UserX, XCircle } from 'lucide-react'
-import { Button, Card, BoosterStatusBadge, EmptyState, FilterTabs, Pagination, SearchInput, Skeleton, ErrorAlert, Popover, Modal } from '@/components/ui'
+import { Button, Card, BoosterStatusBadge, EmptyState, FilterTabs, Pagination, SearchInput, ErrorAlert, Popover, Modal, SkeletonList } from '@/components/ui'
 import { cn, formatDate, formatDateTime, timeAgo } from '@/lib/utils'
 import type { BoosterAdminNote, BoosterProfile } from '@/types'
 import { useAdminBoosters, useAdminApproveBooster, useBoosterAdminNotes, useSetBoosterAdminNote, useExpelBooster } from '@/api/boosters'
@@ -293,7 +293,7 @@ export function AdminBoostersPage() {
 
       {isLoading ? (
         <CardGrid cols={4}>
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-40 w-full rounded-2xl" />
         </CardGrid>
       ) : !filtered.length ? (
         <Card variant="operational" padding="none">

@@ -209,7 +209,7 @@ export function BoosterApplicationForm({
               type="button"
               onClick={() => setValue('peak_tier', value, { shouldValidate: true })}
               className={cn(
-                'py-3 px-4 rounded-xl border-2 text-sm font-bold transition-all',
+                'py-3 px-4 rounded-xl border-2 text-sm font-bold transition-interactive',
                 peakTier === value
                   ? 'bg-brand/15 border-brand text-brand'
                   : 'border-border-subtle text-ink-secondary hover:border-brand/40 hover:text-ink',
@@ -236,7 +236,7 @@ export function BoosterApplicationForm({
                   type="button"
                   onClick={() => toggleDay(key)}
                   className={cn(
-                    'px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all',
+                    'px-3 py-2 rounded-xl text-xs font-bold border-2 transition-interactive',
                     selected
                       ? 'bg-brand/15 border-brand text-brand'
                       : 'border-border-subtle text-ink-secondary hover:border-brand/40 hover:text-ink',

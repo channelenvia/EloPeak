@@ -104,7 +104,7 @@ export function StepService({ fullWidth }: { fullWidth?: boolean }) {
             aria-pressed={serviceType === type}
             onClick={() => handleSelectService(type)}
             className={cn(
-              'relative flex flex-col items-start gap-3 rounded-2xl border-2 text-left transition-all duration-150',
+              'relative flex flex-col items-start gap-3 rounded-2xl border-2 text-left transition-interactive',
               fullWidth ? 'p-6' : 'p-5',
               serviceType === type
                 ? 'border-brand bg-brand/10 shadow-brand'

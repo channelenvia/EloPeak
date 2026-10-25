@@ -87,7 +87,7 @@ export function StepConfigure() {
                 aria-pressed={boostMode === 'solo'}
                 onClick={() => setBoostMode('solo')}
                 className={cn(
-                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
+                  'relative text-left p-4 rounded-2xl border-2 transition-interactive',
                   boostMode === 'solo'
                     ? 'border-brand bg-brand/10 shadow-brand'
                     : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
@@ -103,7 +103,7 @@ export function StepConfigure() {
                 onClick={() => setBoostMode('duo')}
                 disabled={eloDuoBlocked}
                 className={cn(
-                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
+                  'relative text-left p-4 rounded-2xl border-2 transition-interactive',
                   boostMode === 'duo'
                     ? 'border-brand bg-brand/10 shadow-brand'
                     : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
@@ -148,7 +148,7 @@ export function StepConfigure() {
                 aria-pressed={boostMode === 'solo'}
                 onClick={() => setBoostMode('solo')}
                 className={cn(
-                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
+                  'relative text-left p-4 rounded-2xl border-2 transition-interactive',
                   boostMode === 'solo'
                     ? 'border-brand bg-brand/10 shadow-brand'
                     : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',
@@ -164,7 +164,7 @@ export function StepConfigure() {
                 onClick={() => setBoostMode('duo')}
                 disabled={winsMd5DuoBlocked}
                 className={cn(
-                  'relative text-left p-4 rounded-2xl border-2 transition-all duration-150',
+                  'relative text-left p-4 rounded-2xl border-2 transition-interactive',
                   boostMode === 'duo'
                     ? 'border-brand bg-brand/10 shadow-brand'
                     : 'border-border-subtle bg-bg-surface hover:border-brand/40 hover:bg-bg-raised',

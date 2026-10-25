@@ -5,7 +5,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Wallet, Banknote, PiggyBank, Hourglass, Send, FileText, XCircle, CalendarClock } from 'lucide-react'
-import { Button, Card, FilterTabs, Pagination, Skeleton, EmptyState, StatCard, ErrorAlert, CurrencyMaskedInput } from '@/components/ui'
+import { Button, Card, FilterTabs, Pagination, Skeleton, EmptyState, StatCard, ErrorAlert, CurrencyMaskedInput, SkeletonList } from '@/components/ui'
 import { formatDateTime, cn, PAYOUT_REQUEST_STATUS_LABEL, PAYOUT_REQUEST_STATUS_COLOR, PAYOUT_PENDING_STATUSES } from '@/lib/utils'
 import { usePagedList } from '@/hooks/usePagedList'
 import { useCountedFilterTabs } from '@/hooks/useCountedFilterTabs'
@@ -168,7 +168,7 @@ export function BoosterPaymentsPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {BALANCE_BOXES.map(({ label, value, icon, color }) => (
-          <StatCard key={label} label={label} icon={icon} color={color} value={loadingTotals ? <Skeleton className="h-6 w-20" /> : currency(value)} />
+          <StatCard key={label} label={label} icon={icon} color={color} value={loadingTotals ? <Skeleton className="h-6 w-20" /> : value} format={currency} />
         ))}
       </div>
 
@@ -206,7 +206,7 @@ export function BoosterPaymentsPage() {
         </div>
         {loadingRequests ? (
           <CardGrid cols={4}>
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)}
+            <SkeletonList count={3} className="h-32 w-full rounded-2xl" />
           </CardGrid>
         ) : !filtered.length ? (
           <Card padding="md"><EmptyState icon={Wallet} title={requests?.length ? 'Nenhuma solicitação com esse status.' : 'Nenhuma solicitação de saque ainda.'} /></Card>

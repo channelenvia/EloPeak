@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 // Estado visual único de todo "chip selecionável em grade" (vitórias, divisão,
 // tier, dia do Clash); o conteúdo fica por conta de quem usa.
 const selectableTileVariants = cva(
-  'flex items-center justify-center rounded-xl border-2 font-bold transition-all duration-fast focus-ring disabled:cursor-not-allowed',
+  'flex items-center justify-center rounded-xl border-2 font-bold transition-interactive duration-fast focus-ring disabled:cursor-not-allowed',
   {
     variants: {
       state: {

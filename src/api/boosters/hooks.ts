@@ -169,7 +169,7 @@ export function useBoostersWithSlots(enabled: boolean) {
 
 export function useAdminBoosterCpf(userId: string | undefined) {
   return useQuery({
-    queryKey: ['boosters', 'admin-cpf', userId ?? ''],
+    queryKey: queryKeys.boosters.adminCpf(userId ?? ''),
     queryFn: () => getAdminBoosterCpf(userId!),
     enabled: !!userId,
     staleTime: 5 * 60_000,
@@ -218,6 +218,7 @@ export function useBoosterHeartbeat(enabled: boolean) {
 export function useOnboardBooster(userId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Candidatura enviada', silentError: true },
     mutationFn: onboardBooster,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.status(userId ?? '') }),
   })
@@ -226,6 +227,7 @@ export function useOnboardBooster(userId: string | undefined) {
 export function useUpdateProfessionalProfile(userId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Perfil atualizado', silentError: true },
     mutationFn: updateProfessionalProfile,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.profile(userId ?? '') })
@@ -237,7 +239,7 @@ export function useUpdateProfessionalProfile(userId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.top() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.ownDisplayName(userId ?? '') })
       void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.ownFullProfile(userId ?? '') })
-      void queryClient.invalidateQueries({ queryKey: ['boosters', 'public-profile'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.publicProfileScope })
     },
   })
 }
@@ -245,6 +247,7 @@ export function useUpdateProfessionalProfile(userId: string | undefined) {
 export function useAdminApproveBooster() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Booster atualizado', silentError: true },
     mutationFn: adminApproveBooster,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.all }),
   })
@@ -253,6 +256,7 @@ export function useAdminApproveBooster() {
 export function useExpelBooster() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Booster removido', silentError: true },
     mutationFn: expelBooster,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.all }),
   })
@@ -268,6 +272,7 @@ export function useBoosterAdminNotes() {
 export function useSetBoosterAdminNote() {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: { successMessage: 'Nota salva' },
     mutationFn: setBoosterAdminNote,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.boosters.adminNotes() }),
   })

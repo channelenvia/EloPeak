@@ -1,9 +1,13 @@
 import type { ComponentType, ReactNode } from 'react'
+import { AnimatedNumber } from './AnimatedNumber'
 import { Card } from './Card'
 
 interface StatCardProps {
   label: string
+  /** Número → conta até o valor (ver AnimatedNumber); qualquer outro nó é exibido como veio. */
   value: ReactNode
+  /** Formata o número em andamento (ex.: moeda). Só vale quando `value` é number. */
+  format?: (n: number) => string
   icon: ComponentType<{ className?: string }>
   color: string
   trend?: string | null
@@ -16,7 +20,7 @@ interface StatCardProps {
   interactive?: boolean
 }
 
-export function StatCard({ label, value, icon: Icon, color, trend, iconSize = 'sm', valueSize = 'xl', interactive = false }: StatCardProps) {
+export function StatCard({ label, value, format, icon: Icon, color, trend, iconSize = 'sm', valueSize = 'xl', interactive = false }: StatCardProps) {
   const iconBoxClass = iconSize === 'md' ? 'h-9 w-9 rounded-xl' : 'h-8 w-8 rounded-lg'
   const valueClass = valueSize === 'lg' ? 'text-2xl' : 'text-xl'
 
@@ -28,7 +32,9 @@ export function StatCard({ label, value, icon: Icon, color, trend, iconSize = 's
         </div>
         {trend && <span className="text-xs font-semibold text-success">{trend}</span>}
       </div>
-      <div className={`${valueClass} font-bold text-ink`}>{value}</div>
+      <div className={`${valueClass} font-bold text-ink`}>
+        {typeof value === 'number' ? <AnimatedNumber value={value} format={format} /> : value}
+      </div>
       <p className="text-xs text-ink-secondary mt-0.5">{label}</p>
     </Card>
   )

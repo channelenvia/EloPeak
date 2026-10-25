@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CardGrid } from '@/components/ui/CardGrid'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Clock, ShoppingBag } from 'lucide-react'
-import { Badge, Skeleton, EmptyState, ErrorAlert, Button, Pagination } from '@/components/ui'
+import { Badge, EmptyState, ErrorAlert, Button, Pagination, SkeletonList } from '@/components/ui'
 import { CustomerOrderCard } from '@/components/order/CustomerOrderCard'
 import { OrderListToolbar } from '@/components/order/OrderListToolbar'
 import { useServiceFilters } from '@/components/order/useServiceFilters'
@@ -83,7 +83,7 @@ export function AdminOrdersPage() {
 
       {isLoading ? (
         <CardGrid >
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          <SkeletonList count={6} className="h-40 w-full rounded-2xl" />
         </CardGrid>
       ) : isError ? (
         <div className="space-y-3">
